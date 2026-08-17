@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#FFFFFF">
+<title>BNCP — Subcontractor Entry</title>
+<link rel="icon" href="assets/img/logo-en.svg">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body class="vbody">
+
+<header class="brand">
+  <img class="brand__logo" src="assets/img/logo-en.svg" alt="Hanwha E&amp;C">
+  <span class="brand__div"></span>
+  <div class="brand__t">Subcontractor Entry
+    <small>إدخال المقاول &nbsp;·&nbsp; BNCP</small></div>
+  <span class="brand__sp"></span>
+  <span class="bd bd--o noprint" id="vVer"></span>
+</header>
+
+<div class="vlocbar" id="vLoc"></div>
+<nav class="tabs vtabs" id="vTabs" role="tablist"></nav>
+
+<main class="vmain">
+  <div id="vBody"></div>
+  <div class="vbar">
+    <button class="btn btn--o" id="vSave">Submit &nbsp;/&nbsp; <span class="ar">إرسال</span></button>
+    <span class="vmsg" id="vMsg"></span>
+  </div>
+  <div class="vsec">Today's entries <span class="sl">/</span><span class="ar">مدخلات اليوم</span></div>
+  <div class="card"><div class="card__b flush" id="vMine"></div></div>
+</main>
+
+<noscript><p style="padding:40px">JavaScript required.</p></noscript>
+
+<script src="assets/js/version.js"></script>
+<script src="assets/js/i18n.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/master.js"></script>
+<script src="assets/js/materials.js"></script>
+<script src="assets/js/materials2.js"></script>
+<script src="assets/js/work_i18n.js"></script>
+<script src="assets/js/prod.js"></script>
+<script src="assets/js/equip.js"></script>
+<script src="assets/js/core.js"></script>
+<script src="assets/js/spot.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/matmaster_api.js"></script>
+<script src="assets/js/vendor.js"></script>
+<script>
+document.getElementById('vVer').textContent = 'v' + (window.BNCP_VER ? window.BNCP_VER.v : '');
+window.VENDOR.render();
+</script>
+</body>
+</html>

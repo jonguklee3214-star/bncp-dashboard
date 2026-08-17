@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ko" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#FFFFFF">
+<title>BNCP</title>
+<link rel="icon" href="assets/img/logo-ko.svg">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+
+<header class="brand">
+  <img class="brand__logo" id="logo" src="assets/img/logo-ko.svg" alt="Hanwha E&amp;C">
+  <span class="brand__div"></span>
+  <div class="brand__t" id="appt"></div>
+  <span class="brand__sp"></span>
+  <div class="brand__meta noprint" id="hmeta"></div>
+  <div class="fltbox noprint" id="fltBox"></div>
+  <div class="lang noprint">
+    <button data-lang="ko">KO</button>
+    <button data-lang="en">EN</button>
+    <button data-lang="bn">BN</button>
+  </div>
+  <a class="btn btn--g btn--sm noprint" id="vendorBtn" href="vendor.html" target="_blank" style="text-decoration:none"></a>
+  <span id="roleBox" class="noprint"></span>
+  <button class="btn btn--g btn--sm noprint" id="wipe"></button>
+</header>
+
+<nav class="tabs" id="tabs" role="tablist"></nav>
+<main><div id="view" class="view on" role="tabpanel"></div></main>
+<noscript><p style="padding:40px">This screen requires JavaScript.</p></noscript>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="assets/js/version.js"></script>
+<script src="assets/js/i18n.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/master.js"></script>
+<script src="assets/js/materials.js"></script>
+<script src="assets/js/equip.js"></script>
+<script src="assets/js/materials2.js"></script>
+<script src="assets/js/work_i18n.js"></script>
+<script src="assets/js/prod.js"></script>
+<script src="assets/js/core.js"></script>
+<script src="assets/js/spot.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/matmaster_api.js"></script>
+<script src="assets/js/tabs.js"></script>
+<script>
+(function(){
+  var A=window.APP,S=A.S,$=A.$,$$=A.$$;
+  $$('[data-lang]').forEach(function(b){
+    b.setAttribute('aria-pressed', b.dataset.lang===S.lang);
+    b.onclick=function(){
+      S.lang=b.dataset.lang; A.save();
+      $$('[data-lang]').forEach(function(x){x.setAttribute('aria-pressed',x===b);});
+      A.render();
+    };
+  });
+  document.addEventListener('click',function(e){
+    var t=e.target&&e.target.closest?e.target.closest('[data-tab]'):null;
+    if(t) A.go(+t.dataset.tab);
+  });
+  document.addEventListener('change',function(e){
+    var t=e.target;
+    if(t&&t.type==='file'){
+      var n=document.getElementById(t.id+'_n');
+      if(n) n.textContent = (t.files&&t.files.length) ? t.files[0].name : A.T('file_none');
+    }
+  });
+  $('#wipe').onclick=function(){
+    if(confirm(A.T('wipeConfirm'))) A.wipe();
+  };
+  A.render();
+  if(A.sync) A.sync(true);   /* fetch once on open; screen still works if it fails */
+})();
+</script>
+</body>
+</html>
