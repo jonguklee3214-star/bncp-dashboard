@@ -50,7 +50,10 @@
     matmap: {},
     mdesign: {}, mreq: [], staff: {}, msgq: [],
     vend: [], roadX: [], mt: {},  /* 협력업체·담당자 명부 / 현장에서 추가한 도로폭 */
-    alias: {}                     /* 내역서 항목 → 공종코드. 한 번 지정하면 계속 쓴다(v2.14.0) */
+    alias: {},                    /* 내역서 항목 → 공종코드. 한 번 지정하면 계속 쓴다(v2.14.0) */
+    boq: null,                    /* ★확인 필요 목록. 저장을 안 눌러도 살아 있다(v2.16.2) */
+    stock: {},                    /* ★재고수량 — 사람이 직접 넣는다(v2.17.1). {위치키:{자재id:수량}} */
+    tab: 1                        /* ★마지막으로 보던 탭 — 다시 들어오면 그 자리(v2.16.2) */
   };
   function load() {
     try {
@@ -145,18 +148,20 @@
      ★업체가 몇 곳뿐인 현장에서 CSV를 만들어 올리는 건 번거롭다(사용자 지시).
        CSV는 그대로 두고, 화면에서 바로 넣는 길을 연다.
        같은 코드면 담당자만 더한다 — 링크(key)는 유지한다. */
-  A.vendAdd = function (code, name, staff) {
+  A.vendAdd = function (code, name, staff, tel) {
     code = String(code || '').trim();
     name = String(name || '').trim();
     staff = String(staff || '').trim();
+    tel = String(tel || '').replace(/[^0-9+]/g, '');
     if (!code || !name) return { ok: false, why: 'need' };
     var hit = null;
     S.vend.forEach(function (v) { if (v.code === code) hit = v; });
     if (hit) {
       hit.name = name;
+      if (tel) hit.tel = tel;
       if (staff && hit.staff.indexOf(staff) < 0) hit.staff.push(staff);
     } else {
-      hit = { code: code, name: name, staff: staff ? [staff] : [], key: A.vendKey(code) };
+      hit = { code: code, name: name, tel: tel, staff: staff ? [staff] : [], key: A.vendKey(code) };
       S.vend.push(hit);
     }
     A.save();
@@ -173,11 +178,37 @@
     A.save();
   };
 
+  /* 협력업체 접속 주소 — 전체 주소로 만든다 (v2.16.0)
+     ★코드에 도메인을 박지 않는다. 지금 화면이 열린 주소에서 뽑아낸다.
+       그래야 로컬에서 열면 로컬 주소, GitHub Pages면 그 주소가 나오고,
+       나중에 주소가 바뀌어도 손댈 곳이 없다.
+     종전에는 'vendor.html?c=...'만 보여줘서, 그대로 복사해 보내면
+     상대 휴대폰에서 열리지 않았다(사용자 지적). */
+  A.vendUrl = function (key) {
+    var base = '';
+    try {
+      var h = String(location.href).split('#')[0].split('?')[0];
+      base = h.replace(/[^/]*$/, '');
+    } catch (e) { base = ''; }
+    return base + 'vendor.html?c=' + encodeURIComponent(key);
+  };
+
   A.vendByKey = function (key) {
     var hit = null;
     S.vend.forEach(function (v) { if (v.key === key) hit = v; });
     return hit;
   };
+  /* 실적의 by(제출자)는 업체명으로 들어온다. 이름으로도 찾을 수 있어야
+     알림 화면에서 전화번호·링크를 붙일 수 있다. (v2.16.1) */
+  A.vendByName = function (name) {
+    var n = String(name || '').trim().toLowerCase(), hit = null;
+    S.vend.forEach(function (v) {
+      if (String(v.name).trim().toLowerCase() === n) hit = v;
+      else if (String(v.code).trim().toLowerCase() === n) hit = v;
+    });
+    return hit;
+  };
+
   A.vendByCode = function (code) {
     var hit = null;
     S.vend.forEach(function (v) { if (v.code === code) hit = v; });
@@ -492,6 +523,53 @@
 
   A.EQ_TREE = (EQ && EQ.tree) || [];
   A.EQ_TYPO = (EQ && EQ.typo) || {};
+  /* ══ 장비 지급 기록 — 고칠 수 있어야 한다 (v2.16.2) ═══════
+     ★종전에는 넣기만 되고 목록도, 수정도, 삭제도 없었다. 있는 것은
+       「지급대장 전체 초기화」뿐이라, 오타 하나에 전부 지우고 다시 넣어야 했다.
+       회수해서 장비가 줄어도 고칠 방법이 없었다(사용자 지적).
+     ★옛 줄에는 id가 없다. 읽을 때 채워 준다 — 지우지 않는다. */
+  A.issueRows = function (f) {
+    var out = [];
+    S.issue.forEach(function (g, i) {
+      if (!g.id) g.id = 'ig' + i + '-' + (g.date || '') + '-' + (g.cat || '');
+      if (A.hit(g, f)) out.push(g);
+    });
+    return out.sort(function (a, b) { return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0); });
+  };
+  A.setIssueCnt = function (id, cnt) {
+    var n = Number(cnt);
+    if (!isFinite(n)) return false;
+    for (var i = 0; i < S.issue.length; i++) {
+      if (S.issue[i].id === id) { S.issue[i].cnt = n; A.save(); return true; }
+    }
+    return false;
+  };
+  A.delIssueRow = function (id) {
+    S.issue = S.issue.filter(function (x) { return x.id !== id; });
+    A.save();
+  };
+
+  /* 규격 한 칸의 지급(또는 회수) 총량을 그 값으로 맞춘다.
+     ★줄을 새로 쌓지 않는다 — 같은 자리를 고친다. 그래야 표가 안 길어진다.
+       기존 줄들을 합쳐 하나로 만들고 거기에 값을 적는다. */
+  A.setEqQty = function (loc, cat, size, kind, qty) {
+    var n = Math.max(0, Number(qty) || 0), keep = null;
+    S.issue = S.issue.filter(function (g) {
+      var same = g.cat === cat && (g.size || '') === (size || '') &&
+        ((g.kind === 'take') === (kind === 'take')) && A.locKey(g.loc) === A.locKey(loc);
+      if (!same) return true;
+      if (!keep) { keep = g; return true; }
+      return false;                       /* 흩어진 줄은 하나로 모은다 */
+    });
+    if (keep) { keep.cnt = n; keep.date = keep.date || A.today(); }
+    else if (n > 0) {
+      S.issue.push({ id: A.uid(), date: A.today(), loc: loc, cat: cat, size: size || '',
+                     kind: kind === 'take' ? 'take' : 'give', cnt: n, by: '' });
+    }
+    A.save();
+    return true;
+  };
+
   A.eqSizes = function (cat) {
     var o = A.EQ_TREE.filter(function (x) { return x.cat === cat; })[0];
     return o ? o.sizes : [];
@@ -655,9 +733,10 @@
     rec.forEach(function (r) {
       var a = A.eqAbbr(r.cat);
       var o = by[r.cat] || (by[r.cat] = {
-        cat: r.cat, abbr: a, given: null, run: 0, brk: 0, rep: 0, mt: 0, rows: []
+        cat: r.cat, abbr: a, given: null, gv: 0, tk: 0, run: 0, brk: 0, rep: 0, mt: 0, rows: []
       });
       o.run += r.run; o.brk += r.brk; o.rep += r.rep;
+      o.gv += (r.gv || 0); o.tk += (r.tk || 0);
       if (r.given != null) o.given = (o.given || 0) + r.given;
       var st = A.mtStep(r.id);
       if (st && st !== 'done') o.mt++;
@@ -668,6 +747,121 @@
   };
 
   /* ══ 공종별 집계 ══════════════════════════════════════ */
+  /* ══ 업체 기준 집계 (v2.17.5 사용자 지시) ═══════════════
+     ★A.rollup은 공종키로만 합쳐 업체 정보가 사라진다. 같은 자료를
+       업체 → 공종 순으로 다시 묶는다. 저장소는 건드리지 않는다.
+     ★직영도 한 줄로 들어간다 — 현장 전체 투입을 볼 때 빠지면 실제와 안 맞는다(4-J). */
+  /* ══ 공구 현황 (v2.18.0) ═══════════════════════════════
+     ★「어느 공구에 몇 명이 장비 몇 대로 어디서 작업 중인가」 — 처음 보는
+       사람이 알고 싶은 것은 공종이 아니라 이 그림이다(사용자 지시).
+     ★공구가 기본 단위다. 공구당 업체는 하나이므로 업체명이 한 줄에 한 번만
+       나오고, 종전 작업위치 표에서 매 줄 반복되던 중복이 사라진다.
+       (한 업체가 여러 공구를 맡는 것은 된다 — 업체가 여러 줄에 나올 뿐이다.)
+     ★작업 없는 공구는 줄을 만들지 않는다(사용자 지시).
+     ★인원·장비는 「오늘」, 검측·측량·자재는 「누계」다(사용자 확정).
+       한 표에 기준이 둘이라 칸 머리에 그 사실을 적는다. */
+  A.siteRows = function (f, today) {
+    today = today || A.today();
+    var m = {}, list = [];
+    function slot(loc) {
+      var k = A.locKey(loc);
+      if (!m[k]) {
+        m[k] = { key: k, loc: loc, co: {}, pax: 0, run: 0, down: 0,
+                 spots: [], seen: {}, insp: 0, surv: 0, mat: 0 };
+        list.push(m[k]);
+      }
+      return m[k];
+    }
+    /* 오늘 인원·장비 — 협력업체 + 직영 */
+    function feed(c, isDir) {
+      if (!A.locMatch(c, f) || c.date !== today) return;
+      var o = slot(c.loc);
+      o.pax += A.crewTotal(c);
+      if (isDir) o.co[A.T('res_dir')] = 1;
+      else if (c.by) o.co[c.by] = 1;
+      (c.eq || []).forEach(function (x) {
+        o.run += Number(x.run) || 0;
+        o.down += (Number(x.brk) || 0) + (Number(x.rep) || 0);
+      });
+    }
+    S.crew.forEach(function (c) { if (c.st === 'ok') feed(c, false); });
+    S.direct.forEach(function (c) { feed(c, true); });
+
+    /* 오늘 작업위치 — 협력업체가 넣은 구간을 전부 모은다 */
+    S.work.forEach(function (w) {
+      if (w.st !== 'ok' || !A.locMatch(w, f) || w.date !== today) return;
+      var o = slot(w.loc);
+      if (w.by) o.co[w.by] = 1;
+      var sp = (w.spot && w.spot.kind === 'road' && window.BNCP_SPOT)
+        ? String(window.BNCP_SPOT.label(w.spot)).replace(/^\s*·\s*/, '') : '';
+      if (sp && !o.seen[sp]) { o.seen[sp] = 1; o.spots.push(sp); }
+    });
+
+    /* 밀린 것 — 누계다. 오늘로 자르지 않는다 */
+    S.insp.forEach(function (r) {
+      if (r.st !== 'apply' || !A.locMatch(r, f)) return;
+      slot(r.loc).insp++;
+    });
+    S.surv.forEach(function (r) {
+      if (r.done || !A.locMatch(r, f)) return;
+      slot(r.loc).surv++;
+    });
+    S.mreq.forEach(function (r) {
+      if (r.st !== 'req' || !A.locMatch(r, f)) return;
+      slot(r.loc).mat++;
+    });
+
+    /* ★작업 없는 공구는 뺀다 — 사람도 장비도 밀린 것도 없는 줄 */
+    /* ★작업위치만 있고 인원 기록이 없는 공구도 남긴다 — 실적이 올라왔다는
+       것 자체가 「작업 있음」이다. spots를 빼면 그 줄이 통째로 사라진다. */
+    return list.filter(function (o) {
+      return o.pax || o.run || o.down || o.spots.length || o.insp || o.surv || o.mat;
+    }).map(function (o) {
+      o.cos = Object.keys(o.co);
+      return o;
+    }).sort(function (a, b) {
+      return A.locLabel(a.loc) < A.locLabel(b.loc) ? -1 : 1;
+    });
+  };
+
+  A.rollupCo = function (f) {
+    var by = {}, list = [];
+    function slot(co, key) {
+      var g = by[co] || (by[co] = { co: co, dir: false, map: {}, rows: [] });
+      var s = g.map[key] || (g.map[key] = {
+        e: REG[key] || { key: key, name: key, grp: '', unit: '' },
+        key: key, qty: 0, teams: 0, ppl: { eng: 0, fmn: 0, wkr: 0 }, opr: 0, pplT: 0,
+        eq: {}, run: 0, brk: 0, rep: 0
+      });
+      if (g.rows.indexOf(s) < 0) g.rows.push(s);
+      if (list.indexOf(g) < 0) list.push(g);
+      return s;
+    }
+    function feed(c, isDir, key) {
+      var co = isDir ? A.T('res_dir') : (c.by || '—');
+      var s = slot(co, key);
+      if (isDir) by[co].dir = true;
+      s.teams += Number(c.teams) || 0;
+      A.JOBS.forEach(function (j) { s.ppl[j.id] += Number(c.ppl && c.ppl[j.id]) || 0; });
+      s.opr += A.oprCount(c.eq);
+      s.pplT += A.crewTotal(c);
+      (c.eq || []).forEach(function (x) {
+        var id = x.cat + '|' + x.size;
+        s.eq[id] = s.eq[id] || { cat: x.cat, size: x.size, run: 0, brk: 0, rep: 0 };
+        s.eq[id].run += Number(x.run) || 0;
+        s.eq[id].brk += Number(x.brk) || 0;
+        s.eq[id].rep += Number(x.rep) || 0;
+        s.run += Number(x.run) || 0; s.brk += Number(x.brk) || 0; s.rep += Number(x.rep) || 0;
+      });
+    }
+    S.crew.forEach(function (c) { if (c.st === 'ok' && A.hit(c, f)) feed(c, false, c.key); });
+    S.direct.forEach(function (c) { if (A.hit(c, f, true)) feed(c, true, '_dir'); });
+    list.forEach(function (g) {
+      g.rows.sort(function (a, b) { return b.pplT - a.pplT; });
+    });
+    return list.sort(function (a, b) { return (a.dir - b.dir) || (a.co < b.co ? -1 : 1); });
+  };
+
   A.rollup = function (f) {
     var o = {};
     function slot(k) {
@@ -705,7 +899,7 @@
 
   /* ══ 장비 지급대조 ════════════════════════════════════ */
   A.eqRecon = function (f, date) {
-    var used = {}, given = {};
+    var used = {}, given = {}, give = {};
     S.crew.forEach(function (c) {
       if (c.st !== 'ok' || !A.hit(c, f)) return;
       if (date && c.date !== date) return;
@@ -717,11 +911,22 @@
         used[id].rep += Number(x.rep) || 0;
       });
     });
+    /* ★지급과 회수를 갈라서 센다 (v2.16.5).
+       회수는 kind:'take'. 옛 줄에는 kind가 없으니 지급으로 본다 — 지우지 않는다.
+       ★보유 = 지급 − 회수. 회수했는데 보유가 안 줄면 대조가 무의미하다. */
     S.issue.forEach(function (g) {
       if (!A.hit(g, f)) return;
       if (date && g.date !== date) return;
       var id = g.cat + '|' + g.size;
-      given[id] = (given[id] || 0) + (Number(g.cnt) || 0);
+      var q = Number(g.cnt) || 0;
+      var t = give[id] || (give[id] = { give: 0, take: 0, by: {} });
+      if (g.kind === 'take') t.take += q; else t.give += q;
+      var co = g.by || '';
+      if (co) {
+        var c = t.by[co] || (t.by[co] = { give: 0, take: 0 });
+        if (g.kind === 'take') c.take += q; else c.give += q;
+      }
+      given[id] = t.give - t.take;
     });
     var ids = {};
     Object.keys(used).forEach(function (k) { ids[k] = 1; });
@@ -730,13 +935,16 @@
       var p = id.split('|');
       var u = used[id] || { cat: p[0], size: p[1], run: 0, brk: 0, rep: 0 };
       var tot = u.run + u.brk + u.rep, g = given[id] == null ? null : given[id];
+      var gv = give[id] || { give: 0, take: 0, by: {} };
+      u.gv = gv.give; u.tk = gv.take; u.gby = gv.by;
       var flag = '';
       if (g == null) flag = 'nogive';
       else if (tot > g) flag = 'over';
       else if (tot === 0 && g > 0) flag = 'norec';
       else if (tot < g) flag = 'idle';
       return { id: id, cat: u.cat, size: u.size, run: u.run, brk: u.brk, rep: u.rep,
-               used: tot, given: g, idle: g == null ? null : g - tot, flag: flag };
+               used: tot, given: g, idle: g == null ? null : g - tot, flag: flag,
+               gv: gv.give, tk: gv.take, gby: gv.by };
     }).sort(function (a, b) {
       var o = { over: 0, norec: 1, nogive: 2, idle: 3, '': 4 };
       return o[a.flag] - o[b.flag] || b.used - a.used;
@@ -788,6 +996,70 @@
       re: r.re || r.id, seq: (r.seq || 1) + 1, hist: []
     };
     S.insp.push(n); A.save(); return n;
+  };
+
+  /* ══ 독촉 대상 (v2.17.0) ══════════════════════════════
+     ★규칙 (사용자 확정)
+       · 협력업체 입력 마감 오전 8시. 안 넣었으면 8:30 · 9:00 두 번.
+       · 스탭이 검측·측량 요청을 확인 안 하면 요청 30분 · 60분 뒤 두 번.
+     ★요청 기록에 시각이 없었다 — 날짜만 있었다. 그래서 at(ISO 시각)을 새로
+       넣는다. 옛 기록에는 없으므로, 어제 이전 것은 곧바로 2차로 본다.
+       「모르니까 안 보낸다」보다 「오래된 건 확실히 늦었다」가 맞다. */
+  A.DUE = { hour: 8, gap: 30 };          /* 마감 08:00 · 30분 간격 */
+
+  function _mins(a, b) { return (b - a) / 60000; }
+
+  /** 독촉 단계 — 0 아직 / 1 1차 / 2 2차 */
+  function _stage(passed, gap) {
+    if (passed >= gap * 2) return 2;
+    if (passed >= gap) return 1;
+    return 0;
+  }
+
+  A.dueList = function (f, now) {
+    now = now || new Date();
+    var today = A.today(), out = { co: [], staff: [] };
+
+    /* ── 협력업체 : 오늘 것을 안 넣었다 ── */
+    var dead = new Date(now); dead.setHours(A.DUE.hour, 0, 0, 0);
+    var st = _stage(_mins(dead, now), A.DUE.gap);
+    if (st) {
+      S.vend.forEach(function (v) {
+        var miss = [];
+        var hasW = S.work.some(function (w) { return w.by === v.name && w.date === today && A.locMatch(w, f); });
+        var hasC = S.crew.some(function (c) { return c.by === v.name && c.date === today && A.locMatch(c, f); });
+        var hasE = S.crew.some(function (c) {
+          return c.by === v.name && c.date === today && A.locMatch(c, f) && (c.eq || []).length;
+        });
+        if (!hasW) miss.push('work');
+        if (!hasC) miss.push('crew');
+        else if (!hasE) miss.push('eq');
+        if (miss.length) out.co.push({ name: v.name, tel: v.tel || '', lang: v.lang || 'en', miss: miss, stage: st });
+      });
+    }
+
+    /* ── 스탭 : 요청을 받고도 확인을 안 했다 ── */
+    function _due(r) {
+      if (r.at) return _stage(_mins(new Date(r.at), now), A.DUE.gap);
+      return r.date === today ? 0 : 2;   /* 시각이 없는 옛 기록 — 어제 것이면 늦은 게 확실하다 */
+    }
+    var byS = {};
+    S.insp.forEach(function (r) {
+      if (r.st !== 'apply' || !A.locMatch(r, f)) return;
+      var g = _due(r); if (!g) return;
+      var k = r.staff || '';
+      (byS[k] = byS[k] || { who: k, insp: 0, surv: 0, stage: 0 });
+      byS[k].insp++; byS[k].stage = Math.max(byS[k].stage, g);
+    });
+    S.surv.forEach(function (r) {
+      if (r.done || !A.locMatch(r, f)) return;
+      var g = _due(r); if (!g) return;
+      var k = r.staff || '';
+      (byS[k] = byS[k] || { who: k, insp: 0, surv: 0, stage: 0 });
+      byS[k].surv++; byS[k].stage = Math.max(byS[k].stage, g);
+    });
+    Object.keys(byS).forEach(function (k) { out.staff.push(byS[k]); });
+    return out;
   };
 
   /* ══ 측량 ═════════════════════════════════════════════ */
@@ -1044,6 +1316,31 @@
              plant: A.matById(id) ? A.matById(id).plant : false,
              design: 0, req: 0, iss: 0, use: 0 };
   }
+  /* ══ 재고 — 직접 입력 (v2.17.1 사용자 지시) ═══════════
+     ★자재는 설계수량 · 재고수량 · 지급수량 셋으로 통일한다.
+       신청→승인→플랜트신청→지급→실사용 5단계는 화면에서 뺐다.
+     ★재고는 어디서도 계산할 수 없다 — 창고를 세어 넣는 수밖에 없다.
+       설계−지급으로 갈음하면 반입분과 잔재가 빠져 실제와 안 맞는다.
+     ★플랜트 자재는 목록에서 뺀다(사용자 지시). 플랜트 신청은 시스템 밖 일이다. */
+  A.stockOf = function (f, id) {
+    var v = (S.stock[A.locKey(f)] || {})[id];
+    return v == null ? null : Number(v);
+  };
+  A.setStock = function (f, id, qty) {
+    var k = A.locKey(f);
+    S.stock[k] = S.stock[k] || {};
+    if (qty === '' || qty == null) delete S.stock[k][id];
+    else S.stock[k][id] = Number(qty) || 0;
+    A.save();
+  };
+  /** 설계 · 재고 · 지급 — 창고 자재만 */
+  A.matRows = function (f) {
+    return A.mVariance(f, false).map(function (a) {
+      a.stock = A.stockOf(f, a.id);
+      return a;
+    }).filter(function (a) { return a.design || a.iss || a.stock != null; });
+  };
+
   A.matById = function (id) {
     var p = id.split('|');
     return A.MAT2 ? A.MAT2.filter(function (m) {

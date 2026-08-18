@@ -826,7 +826,7 @@
       var irow = {
         id: A.uid(), date: A.today(), loc: rows[0].loc, key: rows[0].key,
         spot: rows[0].spot,
-        qty: qsum, st: 'apply', stAt: A.today(), reason: '',
+        qty: qsum, st: 'apply', stAt: A.today(), at: A.nowISO(), reason: '',
         by: V.by, note: '', seq: 1, hist: [], up: 0,
         /* ★ 단계(stage)와 차수(seq)는 다르다. 섞으면 통계가 흐려진다 */
         stage: V.stage, layer: V.stage === 'bf' ? V.layer : 0,
@@ -843,7 +843,7 @@
     } else if (t === 'surv') {
       var why = str('#vWhy'); if (!why) return say('Enter reason / أدخل السبب');
       var srow = { id: A.uid(), date: d, loc: g.loc, key: g.key, spot: g.spot,
-                   why: why, by: V.by, done: false, up: 0 };
+                   why: why, by: V.by, done: false, at: A.nowISO(), up: 0 };
       S.surv.push(srow);
       A.save();
       toServer('surv', srow);

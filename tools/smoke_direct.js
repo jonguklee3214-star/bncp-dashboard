@@ -75,8 +75,13 @@ const all = bag.view.innerHTML;
 ['검측', '측량', '자재'].forEach(w => ok(!new RegExp(w).test(all), `'${w}' 탭7에 없음`));
 
 console.log('\n[D7] 탭 목록에 직영 탭이 노출된다');
-ok(/data-tab="7"/.test(bag.tabs.innerHTML), '탭7 버튼 존재');
+/* ★v2.17.2 — 직영 탭은 스탭용이다. 관리자는 작업현황에서 본다(사용자 지시).
+   스탭 화면은 건드리지 않았다는 것을 여기서 못박는다. */
+A.setRole('staff'); A.render();
+ok(/data-tab="7"/.test(bag.tabs.innerHTML), '★스탭에게는 직영 탭이 있다');
 ok(bag.tabs.innerHTML.includes(A.T('t7')), '탭 이름 표시');
+A.setRole('admin'); A.render();
+ok(!/data-tab="7"/.test(bag.tabs.innerHTML), '관리자에게는 없다 — 작업현황에 들어갔다');
 
 console.log('\n[D8] 별도 직영 화면 파일이 남아 있지 않다 (탭으로 통합)');
 ok(!fs.existsSync(path.join(ROOT, 'direct.html')), 'direct.html 없음');
