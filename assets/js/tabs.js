@@ -640,6 +640,8 @@
      화면 위를 크게 차지하고 있어 맨 아래로 내리고, 버튼으로만 연다.
      한 번에 하나만 열린다 — 여러 개가 동시에 펼쳐지면 다시 길어진다. */
   var setupTab = '';
+  /* ★수정 중인 담당자 (v2.21.0) — {code, raw}. 비어 있으면 「넣기」 모드다. */
+  var vdEdit = null;
   A._setup = function (v) { setupTab = v; };   /* 검사에서 패널을 여는 통로 (6-B) */
 
   function setupHTML() {
@@ -849,38 +851,85 @@
       '<div id="isMsg" class="hint"></div>';
   }
 
-  /* ★손으로 한 곳씩 넣는 길을 연다 — 업체가 몇 곳뿐인데 CSV를 만드는 건
-     번거롭다(사용자 지시). CSV는 여러 곳을 한 번에 넣을 때 쓴다. */
+  /* ★명부를 **두 단계**로 나눈다 (v2.21.0 사용자 지시).
+       「업체만 입력하고, 업체가 생성되면 생성된 업체에 담당자만 입력」
+     ★종전에는 한 폼에서 업체코드·업체명·담당자를 **매번 다시** 적었다.
+       업체명을 그때그때 타이핑하다 한 글자만 달라도(KEW / K.E.W) 같은
+       업체가 둘로 갈라진다. 이제 업체는 한 번 만들고, 담당자는 **골라 붙인다.**
+     ★전화번호는 담당자마다 따로다 — 독촉이 **사람에게** 가야 한다.
+       대표번호로만 보내면 누가 처리할지 모른 채 업체 안에서 돌기만 한다. */
   function vendPanel() {
-    var h = '<div class="f-row">' +
+    var ed = vdEdit, edV = null, edQ = null;
+    if (ed) {
+      S.vend.forEach(function (v) { if (v.code === ed.code) edV = v; });
+      if (edV) A.vendStaffList(edV).forEach(function (q) { if (q.raw === ed.raw) edQ = q; });
+      if (!edQ) { vdEdit = ed = null; }
+    }
+
+    /* ── 1단계 : 업체 만들기 ─────────────────────────── */
+    var h = '<div class="hint" style="margin-bottom:6px"><b>' + T('vd_step1') + '</b> — ' + T('vd_step1n') + '</div>' +
+      '<div class="f-row">' +
       fld(T('vd_code'), '<input class="in" id="vdCode" placeholder="KEW">') +
       fld(T('vd_name'), '<input class="in" id="vdName" placeholder="Al-Kawthar">') +
-      /* ★공종별 담당자 (v2.19.2) — 공종을 비우면 그 업체의 기본 담당자다 */
-      fld(T('work'), '<select class="in" id="vdGrp"><option value="">' + T('all') + '</option>' +
-        A.groupsOf(flt.s === 'anc' ? 'anc' : 'civil').map(function (g) {
-          return '<option value="' + esc(g.grp) + '">' + esc(A.trW(g.grp)) + '</option>';
-        }).join('') + '</select>') +
-      fld(T('vd_staff'), '<input class="in" id="vdStaff" placeholder="Ahmed">') +
-      fld(T('vd_tel'), '<input class="in" id="vdTel" placeholder="964770000000">') +
-      fld('&nbsp;', '<button class="btn" id="vdAdd">' + T('vd_add') + '</button>') +
+      fld('&nbsp;', '<button class="btn" id="vdMk">' + T('vd_mk') + '</button>') +
       '</div>';
+
+    /* ── 2단계 : 담당자 넣기 ────────────────────────── */
+    h += '<div class="sb__sp" style="margin:14px 0"></div>' +
+      '<div class="hint" style="margin-bottom:6px"><b>' + T('vd_step2') + '</b> — ' + T('vd_step2n') +
+      (ed ? ' <span class="bd bd--o">' + T('vd_editing') + ': ' + esc(edQ.name) + '</span>' : '') + '</div>';
+    if (!S.vend.length) {
+      /* ★업체가 없으면 담당자 폼을 **아예 그리지 않는다.** 빈 드롭다운을
+         띄워 두면 눌러 보고 나서야 안 된다는 걸 안다. */
+      h += '<div class="hint">' + T('vd_first') + '</div>';
+    } else {
+      h += '<div class="f-row">' +
+        fld(T('vd_pick'), '<select class="in" id="vdCo">' + S.vend.map(function (v) {
+          return '<option value="' + esc(v.code) + '"' +
+            (ed && ed.code === v.code ? ' selected' : '') + '>' +
+            esc(v.name) + ' (' + esc(v.code) + ')</option>';
+        }).join('') + '</select>') +
+        fld(T('work'), '<select class="in" id="vdGrp"><option value="">' + T('all') + '</option>' +
+          A.groupsOf(flt.s === 'anc' ? 'anc' : 'civil').map(function (g) {
+            return '<option value="' + esc(g.grp) + '"' +
+              (edQ && edQ.grp === g.grp ? ' selected' : '') + '>' + esc(A.trW(g.grp)) + '</option>';
+          }).join('') + '</select>') +
+        fld(T('vd_staff'), '<input class="in" id="vdStaff" placeholder="Ahmed" value="' +
+          (edQ ? esc(edQ.name) : '') + '">') +
+        fld(T('vd_tel'), '<input class="in" id="vdTel" placeholder="964770000000" value="' +
+          (edQ ? esc(edQ.tel) : '') + '">') +
+        fld('&nbsp;', '<button class="btn" id="vdAdd">' + T(ed ? 'vd_ssave' : 'vd_sadd') + '</button>' +
+          (ed ? ' <button class="btn btn--g" id="vdCancel">' + T('vd_cancel') + '</button>' : '')) +
+        '</div>';
+    }
+
     h += '<div class="btns" style="margin-top:10px"><label class="btn btn--g btn--sm">' + T('vd_up') +
       '<input type="file" id="vdFile" accept=".csv,text/csv" style="display:none"></label>' +
+      (S.vend.length ? '<button class="btn btn--d btn--sm" id="vdReset">' + T('vd_reset') + '</button>' : '') +
       '<span class="hint" id="vdMsg">' + T('vd_upn') + '</span></div>';
+    if (S.vend.length) h += '<div class="hint">' + T('vd_reset_n') + '</div>';
 
     if (!S.vend.length) return h + '<div class="hint" style="margin-top:10px">' + T('vd_none') + '</div>';
+
+    /* ── 명부 ─────────────────────────────────────── */
     h += '<div class="tw" style="margin-top:12px"><table><thead><tr>' +
       '<th>' + T('vd_name') + '</th><th>' + T('vd_staff') + '</th>' +
       '<th>' + T('vd_link') + '</th><th class="noprint"></th></tr></thead><tbody>' +
       S.vend.map(function (v) {
-        return '<tr><td><span class="nm">' + esc(v.name) + '</span> <span class="code">' + esc(v.code) + '</span>' +
-          (v.tel ? '<br><span class="sp">+' + esc(v.tel) + '</span>' : '') + '</td>' +
-          '<td>' + (v.staff.length ? v.staff.map(function (s2) {
-            var q = A.vendStaffList({ staff: [s2] })[0];
-            return '<span class="bd">' +
-              (q.grp ? '<i class="sp">' + esc(A.trW(q.grp)) + '</i> ' : '') + esc(q.name) +
-              ' <a href="#" data-vsdel="' + esc(v.code) + '" data-s="' + esc(s2) + '">×</a></span> ';
-          }).join('') : '<span class="sp">—</span>') + '</td>' +
+        var st = A.vendStaffList(v);
+        return '<tr><td><span class="nm">' + esc(v.name) + '</span> <span class="code">' + esc(v.code) + '</span></td>' +
+          '<td>' + (st.length ? st.map(function (q) {
+            /* ★번호 없는 담당자는 **눈에 띄게** 둔다. 독촉이 못 가는 사람이라
+               모르고 지나가면 그 자리에서 결재가 멈춘다. */
+            return '<div class="mta"><span class="bd">' +
+              (q.grp ? '<i class="sp">' + esc(A.trW(q.grp)) + '</i> ' : '') + esc(q.name) + '</span> ' +
+              (q.tel ? '<span class="sp">+' + esc(q.tel) + '</span>'
+                     : '<span class="bd bd--d">' + T('vd_notel') + '</span>') +
+              ' <button class="btn btn--g btn--sm noprint" data-vsed="' + esc(v.code) +
+              '" data-s="' + esc(q.raw) + '">' + T('vd_edit') + '</button>' +
+              ' <button class="btn btn--g btn--sm noprint" data-vsdel="' + esc(v.code) +
+              '" data-s="' + esc(q.raw) + '">' + T('del') + '</button></div>';
+          }).join('') : '<span class="sp">' + T('vd_nostaff') + '</span>') + '</td>' +
           '<td><code class="vlink" title="' + esc(A.vendUrl(v.key)) + '">' + esc(A.vendUrl(v.key)) + '</code> ' +
           '<button class="btn btn--g btn--sm noprint" data-vcopy="' + esc(v.key) + '">' + T('copy') + '</button></td>' +
           '<td class="c noprint"><button class="btn btn--g btn--sm" data-vdel="' + esc(v.code) + '">' + T('del') + '</button></td></tr>';
@@ -906,13 +955,34 @@
         A.render();
       };
     });
-    if ($('#vdAdd')) $('#vdAdd').onclick = function () {
-      var g = val('#vdGrp'), nm = val('#vdStaff');
-      var r = A.vendAdd(val('#vdCode'), val('#vdName'),
-                        nm ? (g ? g + '|' + nm : nm) : '', val('#vdTel'));
+    /* 1단계 — 업체만 만든다 */
+    if ($('#vdMk')) $('#vdMk').onclick = function () {
+      var r = A.vendCreate(val('#vdCode'), val('#vdName'));
       if (!r.ok) { say('#vdMsg', T('vd_need'), false); return; }
-      A.render();
-      setTimeout(function () { say('#vdMsg', T('vd_added'), true); }, 30);
+      vdEdit = null; A.render();
+      setTimeout(function () { say('#vdMsg', T(r.dup ? 'vd_upd' : 'vd_made'), true); }, 30);
+    };
+    /* 2단계 — 고른 업체에 담당자를 붙이거나 고친다 */
+    if ($('#vdAdd')) $('#vdAdd').onclick = function () {
+      var code = val('#vdCo'), g = val('#vdGrp'), nm = val('#vdStaff'), tel = val('#vdTel');
+      var r = vdEdit
+        ? A.vendStaffSet(vdEdit.code, vdEdit.raw, g, nm, tel)
+        : A.vendStaffAdd(code, g, nm, tel);
+      if (!r.ok) { say('#vdMsg', T(r.why === 'sname' ? 'vd_sneed' : 'vd_first'), false); return; }
+      var was = !!vdEdit || r.edit;
+      vdEdit = null; A.render();
+      setTimeout(function () { say('#vdMsg', T(was ? 'vd_sedit' : 'vd_sok'), true); }, 30);
+    };
+    if ($('#vdCancel')) $('#vdCancel').onclick = function () { vdEdit = null; A.render(); };
+    $$('[data-vsed]').forEach(function (b) {
+      b.onclick = function () { vdEdit = { code: b.dataset.vsed, raw: b.dataset.s }; A.render(); };
+    });
+    /* ★명부 초기화 — 되돌릴 수 없으므로 반드시 확인을 받는다 */
+    if ($('#vdReset')) $('#vdReset').onclick = function () {
+      if (!confirm(T('vd_reset_ask'))) return;
+      var n = A.vendReset();
+      vdEdit = null; A.render();
+      setTimeout(function () { say('#vdMsg', T('vd_reset_done') + ' (' + nf(n) + ')', true); }, 30);
     };
     /* 알림 — 업체별 문안·전체 요약 복사 (v2.16.1) */
     function cp(txt, msgId) {
@@ -964,14 +1034,20 @@
         say('#vdMsg', done ? T('vd_copied') : T('vd_copyfail'), !!done);
       };
     });
+    /* ★지우기는 확인을 받는다 (v2.21.0). 종전에는 × 를 스치기만 해도
+       담당자가 사라졌다 — 되돌릴 길이 없다. */
     $$('[data-vdel]').forEach(function (b) {
-      b.onclick = function () { A.vendDel(b.dataset.vdel); A.render(); };
+      b.onclick = function () {
+        if (!confirm(T('vd_del_ask'))) return;
+        A.vendDel(b.dataset.vdel); vdEdit = null; A.render();
+      };
     });
     $$('[data-vsdel]').forEach(function (a) {
       a.onclick = function (e) {
         e.preventDefault();
+        if (!confirm(T('vd_sdel_ask'))) return;
         A.vendStaffDel(a.dataset.vsdel, a.dataset.s);
-        A.render();
+        vdEdit = null; A.render();
       };
     });
   }

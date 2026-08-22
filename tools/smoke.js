@@ -2488,6 +2488,104 @@ console.log('\n[78] 지급 후 양쪽 확인 · 현황판 경고');
   A.setRole('admin'); A.go(1);
 }
 
+/* ── 79 명부 — 업체 먼저, 담당자는 그 다음 (v2.21.0 사용자 지시) ── */
+console.log('\n[79] 명부 2단계 · 담당자별 전화 · 수정/삭제 · 초기화');
+{
+  const tsrc = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+  const keep = S.vend.slice();
+  S.vend = []; S.lang = 'ko';
+
+  /* 79-1. 1단계 — 업체만 만든다 */
+  ok(A.vendCreate('', 'X').ok === false, '코드 없이는 안 만들어진다');
+  ok(A.vendCreate('AAA', '').ok === false, '이름 없이도 안 된다');
+  const c1 = A.vendCreate('AAA', 'Alpha Co');
+  ok(c1.ok && c1.v.staff.length === 0, '★업체만 만들어진다 — 담당자는 안 받는다');
+  ok(!!c1.v.key, '링크 열쇠가 함께 생긴다');
+
+  /* 79-2. ★같은 코드면 회사가 갈라지지 않는다 */
+  const c2 = A.vendCreate('AAA', 'Alpha Company');
+  ok(S.vend.length === 1 && c2.dup === true, '★같은 코드는 새로 안 만든다');
+  ok(S.vend[0].name === 'Alpha Company', '이름만 고쳐진다');
+  ok(S.vend[0].key === c1.v.key, '★링크는 그대로 — 업체가 쓰던 주소가 안 죽는다');
+
+  /* 79-3. 2단계 — 만들어진 업체에 담당자를 붙인다 */
+  ok(A.vendStaffAdd('AAA', '', '').ok === false, '이름 없이는 안 들어간다');
+  ok(A.vendStaffAdd('ZZZ', '', 'Ali').why === 'novend', '★없는 업체에는 못 붙인다');
+  A.vendStaffAdd('AAA', '토공', 'Ahmed', '964770000001');
+  A.vendStaffAdd('AAA', '포장공', 'Kareem', '964770000002');
+  A.vendStaffAdd('AAA', '', 'Ali', '');
+  ok(S.vend[0].staff.length === 3, '담당자 셋이 붙었다');
+  ok(S.vend.length === 1, '★담당자를 넣어도 회사는 하나 그대로다');
+
+  /* 79-4. ★전화번호가 담당자마다 따로다 */
+  const st = A.vendStaffList(S.vend[0]);
+  ok(st[0].grp === '토공' && st[0].name === 'Ahmed' && st[0].tel === '964770000001',
+     '★공종·이름·전화가 따로 읽힌다');
+  ok(st[2].grp === '' && st[2].name === 'Ali' && st[2].tel === '',
+     '공종 없는 담당자도 그대로');
+  ok(A.vendTel(S.vend[0], '포장공') === '964770000002', '★공종 담당자 번호를 고른다');
+  ok(A.vendTel(S.vend[0], '', 'Ahmed') === '964770000001', '★이름으로도 고른다');
+  ok(A.vendTel(S.vend[0], '없는공종') !== '', '★못 찾으면 다른 번호라도 준다 — 빈손으로 안 돌려보낸다');
+
+  /* 79-5. ★옛 자료를 그대로 읽는다 (마이그레이션 없음) */
+  {
+    const old = { staff: ['Ahmed', '토공|Kareem', '포장공|Ali|964770000009'] };
+    const q = A.vendStaffList(old);
+    ok(q[0].name === 'Ahmed' && q[0].grp === '' && q[0].tel === '', '★옛 「이름만」 형식');
+    ok(q[1].grp === '토공' && q[1].name === 'Kareem' && q[1].tel === '', '★옛 「공종|이름」 형식');
+    ok(q[2].tel === '964770000009', '새 「공종|이름|전화」 형식');
+  }
+  ok(A.vendStaffMake('', 'Ali', '9647700') === '|Ali|9647700',
+     '★공종이 없어도 전화가 있으면 칸을 비워 자리를 지킨다 — 안 그러면 이름이 공종 자리로 밀린다');
+
+  /* 79-6. 수정 — 같은 사람이 둘이 되지 않는다 */
+  A.vendStaffAdd('AAA', '토공', 'Ahmed', '964770009999');
+  ok(S.vend[0].staff.length === 3, '★같은 공종·같은 이름이면 덧붙이지 않고 고친다');
+  ok(A.vendTel(S.vend[0], '토공') === '964770009999', '전화만 바뀐다');
+  A.vendStaffSet('AAA', A.vendStaffList(S.vend[0])[0].raw, '관로공', 'Ahmad', '964770001111');
+  const st2 = A.vendStaffList(S.vend[0]);
+  ok(st2[0].grp === '관로공' && st2[0].name === 'Ahmad' && st2[0].tel === '964770001111',
+     '★공종·이름까지 통째로 고칠 수 있다');
+  ok(S.vend[0].staff.length === 3, '고쳐도 수가 안 는다');
+
+  /* 79-7. 삭제 */
+  A.vendStaffDel('AAA', A.vendStaffList(S.vend[0])[2].raw);
+  ok(S.vend[0].staff.length === 2, '담당자 하나만 지워진다');
+  ok(S.vend.length === 1, '업체는 남는다');
+
+  /* 79-8. ★초기화 */
+  A.vendCreate('BBB', 'Beta Co');
+  ok(S.vend.length === 2, '업체 둘');
+  const n = A.vendReset();
+  ok(n === 2 && S.vend.length === 0, '★명부를 통째로 비운다');
+
+  /* 79-9. 화면 — 두 단계로 나뉘어 있다 */
+  A.vendCreate('CCC', 'Gamma Co');
+  A.vendStaffAdd('CCC', '', 'Sami', '');
+  ok(/id="vdMk"/.test(tsrc), '★1단계 [업체 만들기] 단추가 따로 있다');
+  ok(/id="vdCo"/.test(tsrc), '★2단계는 업체를 **고른다** — 이름을 다시 안 적는다');
+  ok(!/A\.vendAdd\(val\('#vdCode'\)/.test(tsrc),
+     '★한 폼에서 업체·담당자를 함께 받던 옛 길이 없다');
+  ok(/data-vsed=/.test(tsrc), '★담당자 [수정] 단추가 있다');
+  ok(/id="vdReset"/.test(tsrc), '★[명부 초기화] 단추가 있다');
+  ok(/confirm\(T\('vd_reset_ask'\)\)/.test(tsrc), '★초기화는 확인을 받는다');
+  ok(/confirm\(T\('vd_sdel_ask'\)\)/.test(tsrc), '★담당자 삭제도 확인을 받는다');
+  ok(/confirm\(T\('vd_del_ask'\)\)/.test(tsrc), '★업체 삭제도 확인을 받는다');
+  ok(/T\('vd_first'\)/.test(tsrc), '★업체가 없으면 담당자 폼 대신 안내를 낸다');
+  ok(/vd_notel/.test(tsrc), '★번호 없는 담당자는 눈에 띄게 둔다 — 독촉이 못 간다');
+
+  /* 79-10. 독촉이 담당자 번호로 간다 */
+  {
+    const csrc = fs.readFileSync(path.join(ROOT, 'assets/js/core.js'), 'utf8');
+    ok(/tel = A\.vendTel\(v, r\.grp/.test(csrc),
+       '★결재 독촉이 대표번호가 아니라 담당자 번호로 간다');
+    ok(/tel: A\.vendTel\(v\)/.test(csrc), '★미입력 독촉도 마찬가지');
+  }
+
+  S.vend = keep; A.save();
+  A.setRole('admin'); A.go(1);
+}
+
 /* ── 58 공종 수동 추가 · 공종별 담당자 (v2.19.2 사용자 지시) ── */
 console.log('\n[58] 공종 직접 추가 · 공종별 담당자');
 {
@@ -3508,8 +3606,89 @@ console.log('\n[59] 증분 수신 — 바뀐 것만');
           }
         }
 
-        console.log(fail ? `\n✗ 실패 ${fail}건\n` : '\n✓ 전부 통과\n');
-        process.exit(fail ? 1 : 0);
+        /* ── 78 [초기화] — 관리자만 · 협력업체 입력만 (v2.21.1 · 0-Z-1·0-Z-2) ── */
+        console.log('\n[78] [초기화] — 관리자 비밀번호 · 협력업체가 올린 것만 지운다');
+        {
+          const csrc = fs.readFileSync(path.join(ROOT, 'assets/js/core.js'), 'utf8');
+          const hsrc = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+
+          /* 78-1 지우는 범위 — 다섯만 비고 나머지는 그대로 남는다.
+             ★사용자 확정 : 「없다 — 협력업체 입력 5종만」 */
+          const lk78 = A.locKey({ s: 'civil', p: 3, c: 1 });
+          S.work = [{ id: 'w78' }]; S.crew = [{ id: 'c78' }]; S.insp = [{ id: 'i78' }];
+          S.surv = [{ id: 's78' }]; S.mreq = [{ id: 'm78' }];
+          S.direct = [{ id: 'd78' }]; S.issue = [{ id: 'e78' }];
+          S.stock = { x78: 1 }; S.boq = { rows: [1] }; S.alias = { a78: 'T-01' };
+          S.plan[lk78] = { 'T-01': 100 };
+          S.vend = [{ code: 'V78', name: 'V78', key: 'k78', staff: ['|Ali|9647'] }];
+          S.lang = 'ko'; S.rxLast = '2026-08-01T00:00:00Z';
+          A.save();
+          A.wipe();
+          ok(!S.work.length && !S.crew.length && !S.insp.length &&
+             !S.surv.length && !S.mreq.length, '★협력업체 입력 5종이 비었다');
+          ok(S.direct.length === 1 && S.issue.length === 1 && S.stock.x78 === 1 && !!S.boq,
+             '★직영·지급대장·재고·확인필요 목록은 남는다 (사용자 확정)');
+          ok(S.plan[lk78] && S.plan[lk78]['T-01'] === 100 && S.vend.length === 1 &&
+             S.alias.a78 === 'T-01', '★설계수량·명부·별칭은 남는다');
+          ok(S.rxLast === '2026-08-01T00:00:00Z',
+             '★rxLast를 되돌리지 않는다 — 되돌리면 지운 줄이 서버에서 되돌아온다');
+          ok(store['bncp.dash.v2'] != null && JSON.parse(store['bncp.dash.v2']).vend.length === 1,
+             '★저장소 키를 통째로 지우지 않는다');
+          ok(!/removeItem\(KEY\)/.test(csrc), '★옛 removeItem(KEY) 길이 남아 있지 않다');
+
+          /* 78-2 관문 판정 — 관리자만 통과한다 */
+          ok(A.wipeOk({ ok: true, role: 'admin' }).ok === true, '관리자는 통과');
+          ok(A.wipeOk({ ok: true, role: 'staff' }).err === 'role', '★스탭은 거절');
+          ok(A.wipeOk({ ok: true, role: 'surv' }).err === 'role', '★측량팀도 거절');
+          ok(A.wipeOk({ ok: false }).err === 'bad', '비밀번호 불일치는 거절');
+          ok(A.wipeOk({ ok: false, err: 'offline' }).err === 'off',
+             '★대조 못 하면 거절 — 확인 없이 지워지는 것보다 낫다');
+          ok(A.wipeOk(null).err === 'off', '응답 자체가 없어도 거절');
+
+          /* 78-3 ★대조 없이 A.wipe가 불리는 자리가 없다 */
+          const inl = (hsrc.split('#wipe')[1] || '').slice(0, 900);
+          ok(/A\.wipeGate\(/.test(inl), '★[초기화]는 서버 대조를 거친다');
+          ok(inl.indexOf('A.wipeGate(') < inl.indexOf('A.wipe()'),
+             '★A.wipe()는 대조를 통과한 뒤에만 불린다');
+          ok(!/if\(confirm\(A\.T\('wipeConfirm'\)\)\) A\.wipe\(\)/.test(hsrc),
+             '★confirm 하나로 곧바로 지우던 옛 길이 없다');
+          const strip78 = t => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+          ok(!/PW_ADMIN|pwAdmin/.test(strip78(hsrc)) && !/PW_ADMIN/.test(strip78(csrc)),
+             '★비밀번호를 화면 코드에 두지 않는다 (주석 제외)');
+
+          /* 78-4 문구가 실제 동작과 맞는다 (ko/en/bn — ar은 협력업체 전용이라 뺀다) */
+          const I78 = sb.BNCP_I18N || sb.I18N || null;
+          ['ko', 'en', 'bn'].forEach(function (L) {
+            const d = I78 && I78[L];
+            ok(!!(d && d.wipePw && d.wipeRole && d.wipeBad && d.wipeOff && d.wipeDone),
+               `${L} — 초기화 안내 문구가 다 있다`);
+          });
+          if (I78 && I78.ko) {
+            ok(/명부/.test(I78.ko.wipeConfirm) && /설계수량/.test(I78.ko.wipeConfirm),
+               '★무엇이 남는지 문구에 적혀 있다');
+          }
+        }
+
+        /* 78-5 관문이 실제로 통신을 거친다 (비동기 — 요약은 이 뒤에 낸다) */
+        const api78 = sb.BNCP_API;
+        const gate78 = function (stub) {
+          sb.BNCP_API = stub;
+          return A.wipeGate('x');
+        };
+        Promise.resolve()
+          .then(() => gate78({ login: () => Promise.resolve({ ok: true, role: 'admin' }) }))
+          .then(r => ok(r.ok === true, '★서버가 관리자라고 하면 통과'))
+          .then(() => gate78({ login: () => Promise.resolve({ ok: true, role: 'staff' }) }))
+          .then(r => ok(r.err === 'role', '★서버가 스탭이라고 하면 막힌다'))
+          .then(() => gate78({ login: () => Promise.resolve({ ok: false, err: 'offline' }) }))
+          .then(r => ok(r.err === 'off', '★오프라인이면 막힌다'))
+          .then(() => gate78(null))
+          .then(r => ok(r.err === 'off', '★API가 아예 없어도 막힌다'))
+          .then(() => {
+            sb.BNCP_API = api78;
+            console.log(fail ? `\n✗ 실패 ${fail}건\n` : '\n✓ 전부 통과\n');
+            process.exit(fail ? 1 : 0);
+          });
       });
     });
   });

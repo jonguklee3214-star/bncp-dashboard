@@ -128,7 +128,45 @@
       }
     }
   };
-  A.wipe = function () { localStorage.removeItem(KEY); location.reload(); };
+  /* ══ [초기화] (v2.21.1 · 인수인계서 0-Z-1·0-Z-2) ═══════════
+     ★종전에는 저장소 키를 통째로 지웠다(`removeItem`). 그러면 설계수량·
+       협력업체 명부·별칭·마스터까지 같이 날아가 정식 전환 때 전부 다시
+       올려야 했다. 문구는 「실적·검측·측량·자재」라고만 해서 실제와 달랐다.
+     사용자 확정 : 「협력업체에서 입력한 것만 날리는 거야」
+       → 문구를 실제에 맞추는 것이 아니라 **동작을 문구에 맞춘다.**
+     ★같이 지울 것을 따로 물었고 「없다 — 협력업체 입력 5종만」이었다.
+       직영(direct)·장비 지급대장(issue)·자재 재고(stock)·내역서 확인필요
+       목록(boq)은 우리 쪽에서 넣은 것이라 **남긴다.**
+       (boq는 [목록 지우기] 단추가 따로 있다 — 0-B-2)
+     ★rxLast는 일부러 안 건드린다. 되돌리면 증분 수신이 방금 지운 줄을
+       서버에서 그대로 다시 받아 와 초기화가 없던 일이 된다. */
+  A.WIPE_BOX = ['work', 'crew', 'insp', 'surv', 'mreq'];
+  A.wipe = function () {
+    A.WIPE_BOX.forEach(function (b) { S[b] = []; });
+    S.trimMsg = '';
+    A.save();
+    location.reload();
+  };
+
+  /* 로그인 응답 하나로 판정한다. ★비동기와 갈라 둔 이유는 이 판정이
+     검사로 확인되어야 하기 때문이다 — 통신은 검사에서 못 돌린다.
+       ok    관리자다
+       role  들어오긴 했는데 스탭·측량팀이다 → 거절
+       bad   비밀번호가 틀렸다
+       off   대조할 방법이 없다 → ★거절. 확인 못 하면 지우지 않는다. */
+  A.wipeOk = function (r) {
+    if (!r) return { ok: false, err: 'off' };          /* 응답 자체가 없다 = 대조 못 했다 */
+    if (!r.ok) return { ok: false, err: r.err === 'offline' ? 'off' : 'bad' };
+    return r.role === 'admin' ? { ok: true } : { ok: false, err: 'role' };
+  };
+
+  /* ★비밀번호를 화면 코드에 박지 않는다. 로그인과 **같은 길**을 쓴다 —
+     Apps Script 스크립트 속성 PW_ADMIN에서 대조한다. */
+  A.wipeGate = function (pw) {
+    var api = window.BNCP_API;
+    if (!api || !api.login) return Promise.resolve({ ok: false, err: 'off' });
+    return api.login(pw).then(A.wipeOk);
+  };
 
   /* ══ 권한 ════════════════════════════════════════════
      · 두 등급뿐이다: 스탭(staff) / 관리자(admin).
@@ -244,11 +282,26 @@
        옛 자료(이름만 있는 것)도 그대로 읽힌다 — 마이그레이션이 필요 없다.
      ★쓰임 : 협력업체 화면에서 공종을 고르면 담당자가 자동으로 뜬다.
        틀리면 목록에서 고른다. 매번 손으로 적던 것을 없앤다. */
+  /* ★전화번호를 **담당자마다** 갖는다 (v2.21.0 사용자 지시).
+     종전에는 업체에 하나뿐이라(`v.tel`) 독촉이 늘 대표번호로만 갔다.
+     ★구조를 갈아엎지 않는다 — staff는 종전대로 문자열 배열이고,
+       칸을 하나 더 쓴다: 「공종|이름|전화」.
+       옛 자료(이름만 · 공종|이름)도 그대로 읽힌다. 마이그레이션이 없다. */
   function _sp(x) {
-    var i = String(x || '').indexOf('|');
-    return i < 0 ? { grp: '', name: String(x || '') }
-                 : { grp: String(x).slice(0, i), name: String(x).slice(i + 1) };
+    var a = String(x || '').split('|');
+    if (a.length === 1) return { grp: '', name: a[0], tel: '', raw: String(x || '') };
+    return { grp: a[0] || '', name: a[1] || '', tel: a[2] || '', raw: String(x || '') };
   }
+  /** 되돌려 담는다. ★공종이 없어도 전화가 있으면 칸을 비워 자리를 지킨다
+      (`|이름|전화`) — 안 그러면 이름이 공종 자리로 밀려 들어간다. */
+  function _mk(grp, name, tel) {
+    grp = String(grp || '').trim(); name = String(name || '').trim();
+    tel = String(tel || '').replace(/[^0-9+]/g, '');
+    if (tel) return grp + '|' + name + '|' + tel;
+    if (grp) return grp + '|' + name;
+    return name;
+  }
+  A.vendStaffMake = _mk;
   A.vendStaffList = function (v) {
     return (v && v.staff || []).map(_sp);
   };
@@ -261,6 +314,82 @@
     all.forEach(function (s2) { if (s2.grp && s2.grp === grp && !hit) hit = s2.name; });
     if (!hit) all.forEach(function (s2) { if (!s2.grp && !hit) hit = s2.name; });
     return { pick: hit, all: all.map(function (s2) { return s2.name; }) };
+  };
+
+  /** ★그 공종 담당자의 번호 — 없으면 공종 없는 담당자, 그것도 없으면 업체 번호.
+      독촉은 **사람에게** 가야 한다. 대표번호로만 보내면 누가 처리할지 모른다. */
+  A.vendTel = function (v, grp, sname) {
+    if (!v) return '';
+    var all = A.vendStaffList(v), hit = '';
+    if (sname) all.forEach(function (x) { if (x.name === sname && x.tel && !hit) hit = x.tel; });
+    if (!hit && grp) all.forEach(function (x) { if (x.grp === grp && x.tel && !hit) hit = x.tel; });
+    if (!hit) all.forEach(function (x) { if (!x.grp && x.tel && !hit) hit = x.tel; });
+    if (!hit) all.forEach(function (x) { if (x.tel && !hit) hit = x.tel; });
+    return hit || v.tel || '';
+  };
+
+  /* ══ 명부 — 업체 먼저, 담당자는 그 다음 (v2.21.0 사용자 지시) ══
+     ★두 단계로 나눈다. 종전에는 한 폼에서 업체코드·업체명·담당자를 **매번
+       다시** 적었다. 업체명을 그때그때 타이핑하다 한 글자만 달라도
+       (KEW / K.E.W) 같은 업체가 둘로 갈라진다.
+     ★이제 업체는 한 번만 만들고, 담당자는 **만들어진 업체에 골라 붙인다.** */
+
+  /** 1단계 — 업체만 만든다. 담당자는 받지 않는다. */
+  A.vendCreate = function (code, name) {
+    code = String(code || '').trim();
+    name = String(name || '').trim();
+    if (!code || !name) return { ok: false, why: 'need' };
+    var hit = null;
+    S.vend.forEach(function (v) { if (v.code === code) hit = v; });
+    if (hit) { hit.name = name; A.save(); return { ok: true, v: hit, dup: true }; }
+    hit = { code: code, name: name, tel: '', staff: [], key: A.vendKey(code) };
+    S.vend.push(hit); A.save();
+    return { ok: true, v: hit };
+  };
+
+  /** 2단계 — 만들어진 업체에 담당자를 붙인다.
+      ★같은 공종에 같은 이름이 이미 있으면 **덧붙이지 않고 고친다.**
+        안 그러면 전화만 바꾸려다 같은 사람이 둘이 된다. */
+  A.vendStaffAdd = function (code, grp, name, tel) {
+    name = String(name || '').trim();
+    if (!name) return { ok: false, why: 'sname' };
+    var hit = null;
+    S.vend.forEach(function (v) { if (v.code === code) hit = v; });
+    if (!hit) return { ok: false, why: 'novend' };
+    var raw = _mk(grp, name, tel), done = false;
+    hit.staff = hit.staff.map(function (x) {
+      var q = _sp(x);
+      if (!done && q.name === name && q.grp === String(grp || '').trim()) { done = true; return raw; }
+      return x;
+    });
+    if (!done) hit.staff.push(raw);
+    A.save();
+    return { ok: true, v: hit, edit: done };
+  };
+
+  /** 담당자 한 줄을 통째로 바꾼다(공종·이름까지 바뀔 수 있다) */
+  A.vendStaffSet = function (code, oldRaw, grp, name, tel) {
+    name = String(name || '').trim();
+    if (!name) return { ok: false, why: 'sname' };
+    var hit = null;
+    S.vend.forEach(function (v) { if (v.code === code) hit = v; });
+    if (!hit) return { ok: false, why: 'novend' };
+    var raw = _mk(grp, name, tel), found = false;
+    hit.staff = hit.staff.map(function (x) {
+      if (!found && x === oldRaw) { found = true; return raw; }
+      return x;
+    });
+    if (!found) hit.staff.push(raw);
+    A.save();
+    return { ok: true, v: hit };
+  };
+
+  /** ★명부 전체를 비운다. 되돌릴 수 없다 — 부르는 쪽에서 반드시 확인을 받는다. */
+  A.vendReset = function () {
+    var n = S.vend.length;
+    S.vend = [];
+    A.save();
+    return n;
   };
 
   A.vendDel = function (code) {
@@ -1413,7 +1542,9 @@
           if (own === 'vendor') {
             nm = r.by || '';
             var v = A.vendByName ? A.vendByName(nm) : null;
-            if (v) { tel = v.tel || ''; lg = v.lang || 'en'; }
+            /* ★담당자 번호를 먼저 쓴다 (v2.21.0). 대표번호로만 보내면
+               누가 처리해야 하는지 모른 채 업체 안에서 돌기만 한다. */
+            if (v) { tel = A.vendTel(v, r.grp || '', r.by || ''); lg = v.lang || 'en'; }
             k = 'vendor|' + nm;
           }
           var o = by[k] = by[k] || { own: own, name: nm, tel: tel, lang: lg,
@@ -1499,7 +1630,7 @@
           if (!hasC) miss.push('crew');
           else if (!hasE) miss.push('eq');
         }
-        if (miss.length) out.co.push({ name: v.name, tel: v.tel || '', lang: v.lang || 'en',
+        if (miss.length) out.co.push({ name: v.name, tel: A.vendTel(v), lang: v.lang || 'en',
                                        miss: miss, stage: st2, rej: rej });
       });
     }

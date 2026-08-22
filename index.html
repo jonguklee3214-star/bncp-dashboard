@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#FFFFFF">
 <title>BNCP</title>
 <link rel="icon" href="assets/img/logo-ko.svg">
-<link rel="stylesheet" href="assets/css/app.css?v=2.20.1">
+<link rel="stylesheet" href="assets/css/app.css?v=2.22.0">
 </head>
 <body>
 
@@ -32,21 +32,21 @@
 <noscript><p style="padding:40px">This screen requires JavaScript.</p></noscript>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="assets/js/version.js?v=2.20.1"></script>
-<script src="assets/js/i18n.js?v=2.20.1"></script>
-<script src="assets/js/data.js?v=2.20.1"></script>
-<script src="assets/js/master.js?v=2.20.1"></script>
-<script src="assets/js/materials.js?v=2.20.1"></script>
-<script src="assets/js/equip.js?v=2.20.1"></script>
-<script src="assets/js/materials2.js?v=2.20.1"></script>
-<script src="assets/js/work_i18n.js?v=2.20.1"></script>
-<script src="assets/js/prod.js?v=2.20.1"></script>
-<script src="assets/js/core.js?v=2.20.1"></script>
-<script src="assets/js/spot.js?v=2.20.1"></script>
-<script src="assets/js/api.js?v=2.20.1"></script>
-<script src="assets/js/matmaster_api.js?v=2.20.1"></script>
-<script src="assets/js/wx.js?v=2.20.1"></script>
-<script src="assets/js/tabs.js?v=2.20.1"></script>
+<script src="assets/js/version.js?v=2.22.0"></script>
+<script src="assets/js/i18n.js?v=2.22.0"></script>
+<script src="assets/js/data.js?v=2.22.0"></script>
+<script src="assets/js/master.js?v=2.22.0"></script>
+<script src="assets/js/materials.js?v=2.22.0"></script>
+<script src="assets/js/equip.js?v=2.22.0"></script>
+<script src="assets/js/materials2.js?v=2.22.0"></script>
+<script src="assets/js/work_i18n.js?v=2.22.0"></script>
+<script src="assets/js/prod.js?v=2.22.0"></script>
+<script src="assets/js/core.js?v=2.22.0"></script>
+<script src="assets/js/spot.js?v=2.22.0"></script>
+<script src="assets/js/api.js?v=2.22.0"></script>
+<script src="assets/js/matmaster_api.js?v=2.22.0"></script>
+<script src="assets/js/wx.js?v=2.22.0"></script>
+<script src="assets/js/tabs.js?v=2.22.0"></script>
 <script>
 (function(){
   var A=window.APP,S=A.S,$=A.$,$$=A.$$;
@@ -69,8 +69,24 @@
       if(n) n.textContent = (t.files&&t.files.length) ? t.files[0].name : A.T('file_none');
     }
   });
+  /* Reset is admin-only: the password is checked on the server, never here.
+     If the server cannot be reached, the reset is blocked — an unverifiable
+     reset is the same as no lock at all. (handover 0-Z-1) */
   $('#wipe').onclick=function(){
-    if(confirm(A.T('wipeConfirm'))) A.wipe();
+    var b=this;
+    if(!confirm(A.T('wipeConfirm'))) return;
+    var pw=prompt(A.T('wipePw'),'');
+    if(pw==null||!String(pw).trim()) return;
+    b.disabled=true;
+    A.wipeGate(String(pw).trim()).then(function(r){
+      b.disabled=false;
+      if(!r||!r.ok){
+        alert(A.T(r&&r.err==='off'?'wipeOff':r&&r.err==='role'?'wipeRole':'wipeBad'));
+        return;
+      }
+      alert(A.T('wipeDone'));
+      A.wipe();
+    });
   };
   A.render();
   if(A.sync) A.sync(true);   /* fetch once on open; screen still works if it fails */
