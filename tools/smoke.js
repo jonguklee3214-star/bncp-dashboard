@@ -3606,6 +3606,58 @@ console.log('\n[59] 증분 수신 — 바뀐 것만');
           }
         }
 
+        /* ── 80 측량·자재도 기간 단추를 따른다 (v2.22.1 · 0-K) ── */
+        console.log('\n[80] 측량·자재 — 끝난 것도 기간을 주면 나온다');
+        {
+          const lk79 = A.locKey({ s: 'civil', p: 3, c: 1 });
+          const L79 = { s: 'civil', p: 3, c: 1 };
+          const F79 = { s: 'civil', p: 0, c: 0, t: '', b: 0 };
+          S.surv = [
+            { id: 'sv79a', date: '2026-08-18', loc: L79, key: 'T-01', done: true },
+            { id: 'sv79b', date: A.today(), loc: L79, key: 'T-01', done: true },
+            { id: 'sv79c', date: '2026-08-18', loc: L79, key: 'T-01', done: false }
+          ];
+          S.mreq = [
+            { id: 'mq79a', date: '2026-08-18', loc: L79, mat: '레미콘', st: 'iss', iss: 3 },
+            { id: 'mq79b', date: A.today(), loc: L79, mat: '레미콘', st: 'iss', iss: 3 },
+            { id: 'mq79c', date: '2026-08-18', loc: L79, mat: '모래', st: 'req' }
+          ];
+
+          /* 기간을 안 주면 종전대로 — 오늘 것 + 안 끝난 것 */
+          A.dateFlt = { from: '', to: '' };
+          let sv = A.survList(F79).map(r => r.id);
+          ok(sv.indexOf('sv79b') >= 0 && sv.indexOf('sv79c') >= 0,
+             '기간 없으면 오늘 것과 미처리는 나온다');
+          ok(sv.indexOf('sv79a') < 0, '기간 없으면 끝난 과거 건은 안 나온다 (종전 그대로)');
+
+          /* ★기간을 주면 끝난 과거 건도 나와야 한다 — 여기가 안 되고 있었다 */
+          A.dateFlt = { from: '2026-08-17', to: '2026-08-23' };
+          sv = A.survList(F79).map(r => r.id);
+          ok(sv.indexOf('sv79a') >= 0,
+             '★★기간을 주면 끝난 측량도 나온다 — 옛 사본은 기간을 안 봤다');
+          ok(sv.indexOf('sv79c') >= 0, '미처리는 기간과 무관하게 계속 나온다');
+
+          const mq = A.mreqOpen(F79).map(r => r.id);
+          ok(mq.indexOf('mq79a') >= 0, '★★기간을 주면 지급 끝난 자재도 나온다');
+          ok(mq.indexOf('mq79c') >= 0, '아직 지급 안 된 자재는 계속 나온다');
+
+          /* ★기간 밖은 여전히 걸러야 한다 — 단추가 뜻대로 들어야 한다 */
+          A.dateFlt = { from: '2026-08-01', to: '2026-08-02' };
+          ok(A.survList(F79).map(r => r.id).indexOf('sv79a') < 0,
+             '기간 밖의 끝난 건은 안 나온다');
+          ok(A.mreqOpen(F79).map(r => r.id).indexOf('mq79a') < 0,
+             '기간 밖의 지급 끝난 자재도 안 나온다');
+
+          /* ★같은 뜻의 함수가 둘이면 또 한쪽만 고치게 된다 (3-D) */
+          ok(!/function todayOrOpen\(/.test(
+               fs.readFileSync(path.join(ROOT, 'assets/js/core.js'), 'utf8')),
+             '★옛 사본(비공개 todayOrOpen)이 지워졌다 — 같은 뜻이 둘이면 또 갈린다');
+
+          A.dateFlt = { from: '', to: '' };
+          S.surv = []; S.mreq = [];
+          void lk79;
+        }
+
         /* ── 78 [초기화] — 관리자만 · 협력업체 입력만 (v2.21.1 · 0-Z-1·0-Z-2) ── */
         console.log('\n[78] [초기화] — 관리자 비밀번호 · 협력업체가 올린 것만 지운다');
         {

@@ -754,17 +754,6 @@
     return Math.round(t * 1000) / 1000;
   };
   /* ══ 오늘 + 미처리 (v2.18.9 사용자 확정) ═══════════════
-     ★「검측이나 작업량이나 오늘 기준은 맞아. 그런데 확인 안 한 것들은 떠야
-       누락된 거 확인하고 추가되는 거지.」
-     ★그래서 기준이 둘이다 — 오늘 것이거나, 아직 처리 안 된 것.
-       밀린 일이 화면에서 사라지면 그 일 자체가 없어진 것처럼 보인다.
-     ★미처리는 날짜를 안 따진다. 두 달 전 것이라도 안 끝났으면 떠야 한다. */
-  function todayOrOpen(rec, done) {
-    if (!done) return true;                        /* 아직 안 끝났다 — 날짜 무관 */
-    return String(rec && rec.date || '') === A.today();
-  }
-
-  /* ══ 오늘 + 미처리 (v2.18.9 사용자 확정) ═══════════════
      ★「오늘 기준은 맞아. 그런데 확인 안 한 것들은 떠야 누락된 걸 확인하고
        추가되는 거지」 — 처리한 것은 오늘 것만, 안 한 것은 날짜와 무관하게.
      ★안 그러면 어제 밀린 검측이 화면에서 사라져 그 일 자체가 없어진다. */
@@ -1663,7 +1652,10 @@
   A.survList = function (f) {
     return S.surv.filter(function (r) {
       if (!A.locMatch(r, f)) return false;
-      return todayOrOpen(r, !!r.done);
+      /* ★v2.22.1 — 종전에는 이 자리에서 **옛 사본**을 불렀다. 그 사본은
+         A.dateFlt를 안 봐서 기간 단추를 눌러도 끝난 측량이 안 나왔다.
+         v2.19.0에서 검측만 고치고 측량·자재는 옛 사본에 남아 있었다. */
+      return A.todayOrOpen(r, !r.done);
     });
   };
   A.survAll = function (f) { return S.surv.filter(function (r) { return A.locMatch(r, f); }); };
@@ -1876,10 +1868,12 @@
       return A.locMatch(r, f);
     });
   };
-  /** 화면용 — 오늘 것이거나 아직 지급 안 된 것 */
+  /** 화면용 — 오늘 것이거나 아직 지급 안 된 것
+      ★v2.22.1 — 측량과 같은 이유로 공개판(A.todayOrOpen)으로 바꿨다.
+        옛 사본은 기간을 안 봐서 지급 끝난 과거 자재가 영영 안 보였다. */
   A.mreqOpen = function (f, plant) {
     return A.mreqList(f, plant).filter(function (r) {
-      return todayOrOpen(r, r.st === 'iss' || r.st === 'deny');
+      return A.todayOrOpen(r, !(r.st === 'iss' || r.st === 'deny'));
     });
   };
   /* 실사용 미입력(지급됐는데 use 없음) */

@@ -432,3 +432,67 @@ function say_(msg) {
   Logger.log(msg);
   return msg;
 }
+
+/* ══════════════════════════════════════════════════════════
+   ★진단 전용 — 아무것도 바꾸지 않는다. 읽기만 한다.
+   화면(assets/js/tabs.js의 unpack)이 줄 하나를 받아들이려면
+     0) r.id 가 있어야 한다
+     1) r.s 가 'civil' 또는 'anc' 여야 한다 (위치 종류 — 없으면 조용히 버려진다)
+     2) type별로 : plan/work/crew/insp/surv는 r.key 필요, mat은 r.mat 필요
+   이 중 하나라도 없으면 화면이 그 줄을 **조용히 버린다.** (실측 : surv 5건 중
+   1건만 화면에 들어옴 — 2026-08-22 확인)
+   ★etc 시트는 애초에 화면에 받는 갈래가 없다. type을 모르는 줄이라 여기
+   왔을 뿐이고, 조건을 갖췄어도 화면은 절대 안 받는다 — 따로 표시한다. */
+function auditUnpack() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var names = ['work', 'crew', 'insp', 'surv', 'mat', 'direct', 'plan', 'etc'];
+  var lines = ['시트별 진단 — 화면이 받아들이는 조건으로 세어 봤다 (아무것도 안 바꿈)'];
+  var total = { rows: 0, noId: 0, noS: 0, noKey: 0, ok: 0 };
+
+  for (var n = 0; n < names.length; n++) {
+    var sh = ss.getSheetByName(names[n]);
+    if (!sh) { continue; }
+    var last = sh.getLastRow();
+    if (last < 2) { lines.push('  ' + names[n] + '  0줄'); continue; }
+
+    var vals = sh.getRange(2, 1, last - 1, COLS.length).getValues();
+    var rows = 0, noId = 0, noS = 0, noKey = 0, ok = 0, sample = null;
+
+    for (var i = 0; i < vals.length; i++) {
+      rows++;
+      var o = {};
+      try { o = JSON.parse(vals[i][COL_JSON - 1]); } catch (e) { o = {}; }
+
+      if (!o.id) { noId++; continue; }
+
+      var hasS = (o.s === 'civil' || o.s === 'anc');
+      if (!hasS) {
+        noS++;
+        if (!sample) sample = o.id + ' → ' + JSON.stringify(o).slice(0, 220);
+        continue;
+      }
+
+      var needKey = (names[n] === 'plan' || names[n] === 'work' ||
+                     names[n] === 'crew' || names[n] === 'insp' || names[n] === 'surv');
+      var needMat = (names[n] === 'mat');
+      if (needKey && !o.key) { noKey++; continue; }
+      if (needMat && !(o.mat)) { noKey++; continue; }
+      ok++;
+    }
+
+    var tag = (names[n] === 'etc') ? ' (★화면이 애초에 안 받는 시트)' : '';
+    lines.push('  ' + names[n] + tag + '  ' + rows + '줄  →  받아들여짐 ' + ok +
+      '  ·  위치정보(r.s)없음 ' + noS + '  ·  필수값없음 ' + noKey +
+      (noId ? '  ·  id없음 ' + noId : '') +
+      (sample ? '\n      예시(위치정보 없는 첫 줄) : ' + sample : ''));
+
+    total.rows += rows; total.noId += noId; total.noS += noS;
+    total.noKey += noKey; total.ok += ok;
+  }
+
+  lines.push('');
+  lines.push('합계 — 전체 ' + total.rows + '줄 · 받아들여짐 ' + total.ok +
+    ' · 위치정보 없음 ' + total.noS + ' · 필수값 없음 ' + total.noKey +
+    (total.noId ? ' · id 없음 ' + total.noId : ''));
+  return say_(lines.join('\n'));
+}
