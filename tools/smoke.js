@@ -1351,13 +1351,21 @@ console.log('\n[39] 자재 — 설계 · 재고 · 지급 세 칸');
   A.setRole('admin'); S.lang = 'ko'; A.setFlt(bl);
   A.go(4);
   const h = bag.view.innerHTML;
-  ok(!/data-mseg/.test(h), '★창고/플랜트 세그먼트 없음 — 플랜트는 뺐다');
+  ok(!/data-mseg/.test(h), '★창고/플랜트 세그먼트 없음 — 칸막이 단추는 되살리지 않았다');
   ok(!/data-mapv/.test(h) && !/data-mdeny/.test(h) && !/data-miss=/.test(h),
      '★신청·승인·지급 절차 단추 없음');
   ok(/MAT_FLOW_ON = false/.test(tsrc) && /function v4Full/.test(tsrc), '옛 화면은 보존');
 
-  /* 플랜트 자재는 목록에 안 온다 */
-  ok(A.matRows(A.flt()).every(a => !a.plant), '★플랜트 자재가 섞이지 않는다');
+  /* ★v2.22.2 — 종전 검사는 「플랜트 자재가 섞이지 않는다」였다(v2.17.1 결정).
+     사용자가 결정을 **바꿨다** — 「플랜트 자재도 보이게 한다」.
+     이유 : 협력업체가 올린 레미콘·모래 신청이 화면 어디에도 안 나와,
+     올린 사람은 올렸는데 받는 사람은 못 보는 상태였다.
+     ★검사를 통과시키려고 고친 것이 아니다. 결정이 바뀌어 검사도 바뀐 것이다.
+     ★칸막이 단추(data-mseg)와 5단계 절차는 **되살리지 않았다** — 그건
+       여전히 시스템 밖 일이다. 바뀐 것은 「표에 보이느냐」뿐이다. */
+  ok(!/A\.mVariance\(f, false\)/.test(
+       fs.readFileSync(path.join(ROOT, 'assets/js/core.js'), 'utf8')),
+     '★matRows가 창고만 세도록 못 박혀 있지 않다 (v2.17.1 결정 변경)');
 
   /* 재고는 사람이 넣는다 */
   const row = A.mVariance(A.flt(), false)[0];
@@ -3604,6 +3612,48 @@ console.log('\n[59] 증분 수신 — 바뀐 것만');
             ok(/@media \(max-width:1180px\)[\s\S]{0,160}position:static/.test(c9),
                '★★그 화면에서는 고정하지 않는다 — 고정하면 또 덮는다');
           }
+        }
+
+        /* ── 81 플랜트 자재가 화면에 나온다 · 측량 기간 단추 (v2.22.2 · 0-M) ── */
+        console.log('\n[81] 플랜트 자재 · 측량 기간 단추');
+        {
+          const tsrc81 = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+          const csrc81 = fs.readFileSync(path.join(ROOT, 'assets/js/core.js'), 'utf8');
+
+          /* 81-1 ★플랜트 자재를 세는가 — 종전에는 false를 박아 창고만 셌다 */
+          ok(!/A\.mVariance\(f, false\)/.test(csrc81),
+             '★matRows가 창고(false)로 못 박혀 있지 않다');
+          ok(/A\.mVariance\(f, null\)/.test(csrc81),
+             '★null로 부른다 — 창고·플랜트를 함께 센다');
+
+          const L81 = { s: 'civil', p: 3, c: 1 };
+          const F81 = { s: 'civil', p: 0, c: 0, t: '', b: 0 };
+          S.mreq = [
+            { id: 'mp81', date: A.today(), loc: L81, grp: '관수공', sub: '환기구',
+              mat: 'STS plate', spec: 't=5mm', unit: 'kg', plant: false, qty: 3, st: 'req' },
+            { id: 'mp82', date: A.today(), loc: L81, grp: '콘크리트공', sub: '레미콘',
+              mat: '레미콘', spec: '', unit: 'M3', plant: true, qty: 23, st: 'req' }
+          ];
+          const mr = A.matRows(F81);
+          ok(mr.filter(a => a.mat === '레미콘').length === 1,
+             '★★플랜트 자재(레미콘)가 표에 나온다 — 종전에는 통째로 빠졌다');
+          ok(mr.filter(a => a.mat === 'STS plate').length === 1,
+             '창고 자재도 그대로 나온다');
+          ok(mr.filter(a => a.mat === '레미콘')[0].plant === true,
+             '★플랜트 여부가 줄에 실려 온다 — 표에서 갈라 보여야 한다');
+          ok(/a\.plant \? ' <span class="bd bd--o">' \+ T\('m_plant'\)/.test(tsrc81),
+             '★표에 플랜트 표를 단다 — 안 달면 창고 자재와 구분이 안 된다');
+
+          /* 81-2 ★측량 기간 단추 — 단추도 없고 감싸지도 않았다 */
+          const v3src = tsrc81.slice(tsrc81.indexOf('function v3()'),
+                                     tsrc81.indexOf('function survTable'));
+          ok(/rngBtn\('surv'\)/.test(v3src), '★측량 표에 기간 단추가 있다');
+          ok(/withRng\('surv'/.test(v3src),
+             '★★측량 목록이 그 기간을 따른다 — 단추만 있고 안 걸면 안 듣는다');
+          ok(/withRng\('surv', function \(\) \{ return A\.survList\(flt\); \}\)\.map/.test(tsrc81),
+             '★CSV도 표와 같은 기간이다 — 어긋나면 0-H와 같은 사고다');
+
+          S.mreq = [];
         }
 
         /* ── 80 측량·자재도 기간 단추를 따른다 (v2.22.1 · 0-K) ── */

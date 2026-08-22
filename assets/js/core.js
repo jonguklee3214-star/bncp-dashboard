@@ -1901,6 +1901,10 @@
     A.mreqList(f, plant).forEach(function (r) {
       var id = matId(r);
       agg[id] = agg[id] || blankAgg(id);
+      /* ★플랜트 여부는 마스터가 기준이다. 다만 마스터에 없는 자재
+         (설계 외 추가)는 blankAgg가 false로 두므로, 협력업체가 올린
+         값으로 메운다 — 안 그러면 화면에서 창고 자재로 보인다. */
+      if (r.plant) agg[id].plant = true;
       agg[id].req += Number(r.qty) || 0;
       if (r.st === 'iss') agg[id].iss += Number(r.iss) || 0;
       if (r.use != null) agg[id].use += Number(r.use) || 0;
@@ -1971,8 +1975,13 @@
         협력업체가 올린 자재신청은 지급 전이라 design·iss·stock이 셋 다
         없다. 그래서 관리자 화면에 아예 안 떴다 — 신청이 온 줄도 몰랐다.
         신청이야말로 스탭이 가장 먼저 봐야 할 것이다. */
+  /* ★v2.22.2 — 종전에는 `false`를 박아 **창고 자재만** 세었다.
+     옛 자재 화면(v4Full)에는 창고/플랜트 칸막이 단추가 있어 갈라 볼 수
+     있었는데, MAT_FLOW_ON=false로 그 화면을 끄면서 **플랜트 갈래가 갈 곳을
+     잃었다.** 협력업체가 올린 레미콘·모래가 화면 어디에도 안 나왔다.
+     ★null이면 둘 다 센다. 표에서는 플랜트 자재에 표를 달아 구분한다. */
   A.matRows = function (f) {
-    return A.mVariance(f, false).map(function (a) {
+    return A.mVariance(f, null).map(function (a) {
       a.stock = A.stockOf(f, a.id);
       return a;
     }).filter(function (a) {

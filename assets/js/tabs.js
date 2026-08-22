@@ -2820,7 +2820,11 @@
   function v3() {
     if (A.isSurv()) return mineCard();
 
-    var list = A.survList(flt);
+    /* ★v2.22.2 — 종전에는 기간 단추가 **없었다.** RNG_DEF에 surv가 있는데도
+       화면에 그리는 곳도, withRng로 감싸는 곳도 없어 A.dateFlt가 늘 비었다.
+       그래서 끝난 측량은 「오늘 것」만 남고 어제 완료한 것은 볼 길이 아예 없었다.
+       ★기본은 종전 그대로 오늘이다(RNG_DEF.surv='today'). 단추가 생겼을 뿐이다. */
+    var list = withRng('surv', function () { return A.survList(flt); });
     var open = list.filter(function (r) { return !A.flowEnd('surv', r); });
     var late = list.filter(function (r) { return A.flowLate('surv', r); });
     var h = '<div class="grid g4" style="margin-bottom:16px">' +
@@ -2832,7 +2836,7 @@
     h += mineCard();
     h += card(T('h_survq'), nf(list.length) + T('u_case'),
         list.length ? survTable(list) : empty(T('z_noreq2'), T('z_fromvendor')), 'flush',
-        '<button class="btn btn--g btn--sm noprint" id="sCsv">' + T('csv') + '</button>');
+        rngBtn('surv') + '<button class="btn btn--g btn--sm noprint" id="sCsv">' + T('csv') + '</button>');
     return h;
   }
   function survTable(list) {
@@ -2895,7 +2899,10 @@
         return '<tr><td><b class="code">' + esc(A.locShort(pkLoc('w'))) + '</b></td>' +
           '<td><span class="sp">' + esc(A.trM(a.grp)) + ' › ' + esc(A.trM(a.sub)) + '</span><br>' +
           '<b class="nm">' + esc(A.trM(a.mat)) + '</b>' +
-          (a.spec ? ' <span class="sp">' + esc(A.trS(a.spec)) + '</span>' : '') + '</td>' +
+          (a.spec ? ' <span class="sp">' + esc(A.trS(a.spec)) + '</span>' : '') +
+          /* ★플랜트 자재는 표를 단다 (v2.22.2). 안 달면 레미콘과 창고 자재가
+             같은 줄처럼 보인다 — 받는 곳도 처리도 다르다. */
+          (a.plant ? ' <span class="bd bd--o">' + T('m_plant') + '</span>' : '') + '</td>' +
           '<td class="r sp">' + (a.design ? nf(a.design, 2) + ' <span class="sp">' + esc(A.trU(a.unit)) + '</span>' : '—') + '</td>' +
           /* ★신청 — 협력업체가 올린 것. 지급 전이라 다른 칸이 다 비어 있어도
              여기만 차 있다. 스탭이 가장 먼저 봐야 할 칸이다. */
@@ -4076,7 +4083,7 @@
     });
     if ($('#sCsv')) $('#sCsv').onclick = function () {
       A.dl(T('f_surv') + '.csv', A.toCSV([T('c_st'), T('c_date'), T('c_loc'), T('work'), T('c_reason'), T('c_by')],
-        A.survList(flt).map(function (r) {
+        withRng('surv', function () { return A.survList(flt); }).map(function (r) {
           var e = A.item(r.key) || {};
           return [A.T(r.done ? 's_done' : 's_open'), r.date, A.locLabel(r.loc), e.name || r.key, r.why, r.by || ''];
         })));
