@@ -44,7 +44,45 @@ ok(/class="bi"/.test(h), '병기 라벨 구조 있음');
 ok(/class="ar"/.test(h), '아랍어 span 있음');
 ok(/[\u0600-\u06FF]/.test(h), '아랍 문자 실제 출력됨');
 ok(!/[가-힣]/.test(bag.vBody.innerHTML.replace(/<option[^>]*>[^<]*<\/option>/g,'')),
-   '입력 라벨에 한국어 없음 (공종·자재명 원문 제외)');
+   '입력 라벨에 한국어 없음');
+
+/* ★드롭다운 안까지 본다 (v2.18.3 사용자 지적).
+   종전 검사는 <option>을 통째로 빼고 봤다. 그런데 자재 대분류·세부공종이
+   바로 그 <option>이라, 한국어 원문이 그대로 나가는 것을 못 잡았다.
+   검사가 문제 지점을 비껴가고 있었다. */
+/* ★탭은 V.state.tab이다 — V.tab에 넣으면 아무 일도 안 일어난다.
+   종전 검사가 이걸 몰라 늘 첫 탭만 보고 통과했다. */
+TABS.forEach(function (t) {
+  V.state.tab = t; V.render();
+  /* ★보이는 글자만 본다. value 속성의 한국어는 조회 키라 바꾸면 안 된다 —
+     값을 영어로 바꾸면 matItems·itemsOf 조회가 어긋나 목록이 통째로 빈다. */
+  const labels = [...bag.vBody.innerHTML.matchAll(/<option[^>]*>([^<]*)<\/option>/g)]
+    .map(m => m[1]);
+  const kr = labels.filter(x => /[가-힣]/.test(x));
+  ok(kr.length === 0,
+     `${t} 탭 드롭다운 글자에 한국어 없음${kr.length ? ' ★' + [...new Set(kr)].slice(0,5).join(' / ') : ''}`);
+});
+V.state.tab = 'work';
+
+console.log('\n[V2-2] 입력 폼 기본 날짜 — 전부 오늘 (v2.19.13)');
+{
+  /* ★v2.18.9에서 「실적은 어제 · 투입은 오늘」로 갈랐는데 **업체 폼은
+     둘 다 어제**로 남아 있었다. 업체가 기본값 그대로 인원·장비를 올리면
+     어제 날짜로 저장돼, 오늘 기준인 관리자 인원·장비 표에 영영 안 나온다
+     (「오늘 투입 인원 0명 · 장비 0대」의 원인 — 사용자 캡처). */
+  function dateVal(tab) {
+    V.state.tab = tab; V.render();
+    const m = /id="vDate"[^>]*value="([\d-]+)"/.exec(bag.vBody.innerHTML);
+    return m ? m[1] : '';
+  }
+  /* ★v2.19.13에서 오늘로 바꿨다 — 작업량 표를 오늘로 통일했으므로 폼도 같이다.
+     한쪽만 바꾸면 올린 실적이 표에 안 나온다(0-H와 같은 사고). */
+  ok(dateVal('work') === A.today(), '★실적도 오늘이다 (반영된 날이 기준)');
+  ok(dateVal('crew') === A.today(), '★인원·장비는 오늘이다 (투입은 아침에 정해진다)');
+  ok(dateVal('surv') === A.today(), '측량은 종전대로 오늘');
+  ok(dateVal('mat') === A.today(), '자재는 종전대로 오늘');
+  V.state.tab = 'work';
+}
 
 console.log('\n[V3] 위치는 항상 영문');
 ok(/Phase 1/.test(bag.vLoc.innerHTML), 'Phase 표기');

@@ -10,7 +10,8 @@
     url: 'https://script.google.com/macros/s/AKfycbw4dDiqV_7gDnOCk0W5kGL0ie0NJrwy654GzY80VgNzgRyRyjxELs5_2AaMM_yTOE19/exec',
     on: true,     // false로 두면 통신하지 않는다(로컬 테스트용)
     log: [],      // 최근 통신 결과 50건
-    rxAt: '',     // 마지막 수신 시각
+    rxAt: '',     // 마지막 수신 시각(내 시계 — 표시용)
+    last: '',     // ★서버가 알려준 마지막 수신시각 — 다음 조회의 since
     rxErr: ''     // 마지막 수신 오류
   };
 
@@ -67,12 +68,38 @@
         if (!d || !d.ok) { r.ok = false; r.err = (d && d.err) || 'rejected'; API.rxErr = r.err; return null; }
         r.ok = true; r.row = d.count || 0;
         API.rxAt = new Date().toISOString(); API.rxErr = '';
+        /* ★서버가 알려준 마지막 수신시각을 기억한다 — 다음 조회의 since가 된다.
+           내 시계가 아니라 서버 시계여야 한다. 둘이 어긋나면 그 사이에 들어온
+           줄을 영영 건너뛴다. */
+        if (d.last) API.last = d.last;
         return d.rows || [];
       })
       .catch(function (e) {
         r.ok = false; r.err = String((e && e.message) || e); API.rxErr = r.err;
         return null;
       });
+  };
+
+  /* ── 바뀐 게 있는지만 묻는다 (v2.19.3) ───────────────
+     ★본문을 받지 않는다. 응답이 수십 바이트로 끝난다.
+       내가 가진 last와 같으면 조회 자체를 건너뛴다. */
+  API.meta = function () {
+    if (!live()) return Promise.resolve(null);
+    return fetch(API.url + '?action=meta')
+      .then(function (res) { return res.json(); })
+      .then(function (d) { return (d && d.ok) ? d : null; })
+      .catch(function () { return null; });
+  };
+
+  /** 바뀐 것만 받는다. 바뀐 게 없으면 null이 아니라 빈 배열을 준다 —
+      null은 「통신 실패」라는 뜻이라 구분해야 한다. */
+  API.changed = function () {
+    if (!live()) return Promise.resolve(null);
+    return API.meta().then(function (m) {
+      if (!m) return null;                          /* 통신 실패 */
+      if (API.last && m.last && m.last === API.last) return [];   /* 바뀐 게 없다 */
+      return API.rows('', API.last || '');
+    });
   };
 
   /* ── 로그인 ─────────────────────────────────────────

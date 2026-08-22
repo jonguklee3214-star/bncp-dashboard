@@ -51,9 +51,11 @@
     mdesign: {}, mreq: [], staff: {}, msgq: [],
     vend: [], roadX: [], mt: {},  /* 협력업체·담당자 명부 / 현장에서 추가한 도로폭 */
     alias: {},                    /* 내역서 항목 → 공종코드. 한 번 지정하면 계속 쓴다(v2.14.0) */
+    alias2: {},                   /* ★대분류를 뺀 별칭 — 다른 페이즈에도 붙는다(v2.19.5). '*'면 갈린 것 */
     boq: null,                    /* ★확인 필요 목록. 저장을 안 눌러도 살아 있다(v2.16.2) */
     stock: {},                    /* ★재고수량 — 사람이 직접 넣는다(v2.17.1). {위치키:{자재id:수량}} */
-    tab: 1                        /* ★마지막으로 보던 탭 — 다시 들어오면 그 자리(v2.16.2) */
+    tab: 1,                       /* ★마지막으로 보던 탭 — 다시 들어오면 그 자리(v2.16.2) */
+    rxLast: ''                    /* ★서버에서 마지막으로 받은 시각 — 증분 수신 기준(v2.19.3) */
   };
   function load() {
     try {
@@ -63,9 +65,68 @@
     return JSON.parse(JSON.stringify(BLANK));
   }
   var S = A.S = load();
+  /* ══ 저장 용량 (v2.18.5) ═══════════════════════════════
+     ★하루 100건이면 1년에 3~4만 건이다. localStorage 한도가 보통 5MB라
+       1~2년 안에 터진다. 터지면 setItem이 조용히 실패해 방금 입력한 것이
+       날아간다 — 현장에서 가장 나쁜 실패다.
+     ★원본은 구글 시트다. 화면은 최근 것만 들고 있으면 된다.
+       오래된 것은 지우는 게 아니라 「안 들고 있는」 것이다. 필요하면
+       서버에서 다시 받는다.
+     ★자동으로 덜어내되, 무엇을 언제 덜어냈는지 반드시 알린다.
+       조용히 지우면 「내 자료가 왜 없지」가 된다. */
+  A.KEEP_DAYS = 90;                       /* 화면에 들고 있는 기간 */
+  A.CAP = 4 * 1024 * 1024;                /* 4MB — 5MB 한도에 여유를 둔다 */
+
+  A.usage = function () {
+    var n = 0;
+    try { n = JSON.stringify(S).length; } catch (e) { }
+    return { bytes: n, pct: Math.min(100, Math.round(n / A.CAP * 100)) };
+  };
+
+  /* 기록형 저장소만 자른다. 마스터·설계량·명부는 건드리지 않는다 —
+     그건 쌓이는 자료가 아니라 기준 자료다. */
+  var TRIM_BOX = ['work', 'crew', 'insp', 'surv', 'mreq', 'direct'];
+
+  A.trim = function (days) {
+    /* addDays는 tabs.js 안에 있어 여기서 못 쓴다 — core는 tabs를 모른다 */
+    var d = new Date(A.today());
+    d.setDate(d.getDate() - (days || A.KEEP_DAYS));
+    var cut = d.getFullYear() + '-' +
+      ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+    var out = { cut: cut, n: 0 };
+    TRIM_BOX.forEach(function (b) {
+      if (!Array.isArray(S[b])) return;
+      var before = S[b].length;
+      S[b] = S[b].filter(function (x) {
+        /* 아직 처리 안 끝난 것은 오래됐어도 남긴다 — 밀린 일이 사라지면 안 된다 */
+        if (x.st && x.st !== 'ok' && x.st !== 'pass' && x.st !== 'iss') return true;
+        if (b === 'surv' && !x.done) return true;
+        return !x.date || x.date >= cut;
+      });
+      out.n += before - S[b].length;
+    });
+    return out;
+  };
+
   A.save = function () {
-    try { localStorage.setItem(KEY, JSON.stringify(S)); }
-    catch (e) { alert(A.T('e_full')); }
+    try {
+      localStorage.setItem(KEY, JSON.stringify(S));
+      S.trimMsg = S.trimMsg || '';
+      return true;
+    } catch (e) {
+      /* ★터지면 그때 덜어내고 한 번 더 시도한다. 여기서 실패하면
+         방금 입력한 것이 날아가므로 조용히 넘어가면 안 된다. */
+      var r = A.trim(A.KEEP_DAYS);
+      try {
+        localStorage.setItem(KEY, JSON.stringify(S));
+        S.trimMsg = A.T('cap_trimmed').replace('{n}', r.n).replace('{d}', r.cut);
+        localStorage.setItem(KEY, JSON.stringify(S));
+        return true;
+      } catch (e2) {
+        alert(A.T('e_full'));
+        return false;
+      }
+    }
   };
   A.wipe = function () { localStorage.removeItem(KEY); location.reload(); };
 
@@ -89,10 +150,20 @@
   };
   A.isAdmin = function () { return A.role() === 'admin'; };
   A.isStaff = function () { return A.role() === 'staff' || A.isAdmin(); };
+  /* ★측량팀 (v2.20.0 사용자 지시) — 스탭이 아니다.
+     들어와서 하는 일은 「완료」 또는 「완료 못한 사유」 입력 하나뿐이다.
+     그래서 스탭 권한을 물려주지 않는다. 측량 탭만 보인다(TABS_ON). */
+  A.isSurv = function () { return A.role() === 'surv'; };
+  /** 로그인 여부 — 게이트는 이것으로 판정한다.
+      ★isStaff()로 판정하면 측량팀이 영영 못 들어온다. */
+  A.isIn = function () { return A.isStaff() || A.isSurv(); };
 
   /* 관리자에게만 보이는 것 */
   A.can = function (what) {
     if (A.isAdmin()) return true;
+    /* ★측량팀은 아무 관리 기능도 못 쓴다. 스탭보다 더 좁다 —
+       업체별 실적·재고·생산성은 측량과 아무 상관이 없다. */
+    if (A.isSurv()) return false;
     switch (what) {
       case 'deny':     // 반려·미승인·미지급
       case 'approve':  // 공정지연 최종승인
@@ -167,6 +238,31 @@
     A.save();
     return { ok: true, v: hit };
   };
+  /* ══ 공종별 담당자 (v2.19.2 사용자 지시) ═══════════════
+     ★staff는 종전부터 이름 문자열 배열이다. 구조를 갈아엎지 않고
+       「공종|이름」 꼴로 담는다. 공종이 없으면 종전처럼 이름만 들어간다.
+       옛 자료(이름만 있는 것)도 그대로 읽힌다 — 마이그레이션이 필요 없다.
+     ★쓰임 : 협력업체 화면에서 공종을 고르면 담당자가 자동으로 뜬다.
+       틀리면 목록에서 고른다. 매번 손으로 적던 것을 없앤다. */
+  function _sp(x) {
+    var i = String(x || '').indexOf('|');
+    return i < 0 ? { grp: '', name: String(x || '') }
+                 : { grp: String(x).slice(0, i), name: String(x).slice(i + 1) };
+  }
+  A.vendStaffList = function (v) {
+    return (v && v.staff || []).map(_sp);
+  };
+  /** 그 업체에서 이 공종을 맡은 사람 — 없으면 공종 없는 담당자를 준다 */
+  A.staffFor = function (vname, grp) {
+    var v = null;
+    S.vend.forEach(function (x) { if (x.name === vname) v = x; });
+    if (!v) return { pick: '', all: [] };
+    var all = A.vendStaffList(v), hit = '';
+    all.forEach(function (s2) { if (s2.grp && s2.grp === grp && !hit) hit = s2.name; });
+    if (!hit) all.forEach(function (s2) { if (!s2.grp && !hit) hit = s2.name; });
+    return { pick: hit, all: all.map(function (s2) { return s2.name; }) };
+  };
+
   A.vendDel = function (code) {
     S.vend = S.vend.filter(function (v) { return v.code !== code; });
     A.save();
@@ -241,8 +337,12 @@
     S.direct = S.direct.filter(function (x) { return x.id !== id; });
     A.save();
   };
+  /* ★날짜를 본다 (v2.19.11 사용자 지시). 종전에는 위치만 보고 **전 기간**을
+     늘어놓았다 — 표마다 기간이 있는데 직영만 없었다.
+     기본은 오늘(RNG_DEF.dir), 기간 단추로 조회한다.
+     ★A.inDate는 A.dateFlt를 본다. 화면 쪽에서 withRng('dir')로 잠깐 바꿔 준다. */
   A.directRows = function (f) {
-    return S.direct.filter(function (x) { return A.locMatch(x, f); })
+    return S.direct.filter(function (x) { return A.locMatch(x, f) && A.inDate(x); })
       .sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
   };
   /* 직영 인원·장비 집계 (기성 실적과 분리해서 본다) */
@@ -325,6 +425,53 @@
     var o = A.TOWNS.filter(function (x) { return x.t === t; })[0];
     if (!o) return [];
     var a = []; for (var i = 1; i <= o.n; i++) a.push(i); return a;
+  };
+
+  /* ══ 파일명으로 위치 판별 (v2.18.2 사용자 지시) ═══════════
+     ★종전에는 상단 필터에서 사람이 고른 위치로 들어갔다. 위를 안 바꾸고
+       올리면 엉뚱한 곳에 저장됐다 — Phase 3-2를 올렸는데 1-1로 들어간
+       사고가 그것이다.
+     ★이제 파일명이 기준이다. 상단 필터는 보지 않는다(사용자 지시).
+     ★찾은 것이 없거나 둘 이상 나오면 정하지 않고 물어본다.
+       틀린 곳에 조용히 넣는 것보다 한 번 묻는 편이 낫다.
+
+     읽는 꼴
+       페이즈 : P3-1 · 3-1 · P3_1 · Phase3-1 · P 3 - 1
+       블럭   : B-7 · B7 · B7BL · BL7 · BL-7  (타운 글자가 앞에 붙는다)
+     ★블럭은 타운 글자(A~H)가 있어야 자리가 정해진다. B7이면 Town B · Block 7. */
+  A.locFromName = function (name) {
+    var n = String(name || '').toUpperCase();
+    n = n.replace(/\.[A-Z0-9]+$/, '');          /* 확장자 제거 */
+
+    var hits = [], seen = {};
+    function add(loc) {
+      var k = A.locKey(loc);
+      if (!seen[k]) { seen[k] = 1; hits.push(loc); }
+    }
+
+    /* 페이즈 — P3-1 / 3-1 / PHASE3-1. 앞뒤가 숫자면 안 잡는다(날짜·치수 오인 방지) */
+    var re1 = /(?:^|[^0-9A-Z])(?:PHASE\s*|P\s*)?([1-6])\s*[-_]\s*([1-2])(?![0-9])/g, m;
+    while ((m = re1.exec(n))) {
+      /* 'P'나 'PHASE'가 붙어 있지 않은 맨 숫자쌍은 페이즈로 보되, 뒤에
+         BL·B가 붙어 있으면 블럭 표기이므로 건너뛴다 */
+      add({ s: 'civil', p: +m[1], c: +m[2] });
+    }
+
+    /* 블럭 — B7 / B-7 / B7BL / BL7 / BBL7. 타운 글자 A~H가 앞에 온다 */
+    var re2 = /(?:^|[^0-9A-Z])([A-H])\s*(?:BL)?\s*[-_]?\s*(?:BL)?\s*([1-9])(?![0-9])\s*(?:BL)?/g;
+    while ((m = re2.exec(n))) {
+      var t = m[1], b = +m[2];
+      if (A.townBlocks(t).indexOf(b) >= 0) add({ s: 'anc', t: t, b: b });
+    }
+
+    /* ★타운 글자 없이 BL7만 있는 꼴 — 블럭 번호는 알겠는데 어느 타운인지
+       모른다. 정하지 않고 물어본다. 6개 타운에 7번 블럭이 다 있다. */
+    if (!hits.length) {
+      var bl = /(?:^|[^0-9A-Z])BL\s*[-_]?\s*([1-9])(?![0-9])/.exec(n);
+      if (bl) return { ok: false, many: false, hits: [], blockOnly: +bl[1] };
+    }
+    if (hits.length === 1) return { ok: true, loc: hits[0] };
+    return { ok: false, many: hits.length > 1, hits: hits };
   };
 
   /** loc = {s:'civil',p:3,c:1}  또는  {s:'anc',t:'B',b:5} */
@@ -477,6 +624,31 @@
     });
     return Math.round(t * 1000) / 1000;
   };
+  /* ══ 오늘 + 미처리 (v2.18.9 사용자 확정) ═══════════════
+     ★「검측이나 작업량이나 오늘 기준은 맞아. 그런데 확인 안 한 것들은 떠야
+       누락된 거 확인하고 추가되는 거지.」
+     ★그래서 기준이 둘이다 — 오늘 것이거나, 아직 처리 안 된 것.
+       밀린 일이 화면에서 사라지면 그 일 자체가 없어진 것처럼 보인다.
+     ★미처리는 날짜를 안 따진다. 두 달 전 것이라도 안 끝났으면 떠야 한다. */
+  function todayOrOpen(rec, done) {
+    if (!done) return true;                        /* 아직 안 끝났다 — 날짜 무관 */
+    return String(rec && rec.date || '') === A.today();
+  }
+
+  /* ══ 오늘 + 미처리 (v2.18.9 사용자 확정) ═══════════════
+     ★「오늘 기준은 맞아. 그런데 확인 안 한 것들은 떠야 누락된 걸 확인하고
+       추가되는 거지」 — 처리한 것은 오늘 것만, 안 한 것은 날짜와 무관하게.
+     ★안 그러면 어제 밀린 검측이 화면에서 사라져 그 일 자체가 없어진다. */
+  A.todayOrOpen = function (rec, isOpen) {
+    if (isOpen) return true;                      /* 미처리는 날짜 안 본다 */
+    /* ★조회 기간을 따른다 (v2.19.0). 종전에는 A.today()로 굳어 있어
+       기간 단추를 눌러도 끝난 건이 안 나왔다 — 단추가 반만 듣는 셈이었다.
+       기간이 비어 있으면(전체) 오늘로 본다. */
+    var d = String(rec && rec.date || '');
+    if (A.dateFlt.from || A.dateFlt.to) return A.inDate(rec);
+    return d === A.today();
+  };
+
   A.pendWork = function (f) {
     return S.work.filter(function (w) { return w.st !== 'ok' && A.locMatch(w, f); });
   };
@@ -532,7 +704,9 @@
     var out = [];
     S.issue.forEach(function (g, i) {
       if (!g.id) g.id = 'ig' + i + '-' + (g.date || '') + '-' + (g.cat || '');
-      if (A.hit(g, f)) out.push(g);
+      /* ★업체 축 (v2.19.14) — 표와 같은 기준으로 센다. 위치·기간으로 거르면
+         표에는 줄이 가득한데 배지만 0건이 되어 서로 어긋난다. */
+      if (A.inCo(g)) out.push(g);
     });
     return out.sort(function (a, b) { return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0); });
   };
@@ -551,21 +725,38 @@
 
   /* 규격 한 칸의 지급(또는 회수) 총량을 그 값으로 맞춘다.
      ★줄을 새로 쌓지 않는다 — 같은 자리를 고친다. 그래야 표가 안 길어진다.
-       기존 줄들을 합쳐 하나로 만들고 거기에 값을 적는다. */
-  A.setEqQty = function (loc, cat, size, kind, qty) {
+       기존 줄들을 합쳐 하나로 만들고 거기에 값을 적는다.
+     ★★자리를 가르는 기준이 **위치에서 업체로 바뀌었다** (v2.19.14 사용자 확정).
+       「장비는 업체에 주는 것이지 부지·부대에 주는 게 아니다.」
+       한 업체가 부지·부대를 다 맡으면 그 업체의 지급 총량은 하나다.
+       loc은 참고로 남겨 두되 자리를 가르지 않는다 — 종전 loc별로 흩어져
+       있던 줄은 업체별 한 줄로 합쳐진다. */
+  function eqPut(loc, cat, size, kind, qty, co, date) {
     var n = Math.max(0, Number(qty) || 0), keep = null;
+    co = String(co || '');
+    kind = (kind === 'take') ? 'take' : 'give';
     S.issue = S.issue.filter(function (g) {
       var same = g.cat === cat && (g.size || '') === (size || '') &&
-        ((g.kind === 'take') === (kind === 'take')) && A.locKey(g.loc) === A.locKey(loc);
+        ((g.kind === 'take') === (kind === 'take')) && String(g.by || '') === co;
       if (!same) return true;
       if (!keep) { keep = g; return true; }
       return false;                       /* 흩어진 줄은 하나로 모은다 */
     });
-    if (keep) { keep.cnt = n; keep.date = keep.date || A.today(); }
-    else if (n > 0) {
-      S.issue.push({ id: A.uid(), date: A.today(), loc: loc, cat: cat, size: size || '',
-                     kind: kind === 'take' ? 'take' : 'give', cnt: n, by: '' });
+    if (keep) {
+      keep.cnt = n; keep.kind = kind; keep.by = co;
+      keep.date = date || keep.date || A.today();
+      keep.loc = loc || keep.loc;
+    } else if (n > 0) {
+      S.issue.push({ id: A.uid(), date: date || A.today(), loc: loc, cat: cat, size: size || '',
+                     kind: kind, cnt: n, by: co });
     }
+    return true;
+  }
+  /* ★파일 판독기도 손입력도 이 한 통로만 쓴다 — 같은 파일을 두 번 올려도
+     보유가 두 배가 되지 않는다(v2.19.12까지는 push라 두 배가 됐다). */
+  A.eqPut = eqPut;
+  A.setEqQty = function (loc, cat, size, kind, qty, co) {
+    eqPut(loc, cat, size, kind, qty, co, null);
     A.save();
     return true;
   };
@@ -787,14 +978,37 @@
     S.crew.forEach(function (c) { if (c.st === 'ok') feed(c, false); });
     S.direct.forEach(function (c) { feed(c, true); });
 
-    /* 오늘 작업위치 — 협력업체가 넣은 구간을 전부 모은다 */
-    S.work.forEach(function (w) {
-      if (w.st !== 'ok' || !A.locMatch(w, f) || w.date !== today) return;
-      var o = slot(w.loc);
-      if (w.by) o.co[w.by] = 1;
-      var sp = (w.spot && w.spot.kind === 'road' && window.BNCP_SPOT)
-        ? String(window.BNCP_SPOT.label(w.spot)).replace(/^\s*·\s*/, '') : '';
-      if (sp && !o.seen[sp]) { o.seen[sp] = 1; o.spots.push(sp); }
+    /* ★오늘 작업위치는 「인원·장비」에서 뽑는다 (v2.18.9 사용자 지적).
+       종전에는 실적(S.work)에서 뽑았다. 그런데 실적은 그날 일이 끝나야
+       나오므로 오늘 것이 늘 비어 있고, 현장 현황의 작업위치가 항상 「—」였다.
+       ★「오늘 어디에 나와 있나」는 투입이 답한다. 실적이 아니다.
+         작업량 표 밑의 「작업위치」(어제·실적 기준)와는 다른 물건이다 —
+         이름이 같아 하나로 묶으면 안 된다. */
+    /* ★★v2.19.19 — `rec.spots`(복수)도 읽는다.
+       종전에는 `rec.spot` 하나만 봤는데, S.crew의 `spot`은 일반 공종이면
+       늘 `null`이고 시설물이면 열 번호(숫자)라 **`kind:'road'`가 될 수가
+       없었다.** 그래서 작업위치 칸이 항상 「—」였다(사용자 확인).
+       측점을 인원·장비 폼에서도 받으면서(사용자 확정 「가」) 한 행에 쪽마다
+       측점이 여럿 담긴다 — 행을 쪼개면 인원이 중복 계상되기 때문이다.
+       ★옛 `spot` 한 개짜리도 그대로 읽는다. 지난 기록을 버리지 않는다. */
+    function pickSpot(o, rec) {
+      var SP = window.BNCP_SPOT; if (!SP) return;
+      var list = [];
+      if (rec.spots && rec.spots.length) list = rec.spots;
+      else if (rec.spot) list = [rec.spot];
+      list.forEach(function (x) {
+        if (!x || x.kind !== 'road') return;
+        var sp = String(SP.label(x)).replace(/^\s*·\s*/, '');
+        if (sp && !o.seen[sp]) { o.seen[sp] = 1; o.spots.push(sp); }
+      });
+    }
+    S.crew.forEach(function (c) {
+      if (c.st !== 'ok' || !A.locMatch(c, f) || c.date !== today) return;
+      pickSpot(slot(c.loc), c);
+    });
+    S.direct.forEach(function (c) {
+      if (!A.locMatch(c, f, true) || c.date !== today) return;
+      pickSpot(slot(c.loc), c);
     });
 
     /* 밀린 것 — 누계다. 오늘로 자르지 않는다 */
@@ -914,9 +1128,17 @@
     /* ★지급과 회수를 갈라서 센다 (v2.16.5).
        회수는 kind:'take'. 옛 줄에는 kind가 없으니 지급으로 본다 — 지우지 않는다.
        ★보유 = 지급 − 회수. 회수했는데 보유가 안 줄면 대조가 무의미하다. */
+    /* ★★보유는 **업체 축**이고 **날짜를 보지 않는다** (v2.19.14 사용자 확정).
+       「한번 올린 지급 대수는 내가 회수할 때까지 지급한 것이다.
+         그날그날 지급하는 게 아니다.」
+       ① 위치로 거르지 않는다 — 상단 필터를 Phase 하나로 좁혀도 그 업체가
+          받아 둔 대수는 줄지 않는다.
+       ② 기간으로도 거르지 않는다 — 지급은 **상태값**이다. 어제 올린 파일이
+          오늘 보유 0이 되면 안 된다. 줄어드는 길은 회수(kind:'take')뿐이다.
+       ★가동·고장(S.crew)은 종전대로 위치별·기간별이다 — 그쪽은 그날의 기록이다.
+       ★줄에 남는 date는 「언제 그 값으로 맞췄나」일 뿐, 거르는 데 쓰지 않는다. */
     S.issue.forEach(function (g) {
-      if (!A.hit(g, f)) return;
-      if (date && g.date !== date) return;
+      if (!A.inCo(g)) return;
       var id = g.cat + '|' + g.size;
       var q = Number(g.cnt) || 0;
       var t = give[id] || (give[id] = { give: 0, take: 0, by: {} });
@@ -979,7 +1201,18 @@
   A.inspOpen = function (r) { return r.st === 'apply' || r.st === 'ready' || r.st === 'sub' || r.st === 'delay'; };
   // 장기 경고 제거 — 항상 0
   A.inspLong = function () { return 0; };
-  A.inspList = function (f) { return S.insp.filter(function (r) { return A.locMatch(r, f); }); };
+  A.inspList = function (f) {
+    return S.insp.filter(function (r) {
+      if (!A.locMatch(r, f)) return false;
+      /* ★끝난 것은 합격뿐이다. 불합격·지연은 재검측이 남아 있으므로
+         미처리다 — 날짜와 무관하게 계속 떠야 한다(사용자 지시).
+         재검측을 새로 만들면 원건은 그때 목록에서 빠진다(r.re로 이어진다). */
+      var done = (r.st === 'pass');
+      return A.todayOrOpen(r, !done);
+    });
+  };
+  /** 기간을 직접 준 조회 — 과거를 볼 때 쓴다 */
+  A.inspAll = function (f) { return S.insp.filter(function (r) { return A.locMatch(r, f); }); };
   A.setInsp = function (id, st, reason) {
     var r = S.insp.filter(function (x) { return x.id === id; })[0]; if (!r) return null;
     r.hist = r.hist || [];
@@ -996,6 +1229,227 @@
       re: r.re || r.id, seq: (r.seq || 1) + 1, hist: []
     };
     S.insp.push(n); A.save(); return n;
+  };
+
+  /* ══ 결재 흐름 — 자재·측량 공용 (v2.20.0 사용자 지시) ═══════
+     ★자재와 측량은 **같은 모양**이다.
+         신청(업체) → 검토(스탭) → 확인(관리자) → 실행 → 완료입력
+       그래서 엔진을 **한 벌만** 둔다. 이름만 다르다
+       (지급요청/측량요청 · 지급/측량지시). 종전에는 자재 따로 측량 따로
+       제각각이라 같은 일을 두 벌로 고쳐야 했다.
+
+     ★복잡해지는 것은 단계 수가 아니라 아래 셋이다. 규칙으로 미리 막는다.
+       ① **반려는 항상 한 칸만 뒤로.** 어디로 보낼지 고르게 하지 않는다.
+          관리자가 반려하면 자동으로 스탭, 스탭이 반려하면 자동으로 업체다.
+          규칙이 하나라 헷갈릴 자리가 없다.
+       ② **버튼은 둘뿐.** 단계마다 이름만 바뀐다(승인/반려 · 완료/미완료).
+          셋째 버튼이 생기는 순간 복잡해진다.
+       ③ **사람은 「내 차례」만 본다.** 단계가 다섯이어도 각자에겐 한 줄이다.
+
+     ★측량은 스탭 선에서 끝나는 길(alt='none')이 있다 — 스탭이 「측량 불필요」로
+       보면 관리자까지 안 올린다. 관리자는 정말 필요한 것만 본다.
+       관리자 반려(rej)는 「스탭 판단이 틀렸다」일 때만 쓴다.
+
+     ★기록은 지우지 않는다(v2.19.1의 미지급 원칙 그대로) — 「누구 잘못인지
+       알아야 되잖아」. 되돌아간 것도 hist에 누가·언제·왜가 남는다. */
+  A.FLOW = {
+    mat: {
+      req:   { own: 'staff',  ok: 'chk',   no: 'back' },   /* 스탭 검토 → 관리자에 지급요청 */
+      chk:   { own: 'admin',  ok: 'ord',   no: 'rej'  },   /* 관리자 확인 → 지급지시 */
+      ord:   { own: 'staff',  ok: 'iss'               },   /* 확인 후 지급 */
+      /* ★지급 뒤는 **양쪽이 확인해야** 끝난다 (v2.20.1 사용자 지시).
+         「협력업체도 수령하면 확인해야 서로 확인되는 거잖아. 그러면 최종 종료.」
+         한쪽만 누르면 이 자리에 그대로 남고, 남아 있는 동안 경고가 뜬다. */
+      iss:   { own: 'staff',  own2: 'vendor', dual: 1, ok: 'fin' },
+      fin:   { end: 1 },
+      back:  { own: 'vendor', ok: 'req'               },   /* 업체 재검토 → 다시 올린다 */
+      rej:   { own: 'staff',  ok: 'chk',   no: 'back' }    /* 스탭 재검토 */
+    },
+    surv: {
+      req:   { own: 'staff',  ok: 'chk',   no: 'back', alt: 'none' },
+      chk:   { own: 'admin',  ok: 'ord',   no: 'rej'  },   /* 관리자 측량지시 */
+      ord:   { own: 'surv',   ok: 'sdone', no: 'sfail' },  /* 측량팀 완료 / 미완료+사유 */
+      sdone: { own: 'staff',  ok: 'fin',   no: 'delay' },  /* 스탭 확인·조치 */
+      sfail: { own: 'staff',  ok: 'fin',   no: 'delay' },
+      delay: { own: 'staff',  ok: 'fin'               },   /* 지연은 끝난 것이 아니다 */
+      fin:   { end: 1 },
+      none:  { end: 1 },                                    /* 측량 불필요 — 스탭 선에서 종결 */
+      back:  { own: 'vendor', ok: 'req'               },
+      rej:   { own: 'staff',  ok: 'chk',   no: 'back' }
+    }
+  };
+
+  /** 지금 단계 — 옛 기록도 그대로 읽는다(마이그레이션 없이).
+      ★옛 자료를 버리지 않는다. fst가 없으면 종전 필드에서 유추한다. */
+  A.fst = function (kind, r) {
+    if (!r) return '';
+    if (r.fst && A.FLOW[kind] && A.FLOW[kind][r.fst]) return r.fst;
+    if (kind === 'mat') {
+      if (r.st === 'iss') return 'fin';                  /* 옛 지급건은 끝난 것으로 본다 */
+      if (r.st === 'noiss' || r.st === 'deny') return 'back';
+      if (r.st === 'apv' || r.st === 'plantReq') return 'chk';
+      return 'req';
+    }
+    return r.done ? 'fin' : 'req';
+  };
+  A.flowDef = function (kind, r) { return (A.FLOW[kind] || {})[A.fst(kind, r)] || null; };
+  A.flowEnd = function (kind, r) { var d = A.flowDef(kind, r); return !!(d && d.end); };
+
+  /** ★아직 안 누른 사람들 — 양쪽 확인 단계에서는 둘이 나온다.
+      한쪽이 눌렀으면 그쪽은 빠지고 남은 쪽만 남는다. */
+  A.flowOwns = function (kind, r) {
+    var d = A.flowDef(kind, r);
+    if (!d || d.end) return [];
+    if (!d.dual) return d.own ? [d.own] : [];
+    var out = [];
+    if (!r.okS) out.push(d.own);
+    if (!r.okV) out.push(d.own2);
+    return out;
+  };
+  /** 대표 하나 — 라벨·묶음용. 남은 사람이 둘이면 앞의 것을 든다. */
+  A.flowOwn = function (kind, r) { return A.flowOwns(kind, r)[0] || ''; };
+
+  /** 「내 차례」 — 그 역할이 지금 눌러야 하는 것인가.
+      ★관리자를 스탭 자리에 끼워 넣지 않는다. 끼워 넣으면 관리자 목록이
+        스탭 것으로 가득 차 정작 관리자가 볼 것이 묻힌다. 전체는 아래 표에서 본다. */
+  A.flowMine = function (kind, r, role) {
+    role = role || A.role();
+    if (!role || role === 'vendor') return false;
+    return A.flowOwns(kind, r).indexOf(role) >= 0;
+  };
+  /** 협력업체 화면 전용 — 업체가 눌러야 하는 것인가 */
+  A.flowMineVendor = function (kind, r) {
+    return A.flowOwns(kind, r).indexOf('vendor') >= 0;
+  };
+
+  /** 한 칸 옮긴다. dir : 'ok' | 'no' | 'alt'
+      ★어디로 갈지는 표가 정한다 — 부르는 쪽이 고르지 않는다(규칙 ①). */
+  A.flowGo = function (kind, r, dir, o) {
+    if (!r) return null;
+    var d = A.flowDef(kind, r); if (!d) return null;
+    var to = d[dir || 'ok']; if (!to) return null;
+    o = o || {};
+    /* ★양쪽 확인 — 누른 쪽만 표시하고, **둘 다 눌렀을 때만** 넘어간다.
+       누가 눌렀는지는 o.as(역할)로 받는다. 이름(o.by)으로는 가릴 수 없다 —
+       업체 담당자 이름이 스탭 이름과 같을 수도 있고, 비어 있을 수도 있다. */
+    if (d.dual && (dir || 'ok') === 'ok') {
+      var as = o.as || A.role();
+      if (as === 'vendor') { r.okV = 1; r.okVAt = A.nowISO(); r.okVBy = o.by || ''; }
+      else { r.okS = 1; r.okSAt = A.nowISO(); r.okSBy = o.by || ''; if (o.qty != null) r.iss = Number(o.qty); }
+      r.hist = r.hist || [];
+      r.hist.push({ st: A.fst(kind, r), at: A.nowISO(), by: o.by || '', why: '', as: as });
+      if (!(r.okS && r.okV)) { A.save(); return r; }   /* 아직 한쪽뿐 — 여기 그대로 남는다 */
+    }
+    r.fst = to;
+    r.fat = A.nowISO();                       /* 이 단계에 들어온 시각 — 독촉의 기준점 */
+    r.fby = o.by || '';
+    if (o.why != null) r.fwhy = String(o.why);
+    else if (dir === 'ok') r.fwhy = '';
+    r.hist = r.hist || [];
+    r.hist.push({ st: to, at: r.fat, by: r.fby, why: r.fwhy || '' });
+    /* ★뒤로 갔으면 양쪽 확인 표시를 지운다. 안 지우면 다시 지급됐을 때
+       옛 확인이 남아 한쪽만 눌러도 종료된다. */
+    if (to === 'req' || to === 'back' || to === 'rej' || to === 'chk' || to === 'ord') { r.okS = 0; r.okV = 0; }
+    /* 종전 필드도 같이 맞춘다 — 옛 화면·집계·서버가 그대로 읽는다 */
+    if (kind === 'mat') {
+      if (to === 'iss' || to === 'fin') { r.st = 'iss'; if (o.qty != null) r.iss = Number(o.qty); if (!r.issAt) r.issAt = r.fat; }
+      else if (to === 'back' || to === 'rej') { r.st = 'noiss'; r.noissWhy = r.fwhy || ''; }
+      else if (to === 'chk' || to === 'ord') r.st = 'apv';
+      else r.st = 'req';
+      if (to === 'fin' && o.qty != null) r.iss = Number(o.qty);
+    } else {
+      r.done = (to === 'fin');
+      if (to === 'none') r.done = true;       /* 측량 불필요도 「더 볼 것 없음」이다 */
+      if (r.fwhy) r.why2 = r.fwhy;
+    }
+    A.save();
+    return r;
+  };
+
+  /* ══ 독촉 — 화면과 문자 (v2.20.0 사용자 지시) ════════════
+     「확인이 늦어지면 화면에서 독촉할 수 있게 해줘. 문자가 아니라
+       화면하고 문자로 독촉하는 거야.」
+     ★끝난 단계(end)와 업체 차례(vendor)는 세지 않는다 — 업체 독촉은
+       종전 A.dueList가 이미 맡고 있다. 두 곳에서 세면 두 번 간다. */
+  A.DUE_FLOW = { gap: 60 };                  /* 단계 대기 60분 → 1차, 120분 → 2차 */
+
+  A.flowLate = function (kind, r, now) {
+    now = now || new Date();
+    var d = A.flowDef(kind, r);
+    if (!d || d.end || d.own === 'vendor') return 0;
+    var t = r.fat || r.at || '';
+    if (!t) return String(r.date || '') === A.today() ? 0 : 2;  /* 시각 없는 옛 기록 */
+    var dt = new Date(t);
+    if (isNaN(dt.getTime())) return 0;
+    return _stage(_mins(dt, now), A.DUE_FLOW.gap);
+  };
+
+  /** 지금 화면에 띄울 것 — 내 차례이면서 늦은 것 */
+  A.flowMineList = function (f, role, now) {
+    role = role || A.role();
+    var out = [];
+    [['mat', S.mreq], ['surv', S.surv]].forEach(function (p) {
+      (p[1] || []).forEach(function (r) {
+        if (!A.locMatch(r, f)) return;
+        if (!A.flowMine(p[0], r, role)) return;
+        out.push({ kind: p[0], row: r, st: A.fst(p[0], r), late: A.flowLate(p[0], r, now) });
+      });
+    });
+    return out.sort(function (a, b) { return b.late - a.late || (a.row.date < b.row.date ? -1 : 1); });
+  };
+
+  /** 문자 독촉 대상 — 역할별로 묶는다.
+      ★업체 수령확인(양쪽 확인 단계)은 **업체명별**로 묶는다 — 그래야
+        왓츠앱 링크를 걸 수 있다. 역할 앞으로 보내면 보낼 곳이 없다. */
+  A.flowDue = function (f, now) {
+    now = now || new Date();
+    var by = {};
+    [['mat', S.mreq], ['surv', S.surv]].forEach(function (p) {
+      (p[1] || []).forEach(function (r) {
+        if (!A.locMatch(r, f)) return;
+        var g = A.flowLate(p[0], r, now); if (!g) return;
+        A.flowOwns(p[0], r).forEach(function (own) {
+          var k = own, nm = '', tel = '', lg = 'en';
+          if (own === 'vendor') {
+            nm = r.by || '';
+            var v = A.vendByName ? A.vendByName(nm) : null;
+            if (v) { tel = v.tel || ''; lg = v.lang || 'en'; }
+            k = 'vendor|' + nm;
+          }
+          var o = by[k] = by[k] || { own: own, name: nm, tel: tel, lang: lg,
+                                     mat: 0, surv: 0, stage: 0 };
+          o[p[0]]++; o.stage = Math.max(o.stage, g);
+        });
+      });
+    });
+    return Object.keys(by).map(function (k) { return by[k]; });
+  };
+
+  /** ★현황판용 — 결재가 멈춰 있는 건수 (v2.20.1 사용자 지시)
+      「현황판만 봐도 승인이 안 되고 있는 것을 경고할 수 있게.」
+      wait = 아직 안 눌린 것 전부 · late = 그중 60분을 넘긴 것
+      ★끝난 것은 안 센다. 업체가 되올려야 하는 것(back)도 여기서 안 센다 —
+        그것은 업체 화면 맨 위에 이미 떠 있다. */
+  A.flowWarn = function (f, now) {
+    now = now || new Date();
+    var out = { wait: 0, late: 0, recv: 0, byOwn: {} };
+    [['mat', S.mreq], ['surv', S.surv]].forEach(function (p) {
+      (p[1] || []).forEach(function (r) {
+        if (!A.locMatch(r, f)) return;
+        var d = A.flowDef(p[0], r);
+        if (!d || d.end) return;
+        var owns = A.flowOwns(p[0], r);
+        if (!owns.length) return;
+        if (owns.length === 1 && owns[0] === 'vendor' && !d.dual) return;
+        var g = A.flowLate(p[0], r, now);
+        out.wait++; if (g) out.late++;
+        /* ★지급받고도 수령확인을 안 한 것은 따로 센다 — 지급은 끝났는데
+           서로 확인이 안 된 상태라, 나중에 「받은 적 없다」가 된다. */
+        if (d.dual) out.recv++;
+        owns.forEach(function (o2) { out.byOwn[o2] = (out.byOwn[o2] || 0) + 1; });
+      });
+    });
+    return out;
   };
 
   /* ══ 독촉 대상 (v2.17.0) ══════════════════════════════
@@ -1023,18 +1477,30 @@
     /* ── 협력업체 : 오늘 것을 안 넣었다 ── */
     var dead = new Date(now); dead.setHours(A.DUE.hour, 0, 0, 0);
     var st = _stage(_mins(dead, now), A.DUE.gap);
-    if (st) {
+    /* 반려 알림은 마감 시각과 무관하다 — 있으면 바로 알려야 한다 */
+    var anyRej = S.work.some(function (w) { return w.st === 'rej' && A.locMatch(w, f); });
+    if (st || anyRej) {
+      var st2 = st || 1;
       S.vend.forEach(function (v) {
         var miss = [];
+        /* ★반려된 것이 있으면 마감과 무관하게 독촉 대상이다 (v2.18.8 사용자 지시).
+           고쳐서 다시 올려야 하는데 업체가 모르고 있을 수 있다. */
+        var rej = S.work.filter(function (w) {
+          return w.st === 'rej' && w.by === v.name && A.locMatch(w, f);
+        }).length;
+        if (rej) miss.push('rej');
         var hasW = S.work.some(function (w) { return w.by === v.name && w.date === today && A.locMatch(w, f); });
         var hasC = S.crew.some(function (c) { return c.by === v.name && c.date === today && A.locMatch(c, f); });
         var hasE = S.crew.some(function (c) {
           return c.by === v.name && c.date === today && A.locMatch(c, f) && (c.eq || []).length;
         });
-        if (!hasW) miss.push('work');
-        if (!hasC) miss.push('crew');
-        else if (!hasE) miss.push('eq');
-        if (miss.length) out.co.push({ name: v.name, tel: v.tel || '', lang: v.lang || 'en', miss: miss, stage: st });
+        if (st) {                          /* 마감이 지났을 때만 미입력을 따진다 */
+          if (!hasW) miss.push('work');
+          if (!hasC) miss.push('crew');
+          else if (!hasE) miss.push('eq');
+        }
+        if (miss.length) out.co.push({ name: v.name, tel: v.tel || '', lang: v.lang || 'en',
+                                       miss: miss, stage: st2, rej: rej });
       });
     }
 
@@ -1063,7 +1529,13 @@
   };
 
   /* ══ 측량 ═════════════════════════════════════════════ */
-  A.survList = function (f) { return S.surv.filter(function (r) { return A.locMatch(r, f); }); };
+  A.survList = function (f) {
+    return S.surv.filter(function (r) {
+      if (!A.locMatch(r, f)) return false;
+      return todayOrOpen(r, !!r.done);
+    });
+  };
+  A.survAll = function (f) { return S.surv.filter(function (r) { return A.locMatch(r, f); }); };
 
   /* ══ 자재 ═════════════════════════════════════════════ */
   A.MAT_SHEETS = (function () {
@@ -1126,7 +1598,9 @@
     });
     return o;
   };
-  A.matRows = function (f) {
+  /* ★이름 주의 — 아래쪽에 같은 이름의 새 정의가 있어 이 함수가 덮어써지고
+     있었다(v2.18.8에서 발견). 옛 화면용이므로 이름을 갈라 둔다. */
+  A.matRowsLegacy = function (f) {
     var need = A.matNeed(f), iss = A.matIssued(f), keys = {};
     Object.keys(need).forEach(function (k) { keys[k] = 1; });
     Object.keys(iss).forEach(function (k) { keys[k] = 1; });
@@ -1143,7 +1617,7 @@
     });
   };
   A.matShort = function (f) {
-    return A.matRows(f).filter(function (r) { return r.gap != null && r.gap < -0.0001; });
+    return A.matRowsLegacy(f).filter(function (r) { return r.gap != null && r.gap < -0.0001; });
   };
   /* ══ 자재 워크플로 v2 (설계 업로드 → 신청 → 승인 → 지급/플랜트 → 실사용 → 증감) ══
      S.mdesign[locKey][matId] = 설계수량
@@ -1271,6 +1745,12 @@
       return A.locMatch(r, f);
     });
   };
+  /** 화면용 — 오늘 것이거나 아직 지급 안 된 것 */
+  A.mreqOpen = function (f, plant) {
+    return A.mreqList(f, plant).filter(function (r) {
+      return todayOrOpen(r, r.st === 'iss' || r.st === 'deny');
+    });
+  };
   /* 실사용 미입력(지급됐는데 use 없음) */
   A.mUseMissing = function (f) {
     return A.mreqList(f).filter(function (r) {
@@ -1333,12 +1813,46 @@
     else S.stock[k][id] = Number(qty) || 0;
     A.save();
   };
-  /** 설계 · 재고 · 지급 — 창고 자재만 */
+  /* ★설계에 없는 자재 — 손으로 넣은 것 (v2.19.0 사용자 지시).
+     S.mreq에 st:'iss'로 넣되 extra:1을 세운다. 설계 대비 차이를 낼 때
+     이것을 설계 초과로 오해하면 안 되므로 표시를 갈라 둔다. */
+  A.addExtraMat = function (o) {
+    var m = {
+      id: A.uid(), date: o.date || A.today(), loc: o.loc,
+      grp: o.grp || A.T('m_extra'), sub: o.sub || '',
+      mat: o.mat, spec: o.spec || '', unit: o.unit || '',
+      plant: false, qty: Number(o.qty) || 0, by: o.by || '',
+      st: 'iss', iss: Number(o.qty) || 0, issAt: A.nowISO(), extra: 1
+    };
+    S.mreq.push(m); A.save(); return m;
+  };
+  A.matExtraCount = function (f) {
+    return S.mreq.filter(function (r) { return r.extra && A.hit(r, f); }).length;
+  };
+
+  /* ★신청 건을 줄마다 되짚는다 (v2.19.1 사용자 지적).
+     종전에는 신청 수량 합계만 보이고 그 신청을 처리할 길이 없었다.
+     600을 신청했는데 지급인지 미지급인지 알 수가 없었다.
+     ★미지급은 사유와 함께 계속 남긴다 — 누구 잘못인지 알아야 하기 때문이다.
+       업체가 보고 다시 신청한다. 지워 버리면 아무도 책임을 못 진다. */
+  A.mreqOf = function (f, id) {
+    return S.mreq.filter(function (r) {
+      return matId(r) === id && A.hit(r, f);
+    }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+  };
+
+  /** 설계 · 신청 · 재고 · 지급 — 창고 자재만
+      ★신청(req)을 걸러내고 있었다 (v2.18.8 사용자 지적).
+        협력업체가 올린 자재신청은 지급 전이라 design·iss·stock이 셋 다
+        없다. 그래서 관리자 화면에 아예 안 떴다 — 신청이 온 줄도 몰랐다.
+        신청이야말로 스탭이 가장 먼저 봐야 할 것이다. */
   A.matRows = function (f) {
     return A.mVariance(f, false).map(function (a) {
       a.stock = A.stockOf(f, a.id);
       return a;
-    }).filter(function (a) { return a.design || a.iss || a.stock != null; });
+    }).filter(function (a) {
+      return a.design || a.iss || a.req || a.stock != null;
+    });
   };
 
   A.matById = function (id) {
@@ -1510,8 +2024,22 @@
 
       if (L.ind === 0 && L.no != null) {
         var tn = tocN[L.no];
-        var isG = L.no > gn && tn != null && bqz(tn) === bqz(L.name);
-        if (isG || (L.no !== mn + 1 && tn != null && L.no > gn)) {
+        /* ★대분류는 **번호와 이름이 목차와 둘 다 맞아야** 한다 (v2.19.6 — 사용자 지적).
+           종전에는 이름이 달라도 `번호가 앞 중분류+1이 아니면` 대분류로 올렸다.
+           번호가 튀는 것만 보고 이름을 안 본 것이다. P3-2에서 이렇게 터졌다 :
+             「6. 부대공」은 토공의 부대공(작업로·규준틀)이라 토공 아래 놓인다.
+             그런데 앞이 「4. 잔토처리」여서 5를 건너뛴다
+             → 목차[6]은 '공동구'로 이름이 전혀 다른데도 대분류로 올라간다
+             → gn=6이 되어 뒤따르는 「2. 포장공」이 2 > 6에 걸려 아래로 밀린다
+             → 포장공·우수공·오수공·상수공이 통째로 사라지고 전부 g='부대공'
+           ★부대공은 토공·우수공·오수공·상수공에 **각각 하나씩** 있다
+             (마스터도 같다 — T-08 토공›부대공›규준틀, SS-38 오수공›부대공›수압시험).
+             그래서 목차에는 없고, 번호도 대분류와 겹친다. 이름을 봐야 갈린다.
+           ★번호만 맞고 이름이 다르면 대분류가 아니다. 아래 단계는 번호가 얼마든
+             건너뛸 수 있다 — 수량이 없는 항목은 내역서에서 그냥 빠진다.
+           ★`L.no > gn`은 남긴다. 「1. 토공」은 대분류로도 나오고
+             우수공·오수공 밑 중분류로도 나온다. 번호가 되돌아가면 중분류다. */
+        if (tn != null && L.no > gn && bqz(tn) === bqz(L.name)) {
           g = L.name; gn = L.no; mn = 0; stack = [];
           continue;                       /* 대분류 줄은 수량을 갖지 않는다 */
         }
@@ -1550,20 +2078,56 @@
     return x;
   }
 
-  /** 별칭 — 한 번 지정하면 다음 파일부터 자동으로 붙는다. */
+  /** 별칭 — 한 번 지정하면 다음 파일부터 자동으로 붙는다.
+     ★두 벌을 기억한다 (v2.19.5 — 사용자 지시).
+       정확 별칭 : 대분류까지 같아야 붙는다.
+       느슨한 별칭 : **대분류를 뺀** 중분류|공종명|규격|단위.
+     왜 필요한가 — 같은 공종이 파일마다 다른 대분류 아래 들어온다.
+       P3-1 : 포장공 › 아스콘 포장 › 표층 › #78
+       P3-2 : 부대공 › 아스콘 포장 › 표층 › #78      ← 대분류만 다르다
+     정확 별칭만 있으면 한쪽에서 골라도 다른 페이즈에서 또 골라야 했다.
+     ★느슨한 별칭은 **서로 다른 것에 붙는 순간 쓰지 않는다**('*'로 막는다).
+       예 : 「토공 › 터파기 · m3」는 우수공(WS-01)·오수공(SS-01)·상수공(WW-01)에
+       똑같이 있다. 하나를 고른 것을 나머지에 밀어 넣으면 조용히 틀린다. */
   A.aliasKey = function (it) { return bqz(it.g) + '|' + bqz(it.m) + '|' + bqz(it.n) + '|' + bqz(it.sp) + '|' + bqz(it.u); };
+  A.aliasKey2 = function (it) { return bqz(it.m) + '|' + bqz(it.n) + '|' + bqz(it.sp) + '|' + bqz(it.u); };
   A.setAlias = function (it, code) {
-    S.alias = S.alias || {};
-    if (code) S.alias[A.aliasKey(it)] = code; else delete S.alias[A.aliasKey(it)];
+    S.alias = S.alias || {}; S.alias2 = S.alias2 || {};
+    var k = A.aliasKey(it), k2 = A.aliasKey2(it);
+    if (code) {
+      S.alias[k] = code;
+      var prev = S.alias2[k2];
+      if (prev === undefined) S.alias2[k2] = code;
+      else if (prev !== code) S.alias2[k2] = '*';   /* 갈렸다 — 자동으로 안 쓴다 */
+    } else {
+      delete S.alias[k];
+    }
     A.save();
   };
 
   /** 내역서 한 줄 → 공종코드. {code, how, cands} */
+  /* ★부대토목에 없는 것은 부지토목에서 갖다 쓴다 — **한 방향만** (v2.19.8 — 사용자 지시).
+       부대토목 마스터는 92개뿐이고, 거기 없는 공종은 부지토목 883개에서 같은
+       것을 쓴다. 종전에는 후보 풀이 site로 양쪽 다 잠겨 있어, 부대토목
+       내역서의 그런 줄은 후보조차 없이 확인필요로 떨어졌다.
+     ★반대는 절대 열지 않는다. 부지토목 내역서가 부대토목(A-*) 코드에 붙으면
+       블럭공사 수량과 뒤섞인다 — 검사 [62]가 그것을 막고 있다.
+     ★부대토목 안에서 먼저 다 찾아보고, 아무것도 못 붙였을 때만 부지토목을 본다.
+       순서가 바뀌면 부대토목에 제 짝이 있는 줄까지 부지토목이 가로챈다. */
   A.boqMatch = function (it, site) {
     S.alias = S.alias || {};
     var al = S.alias[A.aliasKey(it)];
     if (al && REG[al]) return { code: al, how: 'alias', cands: [] };
 
+    var r = bqTry(it, site);
+    if (r.code || site !== 'anc') return r;
+    var r2 = bqTry(it, 'civil');
+    if (r2.code) return { code: r2.code, how: r2.how + '@civil', cands: r2.cands };
+    /* 못 붙였어도 부지토목 후보를 뒤에 붙여 준다 — 고를 거리가 있어야 한다 */
+    return { code: '', how: '', cands: r.cands.concat(r2.cands).slice(0, 8) };
+  };
+
+  function bqTry(it, site) {
     var g = bqMapG(it.g, site);
     var pool = [], i;
     LIST.forEach(function (e) { if (e.site === site) pool.push(e); });
@@ -1575,24 +2139,37 @@
     }
     var kg = bqz(g), km = bqz(it.m), kn = bqz(it.n), ksp = bqz(it.sp), ku = bqz(it.u);
 
+    /* ★대분류 이름이 마스터에 없으면 대분류로 거르지 않는다 (v2.19.5 — 사용자 지적).
+       P3-2(3-2공구 잔여·정산)는 아스콘포장·관로공·우수맨홀·상수관로를 전부
+       「부대공」이라는 한 대분류 아래 묶어 놓았다. 마스터에 그런 대분류가 없어
+       모든 단계가 0건이 됐고, 후보(cands)까지 비어 67줄을 261개 전체에서
+       손으로 골라야 했다.
+       ★부대토목이 아니다 — 같은 부지토목이다. 후보 풀은 site로 이미 잠겨 있어
+         대분류를 풀어도 부대토목 마스터로는 넘어가지 않는다.
+       ★마스터에서 「부대공」은 중분류다(토공›부대공›규준틀). 같은 이름이
+         층만 다르게 쓰인 것이라 대분류 대조로는 영영 안 맞는다. */
+    var gKnown = false;
+    for (i = 0; i < pool.length; i++) if (bqz(pool[i].grp) === kg) { gKnown = true; break; }
+    function gOK(e) { return !gKnown || bqz(e.grp) === kg; }
+
     /* 1) 대·중·공종명·규격·단위가 그대로 맞는다 */
     var h = pick(function (e) {
-      return bqz(e.grp) === kg && bqz(e.mid) === km && bqz(e.name) === kn && bqz(e.spec) === ksp && bqz(e.unit) === ku;
+      return gOK(e) && bqz(e.mid) === km && bqz(e.name) === kn && bqz(e.spec) === ksp && bqz(e.unit) === ku;
     });
     if (h.length === 1) return { code: h[0].code, how: 'exact', cands: [] };
 
     /* 2) 규격+단위로 좁힌다 — 공종명 표기가 갈릴 때 */
     if (ksp) {
-      h = pick(function (e) { return bqz(e.grp) === kg && bqz(e.mid) === km && bqz(e.spec) === ksp && bqz(e.unit) === ku; });
+      h = pick(function (e) { return gOK(e) && bqz(e.mid) === km && bqz(e.spec) === ksp && bqz(e.unit) === ku; });
       if (h.length === 1) return { code: h[0].code, how: 'spec', cands: [] };
     }
     /* 3) 규격을 빼고 공종명+단위로 */
-    h = pick(function (e) { return bqz(e.grp) === kg && bqz(e.mid) === km && bqz(e.name) === kn && bqz(e.unit) === ku; });
+    h = pick(function (e) { return gOK(e) && bqz(e.mid) === km && bqz(e.name) === kn && bqz(e.unit) === ku; });
     if (h.length === 1) return { code: h[0].code, how: 'name', cands: [] };
 
     /* 4) 글자 다발 대조 — 마스터와 내역서가 다르게 쪼개 놓은 경우 */
-    var narrow = pick(function (e) { return bqz(e.grp) === kg && bqz(e.mid) === km && bqz(e.unit) === ku; });
-    if (!narrow.length) narrow = pick(function (e) { return bqz(e.grp) === kg && bqz(e.unit) === ku; });
+    var narrow = pick(function (e) { return gOK(e) && bqz(e.mid) === km && bqz(e.unit) === ku; });
+    if (!narrow.length) narrow = pick(function (e) { return gOK(e) && bqz(e.unit) === ku; });
     var fb = bqbag([it.m].concat(it.sub, [it.n, it.sp]).join(' '));
     function mbag(e) { return bqbag([e.mid, e.name, e.spec].join(' ')); }
 
@@ -1607,22 +2184,60 @@
     if (sub1.length === 1) return { code: sub1[0].code, how: 'bag+', cands: [] };
     if (sub2.length === 1) return { code: sub2[0].code, how: 'bag-', cands: [] };
 
+    /* ★느슨한 별칭 — 구조적 일치가 전부 실패한 뒤에만 본다 (v2.19.5).
+       순서가 핵심이다. 별칭을 맨 앞에서 보면
+         「오수공 › 토공 › 터파기」가 구조적으로 SS-01에 정확히 붙는데도
+         전에 골라 둔 WS-01(우수공)이 덮어써 버린다.
+       구조로 붙는 것은 구조가 이기고, 아무것도 못 붙였을 때만 사람이
+       골라 둔 것을 끌어온다. */
+    var al2 = (S.alias2 || {})[A.aliasKey2(it)];
+    if (al2 && al2 !== '*' && REG[al2]) return { code: al2, how: 'alias~', cands: [] };
+
     /* 5) 마지막 — 가장 가까운 것. 2등과 벌어져 있을 때만 쓴다 */
     var pl = sub1.length ? sub1 : (sub2.length ? sub2 : narrow), sc = [];
     for (i = 0; i < pl.length; i++) sc.push({ v: bqScore(mbag(pl[i]), fb), e: pl[i] });
     sc.sort(function (a, b) { return b.v - a.v; });
-    if (sc.length && sc[0].v >= 0.6 && (sc.length === 1 || sc[0].v - sc[1].v >= 0.05)) {
-      return { code: sc[0].e.code, how: 'near', cands: [] };
+    /* ★대분류를 못 찾았으면 near를 쓰지 않는다 (v2.19.5).
+       대분류를 풀면 후보 범위가 마스터 전체로 넓어져, 「가장 가까운 것」이
+       엉뚱한 것을 집는다. 실제로 이렇게 틀렸다 :
+         표지판설치 107·140·22 ea → 삼각/원형/방향 표지판 **기초설치**
+       기초설치 수량이 두 배가 된다. 조용히 틀리는 것이라 확인필요로 남는
+       것보다 훨씬 나쁘다. 구조로 못 붙이면 사람이 고르게 한다. */
+    var cands = sc.slice(0, 6).map(function (x) { return x.e.code; });
+    if (gKnown && sc.length && sc[0].v >= 0.6 && (sc.length === 1 || sc[0].v - sc[1].v >= 0.05)) {
+      /* ★후보를 같이 실어 보낸다 (v2.19.6). readBoqRows가 겹침을 보고 near를
+         물릴 수 있는데, 그때 후보가 비어 있으면 261개 전체에서 골라야 한다. */
+      return { code: sc[0].e.code, how: 'near', cands: cands };
     }
-    return { code: '', how: '', cands: sc.slice(0, 6).map(function (x) { return x.e.code; }) };
-  };
+    return { code: '', how: '', cands: cands };
+  }
 
   /** 내역서를 설계수량으로 담는다. ★덮어쓰기 — 두 번 올려도 두 배가 되지 않는다. */
   A.readBoqRows = function (rows, loc) {
     var items = A.boqItems(rows), lk = A.locKey(loc);
-    var put = {}, ok = 0, need = [], i;
+    var put = {}, ok = 0, need = [], i, res = [];
+    for (i = 0; i < items.length; i++) res.push(A.boqMatch(items[i], loc.s));
+
+    /* ★한 코드를 두 줄이 차지하면 near 쪽을 물린다 (v2.19.6 — 사용자 지적).
+       내역서가 마스터보다 잘게 쪼개져 있을 때 near가 남의 자리를 뺏는다 :
+         내역서 : 삼각표지판 › 터파기 · 되메우기 · 기초설치 · **표지판설치**
+         마스터 : 삼각표지판 — 터파기 · 되메우기 · 기초설치 (표지판설치는 없다)
+       「표지판설치」에 맞는 코드가 없으니 near가 가장 가까운 P-13(기초설치)을
+       집는다. 그런데 P-13은 바로 위 「기초설치」 줄이 이미 정확히 차지했다.
+       → P-13에 107 + 107 = 214가 들어간다. 수량이 두 배가 된다.
+       ★near는 짐작이고 나머지(exact·spec·name·bag)는 구조다. 겹치면 짐작이
+         물러난다. 물린 줄은 후보를 달고 확인필요로 남는다 — 4-D와 같다. */
+    var strong = {}, nearSeen = {};
+    for (i = 0; i < res.length; i++) if (res[i].code && res[i].how !== 'near') strong[res[i].code] = 1;
+    for (i = 0; i < res.length; i++) {
+      if (res[i].code && res[i].how === 'near') {
+        if (strong[res[i].code] || nearSeen[res[i].code]) res[i] = { code: '', how: '', cands: res[i].cands || [] };
+        else nearSeen[res[i].code] = 1;
+      }
+    }
+
     for (i = 0; i < items.length; i++) {
-      var it = items[i], m = A.boqMatch(it, loc.s);
+      var it = items[i], m = res[i];
       if (m.code) { put[m.code] = (put[m.code] || 0) + it.q; ok++; it.code = m.code; it.how = m.how; }
       else { it.cands = m.cands; need.push(it); }
     }
@@ -1681,7 +2296,7 @@
 
   /* ══ 장비 지급대장 파일 ═══════════════════════════════ */
   /** 열: 날짜 · 장비 · 규격 · 대수  (장비명은 오타 원문도 인식) */
-  A.readIssueRows = function (rows, loc) {
+  A.readIssueRows = function (rows, loc, co) {
     if (!rows.length) return { ok: 0, miss: [] };
     var head = rows[0].map(function (h) { return String(h || '').trim().toLowerCase(); });
     function col(re, dflt) {
@@ -1702,13 +2317,133 @@
       if (!cat || isNaN(cnt)) continue;
       var fix = alias[cat.toLowerCase()];
       if (!fix) { if (miss.indexOf(cat) < 0) miss.push(cat); continue; }
-      S.issue.push({
-        id: A.uid(), date: String(r[di] || A.today()).slice(0, 10),
-        loc: loc, cat: fix, size: size, cnt: cnt
-      });
+      /* ★쌓지 않고 덮어쓴다 (v2.19.14) — 지급 대수는 그때그때의 상태값이다.
+         같은 파일을 두 번 올려도 두 배가 되지 않는다. */
+      eqPut(loc, fix, size, 'give', cnt, co, String(r[di] || A.today()).slice(0, 10));
       ok++;
     }
     A.save();
     return { ok: ok, miss: miss };
+  };
+
+  /* ══ 장비 이름 맞추기 — 파일 글자를 마스터 코드로 (v2.19.12) ══════
+     ★현장 파일의 장비 이름은 마스터와 글자가 안 맞는다.
+         파일  : Excavator2.9㎥(Crawler)   Dozer26 Ton      Fork Lift (16 Ton )
+         마스터: Excavator(crawler) 2.9m3  Dozer(D7RⅡ) 27ton  Fork Lift 15ton
+       글자 대조로는 하나도 안 붙는다. **낱말과 숫자를 따로 본다.**
+       - 낱말이 겹치는 만큼 점수. 마스터에만 있는 낱말(d3k 같은 것)은 감점만 한다.
+       - 숫자가 같으면 크게, 가까우면 조금.
+     ★붙인 방법을 how로 돌려준다 — exact(정확) / near(근사).
+       near는 짐작이므로 화면에 그대로 알린다(내역서 확인필요와 같은 태도). */
+  /* ★글자와 숫자를 떼어 놓는다 — 「Dozer18 Ton」은 한 낱말로 붙어 있어
+     그냥 자르면 dozer18이 되고 마스터의 dozer와 안 겹친다. */
+  function eqTok(s) {
+    return String(s || '').toLowerCase()
+      .replace(/㎥|m³|m3/g, ' ')
+      .replace(/([a-z])(\d)/g, '$1 $2').replace(/(\d)([a-z])/g, '$1 $2')
+      .replace(/[^a-z0-9.]+/g, ' ').trim().split(/\s+/)
+      .filter(function (w) { return w && !/^(ton|t|kg|ea|nr)$/.test(w); });
+  }
+  /* ★단위 m3는 먼저 지운다 — 안 지우면 3이 숫자로 잡혀
+     「Excavator1.2㎥」가 1.2가 아니라 3으로 읽힌다(실제로 겪었다). */
+  function eqNums(s) {
+    var m = String(s || '').replace(/㎥|m³|m3/g, ' ').replace(/,/g, '')
+      .match(/\d+(?:\.\d+)?/g);
+    return (m || []).map(function (x) { return parseFloat(x); });
+  }
+  A.eqFindName = function (text) {
+    var ht = eqTok(text), hn = eqNums(text);
+    if (!ht.length) return { how: '' };
+    var best = null;
+    A.EQ_TREE.forEach(function (t) {
+      var ct = eqTok(t.cat), hit = 0;
+      ht.forEach(function (w) { if (ct.indexOf(w) >= 0) hit++; });
+      if (!hit) return;
+      var extra = ct.filter(function (w) { return ht.indexOf(w) < 0 && !/^\d/.test(w); }).length;
+      (t.sizes.length ? t.sizes : ['']).forEach(function (sz) {
+        var sn = eqNums(sz), sc = hit * 10 - extra, how = 'exact';
+        if (hn.length && sn.length) {
+          /* 숫자가 하나라도 정확히 겹치면 정확이다 — 「3.5~4.0m」처럼
+             둘씩 든 규격도 있어 마지막 숫자끼리만 대면 근사로 밀린다 */
+          var same = false;
+          hn.forEach(function (a) {
+            sn.forEach(function (b) { if (Math.abs(a - b) < 1e-9) same = true; });
+          });
+          if (same) sc += 20;
+          else {
+            var a2 = hn[hn.length - 1], b2 = sn[0];
+            sc += Math.max(0, 8 - (Math.abs(a2 - b2) / Math.max(a2, b2)) * 20); how = 'near';
+          }
+        } else if (hn.length !== sn.length) { sc -= 1; how = 'near'; }
+        if (!best || sc > best.sc) best = { sc: sc, cat: t.cat, size: sz, how: how };
+      });
+    });
+    if (!best || best.sc <= 0) return { how: '' };
+    return { cat: best.cat, size: best.size, how: best.how };
+  };
+
+  /* ══ 장비 파일 — 가로로 펼쳐진 일일 투입표 (v2.19.12 사용자 지시) ══
+     ★현장에서 쓰는 표는 4열이 아니라 **장비 종류가 열 머리로 가로로 펼쳐진**
+       팀별 일일 투입표다. 날짜 칸도 없다.
+         (빈 줄) → 「사용 장비 현황」 → 열 머리 34종 → 팀별 줄, 값은 대수
+       종전에는 이 파일을 올리면 한 줄도 안 읽혔다(사용자 지적).
+     ★열 머리를 마스터에 맞추고 팀별 줄의 대수를 **종류별로 합친다.**
+     ★파일 안 구역(부대토목현장·부지조성현장…)은 나누지 않는다 —
+       구역을 위치(Phase/Town)로 옮길 근거가 파일에 없다. 화면에서 고른
+       위치로 들어간다. 나누려면 사용자에게 규칙을 받아야 한다.
+     ★날짜 칸도 없다 — 넘겨받은 날짜(없으면 오늘)로 넣는다. */
+  A.eqWideHead = function (rows) {
+    var bi = -1, bn = 0;
+    for (var i = 0; i < Math.min(rows.length, 30); i++) {
+      var n = 0;
+      (rows[i] || []).forEach(function (c) {
+        if (String(c || '').trim() && A.eqFindName(c).how) n++;
+      });
+      if (n > bn) { bn = n; bi = i; }
+    }
+    return bn >= 3 ? bi : -1;      /* 세 칸 넘게 장비로 읽히면 가로 표다 */
+  };
+  A.readEquipWide = function (rows, loc, date, co) {
+    var hi = A.eqWideHead(rows);
+    if (hi < 0) return { ok: 0, miss: [], near: [], wide: false };
+    var head = rows[hi] || [], map = {}, miss = [], near = [];
+    for (var c = 0; c < head.length; c++) {
+      var raw = String(head[c] || '').trim();
+      if (!raw) continue;
+      var m = A.eqFindName(raw);
+      if (!m.how) { if (miss.indexOf(raw) < 0) miss.push(raw); continue; }
+      map[c] = m;
+      if (m.how === 'near') near.push(raw + ' → ' + A.eqLabel(m.cat, m.size));
+    }
+    var sum = {};
+    for (var r = hi + 1; r < rows.length; r++) {
+      var row = rows[r] || [];
+      for (var k in map) {
+        var v = parseFloat(String(row[k] == null ? '' : row[k]).replace(/,/g, ''));
+        if (isNaN(v) || v <= 0) continue;
+        var id = map[k].cat + '|' + map[k].size;
+        sum[id] = (sum[id] || 0) + v;
+      }
+    }
+    var ids = Object.keys(sum);
+    ids.forEach(function (id) {
+      var p = id.split('|');
+      /* ★쌓지 않고 덮어쓴다 (v2.19.14) — 종전에는 push라 같은 파일을 두 번
+         올리면 보유가 두 배가 됐다. 업체 축이므로 자리는 업체+종류+규격이다. */
+      eqPut(loc, p[0], p[1], 'give', sum[id], co, date || A.today());
+    });
+    if (ids.length) A.save();
+    return { ok: ids.length, miss: miss, near: near, wide: true };
+  };
+
+  /* ★형식을 가리지 않는 입구 (사용자 지시 — 「좌던 우던간에 읽어야지」).
+     4열 양식이면 4열로, 가로 표면 가로로 읽는다. 화면은 이것만 부른다. */
+  A.readEquipFile = function (rows, loc, date, co) {
+    var r = A.readIssueRows(rows, loc, co);
+    if (r.ok) { r.wide = false; r.near = []; return r; }
+    var w = A.readEquipWide(rows, loc, date, co);
+    if (w.ok) return w;
+    r.wide = false; r.near = [];
+    return r.miss.length ? r : w;
   };
 })();

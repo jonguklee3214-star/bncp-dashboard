@@ -28,7 +28,7 @@ const sb = {
     querySelectorAll() { return []; } }
 };
 sb.window = sb; vm.createContext(sb);
-['version','i18n','data','master','materials','materials2','work_i18n','prod','equip','core','spot','api','matmaster_api','tabs']
+['version','i18n','data','master','materials','materials2','work_i18n','prod','equip','core','spot','api','matmaster_api','wx','tabs']
   .forEach(f => vm.runInContext(fs.readFileSync(path.join(ROOT, 'assets/js', f + '.js'), 'utf8'), sb, { filename: f }));
 
 const A = sb.APP, S = A.S;
@@ -37,6 +37,10 @@ const ok = (c, m) => { console.log((c ? '  ok   ' : '  FAIL ') + m); if (!c) fai
 const near = (a, b, t) => Math.abs(a - b) <= (t == null ? 1e-6 : t);
 
 /* ── 1 위치체계 ───────────────────────────────────────── */
+/* ★작업량·작업위치는 기본이 어제다(v2.18.9) — 검사 자료도 어제로 넣는다 */
+function yday() { const d = new Date(A.today()); d.setDate(d.getDate() - 1);
+  return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2); }
+
 console.log('\n[1] 위치체계 (층1 — 항상 영문)');
 ok(A.PHASES.length === 6, 'Phase 1~6');
 ok(A.SECTORS.length === 2, '공구 1/2 (전 페이즈 공통)');
@@ -450,7 +454,19 @@ console.log('\n[24] 종류 확장 — 6종(실적·인원장비·검측·측량�
   ['work', 'crew', 'insp', 'surv', 'mat', 'direct'].forEach(t => {
     ok(new RegExp(`r\\.type === '${t}'`).test(tsrc), `수신 ${t} 복원 있음`);
   });
-  ok(/api\.rows\(''\)/.test(tsrc), '한 번의 요청으로 전 종류를 받는다');
+  /* ★v2.19.3 — 전체를 매번 받지 않는다. 바뀐 게 있는지 먼저 묻고,
+     있을 때만 그 뒤에 들어온 줄만 받는다(api.changed). */
+  ok(/api\.changed\(\)/.test(tsrc), '★바뀐 것만 받는다');
+  {
+    const asrc = fs.readFileSync(path.join(ROOT, 'assets/js/api.js'), 'utf8');
+    ok(/API\.changed = function/.test(asrc) && /API\.meta = function/.test(asrc),
+       'meta 확인 + 증분 조회가 있다');
+    ok(/return API\.rows\('', API\.last \|\| ''\)/.test(asrc), '한 번의 요청으로 전 종류를 받는다');
+    ok(/m\.last === API\.last\) return \[\]/.test(asrc),
+       '★바뀐 게 없으면 본문을 안 받는다');
+    ok(/if \(d\.last\) API\.last = d\.last;/.test(asrc),
+       '★서버 시계를 쓴다 — 내 시계와 어긋나면 그 사이 줄을 건너뛴다');
+  }
 
   // 수신 병합이 6개 저장소를 모두 다뤄야
   ['work', 'crew', 'insp', 'surv', 'mreq', 'direct'].forEach(b => {
@@ -476,7 +492,12 @@ console.log('\n[24] 종류 확장 — 6종(실적·인원장비·검측·측량�
   ];
   ok(rows.every(r => (r.s === 'civil' || r.s === 'anc')), '자재·직영도 위치 구성요소를 갖는다');
   ok(/box\[u\.box\]\.push/.test(tsrc), '종류별 저장소로 나눠 넣는다');
-  ok(/if \(have\[r\.id\]\) return;/.test(tsrc), '전 종류에 id 중복 차단 적용');
+  /* ★v2.18.6 — 「한 번만 받는다」에서 「상태가 앞선 쪽을 남긴다」로 바뀌었다.
+     내가 확인해 둔 것을 서버의 옛 값이 되돌리면 확인 대기로 되살아난다. */
+  ok(/function older\(local, r\)/.test(tsrc), '★서버 값이 더 오래됐는지 본다');
+  ok(/if \(older\(cur, r\)\) return;/.test(tsrc), '★내 것이 앞서면 안 덮어쓴다');
+  ok(/if \(cur\.st !== u2\.row\.st \|\| cur\.done !== u2\.row\.done\)/.test(tsrc),
+     '서버가 더 앞서면 상태만 갱신한다');
 }
 
 console.log('\n[25] 확인 필요 — 기준 생산성 대비 과다 실적만 골라낸다');
@@ -581,7 +602,11 @@ console.log('\n[28] 권한 — 스탭/관리자, 로그인 없으면 아무것�
   const tsrc = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
 
   // 로그인 게이트
-  ok(/if \(!A\.isStaff\(\)\)/.test(tsrc), '로그인 전에는 로그인 화면만');
+  /* ★v2.20.0에서 뒤집었다 — 종전 검사는 `!A.isStaff()`를 **통과 조건으로
+     못 박고** 있었다. 그 조건이 유지되면 측량팀은 비밀번호가 맞아도 영영
+     못 들어온다(측량팀은 스탭이 아니다). isIn()이 맞는 문지기다. */
+  ok(/if \(!A\.isIn\(\)\)/.test(tsrc), '로그인 전에는 로그인 화면만');
+  ok(!/if \(!A\.isStaff\(\)\) \{/.test(tsrc), '★스탭 여부로 문을 막지 않는다');
   ok(/function loginHTML/.test(tsrc), '로그인 화면 있음');
   const asrc = fs.readFileSync(path.join(ROOT, 'assets/js/api.js'), 'utf8');
   ok(/API\.login/.test(asrc), '로그인은 서버가 검사한다');
@@ -865,7 +890,8 @@ console.log('\n[30] 작업현황 재설계 — 날짜조회·재확인·장비�
     /* ★v2.18.0 — 오른쪽 기둥(현황판)을 철거하고 가로로 눕혔다(사용자 지시).
        기둥은 가로 29%를 늘 먹었고 세로로 회색 막대만 아홉 줄이었다.
        요약 띠(한 줄) + 공구 표로 갈랐다. 도넛은 없앴다. */
-    ok(!/class="pg"/.test(hp) && !/class="pn"/.test(hp), '★오른쪽 기둥 철거됨');
+    /* ★v2.19.21 — 기둥이 돌아왔다(사용자 확정 「세로로 바꾸자」). 뒤집는다. */
+    ok(/class="pg"/.test(hp) && /class="pg__side"/.test(hp), '★오른쪽 기둥이 돌아왔다 (5:2)');
     ok(!/stroke-dasharray/.test(hp), '★도넛 삭제됨');
     ok(/class="sb"/.test(hp), '★요약 띠가 있다');
     ok(/<polyline/.test(hp), '7일 추이 선그래프는 요약 띠에 남는다');
@@ -873,7 +899,8 @@ console.log('\n[30] 작업현황 재설계 — 날짜조회·재확인·장비�
       ok(hp.indexOf(A.T(k)) >= 0, `요약 띠 제목: ${A.T(k)}`);
     });
     ok(hp.indexOf(A.T('sb_t')) > 0, '★공구 표가 있다');
-    ok(hp.indexOf(A.T('sb_t')) > hp.indexOf('class="sb"'), '순서 — 요약 띠 → 공구 표');
+    ok(hp.indexOf(A.T('sb_t')) < hp.indexOf('class="sb"'),
+       '★본문이 먼저, 기둥(현황판)이 나중 — 현황판은 오른쪽 칸이다');
     {
       const st2 = A.eqStatus(bl);
       const dt = st2.find(o => o.cat === 'Dump Truck');
@@ -959,30 +986,44 @@ console.log('\n[31] 원본 감사 · v2.16.2 수정분');
   }
 
   /* 31-3. 내역서 확인필요 — 위치·선택유지·별칭 재적용 */
-  ok(/function boqHere/.test(tsrc), '★올린 위치에서만 보인다');
-  ok(/A\.locKey\(boqLoc\) === A\.locKey\(pkLoc\('w'\)\)/.test(tsrc),
-     '★페이즈·블럭을 바꾸면 이전 내역서가 따라오지 않는다');
+  ok(/function boqHere/.test(tsrc), '확인필요 목록의 문지기가 있다');
+  /* ★v2.19.4 — 종전 검사는 반대를 못 박고 있었다. 화면 위치와 대조하는 것을
+     통과 조건으로 걸어 두어, 67개가 안 뜨는 결함이 검사에서는 「정상」으로
+     나왔다. ★주석에도 옛 식이 적혀 있으므로 **함수 몸통만** 떼어 본다 —
+     원본 전체로 찾으면 주석에 걸려 거짓 실패한다(실제로 그랬다). */
+  {
+    const i0 = tsrc.indexOf('function boqHere');
+    const body = tsrc.slice(i0, tsrc.indexOf('function boqNeedHTML'));
+    ok(i0 > 0 && !/pkLoc\('w'\)/.test(body),
+       '★화면 위치(pkLoc)와 대조하지 않는다 — 안 따라가는 옛 변수다');
+  }
   ok(/function boqKeep/.test(tsrc) && /boqKeep\(\);\s*\/\* ★빼기 전에/.test(tsrc),
      '★[제외]를 눌러도 고른 것이 날아가지 않는다');
   ok(/it\.pick === /.test(tsrc), '고른 값이 다시 그려도 남는다(selected)');
-  ok(/m\.how === 'alias'/.test(tsrc),
-     '★저장하면 방금 배운 별칭으로 남은 줄을 다시 훑는다');
+  ok(/\/\^alias\/\.test\(m\.how\)/.test(tsrc),
+     '★저장하면 방금 배운 별칭으로 남은 줄을 다시 훑는다(느슨한 별칭 포함)');
 
   /* 31-4. 배치 */
   ok(!/max-width:1240px/.test(css), '★본문 폭을 묶지 않는다 — 좌우 공백 없음');
-  ok(!/\.pg\{display:grid/.test(css), '★.pg 격자 제거됨 — 가로 29%를 되찾았다');
-  /* ★요약 띠는 아래로 읽는 동안 자리를 완전히 비운다. 고정해 두면
-     브랜드바 64 + 탭 51 위에 띠까지 얹혀 화면 위 145px이 늘 죽는다. */
-  ok(/body\.scr-dn \.sb\{transform:translateY/.test(css), '★아래로 내리면 띠가 비켜준다');
+  /* ★v2.19.21 — 5:2 격자가 돌아왔다. 가로 띠는 고정하는 순간 반드시
+     본문을 덮는다는 것이 네 판(v2.19.15~20)에 걸쳐 확인됐다. */
+  ok(/\.pg\{display:grid;grid-template-columns:5fr 2fr/.test(css),
+     '★.pg 5:2 격자');
+  /* ★★v2.19.9에서 뒤집었다 — 종전 세 줄은 「띠를 고정한다」를 통과 조건으로
+     못 박고 있었고, 그것이 바로 공구 표 머리행을 덮던 결함이었다.
+     [31-3]과 같은 꼴이다. 되살리려면 겹침부터 풀 것(0-D). */
+  ok(!/scr-dn/.test(css), '★요약 띠에 스크롤 방향 규칙이 없다');
   /* ★사용자가 직접 발견 — body에 'dn' 클래스를 쓰면 기존 .dn{color:var(--danger)}
      (고장 표시용 빨간 글씨)와 이름이 겹쳐 화면 전체 글씨가 빨개졌다.
-     body 클래스는 반드시 고유 이름을 쓴다. */
+     감시 자체는 지웠지만 이 규칙은 남긴다 — 다음에 body 클래스를 붙일 때도 같다. */
   ok(!/document\.body\.classList\.add\('dn'\)/.test(tsrc),
      '★body 클래스에 기존 .dn과 겹치는 이름을 쓰지 않는다');
-  ok(/document\.body\.classList\.add\('scr-dn'\)/.test(tsrc),
-     '스크롤 상태는 고유 이름(scr-dn)을 쓴다');
-  ok(/\.sb\{position:sticky;top:calc\(var\(--hd\) \+ var\(--tabh\)\)/.test(css),
-     '위로 올리면 탭 줄 바로 아래로 내려온다');
+  ok(!/scr-dn/.test(tsrc.replace(/\/\*[\s\S]*?\*\//g, '')),
+     '★스크롤 방향 감시는 지웠다 (주석 설명만 남는다)');
+  /* ★v2.19.15 — 사용자가 다시 「위에 고정」을 지시했다. 뒤집는다.
+     단 v2.18.0의 「스크롤 방향을 보고 내렸다 올렸다」는 되살리지 않는다 —
+     그것이 .dn 이름 겹침과 머리행 가림을 만들었다. 항상 보이는 고정이다. */
+  ok(!/--tabh/.test(css), '★쓰지 않게 된 --tabh를 되살리지 않는다');
   ok(!/body:not\(\.vbody\)\s*\.brand/.test(css), '★브랜드바를 가운데로 몰지 않는다');
 }
 
@@ -1029,8 +1070,11 @@ console.log('\n[32] 표기·기록·유지 — 2차 수정분');
     A.go(1);
     ok(!/class="ei"/.test(bag.view.innerHTML), '★밑으로 쌓이던 지급 기록 목록 없음');
     const tsrc2 = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
-    ok(/data-eqq="' \+ k \+ '\|give"/.test(tsrc2), '표 안에 지급 칸이 있다');
-    ok(/data-eqq="' \+ k \+ '\|take"/.test(tsrc2), '표 안에 회수 칸이 있다');
+    /* ★v2.19.14 — 입력칸이 규격 줄에서 **업체 줄**로 내려갔다.
+       보유가 업체 축이 되면서, 어느 업체의 대수인지 정해지지 않은 칸은
+       고칠 수가 없다. 그래서 키 끝에 업체가 붙는다. */
+    ok(/data-eqq="' \+ k \+ '\|give\|' \+ ck \+ '"/.test(tsrc2), '표 안에 지급 칸이 있다');
+    ok(/data-eqq="' \+ k \+ '\|take\|' \+ ck \+ '"/.test(tsrc2), '표 안에 회수 칸이 있다');
     ok(!/function eqIssueHTML/.test(tsrc2), '쌓이는 목록 코드도 제거');
   }
   A.setEqQty({ s: 'civil', p: 3, c: 1 }, 'Dump Truck', '25ton', 'give', 0);
@@ -1224,6 +1268,7 @@ console.log('\n[37] 작업량에 위치 표시');
     const bl4 = { s: 'civil', p: 3, c: 1 };
     A.setFlt(bl4);
     const key = A.progressRows(A.flt())[0] && A.progressRows(A.flt())[0].e.key;
+    /* ★날짜를 오늘로 (v2.19.13) — 작업량·작업위치 기준이 어제에서 오늘로 바뀌었다 */
     S.work.push({ id: 'w-t1', date: A.today(), loc: bl4, key: key, qty: 10, st: 'ok', by: 'LUU',
                   spot: { kind: 'road', f: 0, t: 250 } });
     S.work.push({ id: 'w-t2', date: A.today(), loc: bl4, key: key, qty: 5, st: 'ok', by: 'LUU',
@@ -1418,8 +1463,9 @@ console.log('\n[42] 요약 띠 · 공구 표 (v2.18.0)');
   S.crew.push({ id: 's1', date: A.today(), loc: bl, by: 'LUU', key: 'T-02', st: 'ok',
                 teams: 1, ppl: { wkr: 9 },
                 eq: [{ cat: 'Dump Truck', size: '25ton', run: 6, brk: 1, rep: 0 }] });
-  S.work.push({ id: 's2', date: A.today(), loc: bl, key: 'T-02', qty: 10, st: 'ok',
-                by: 'LUU', spot: { kind: 'road', f: 0, t: 250 } });
+  /* ★현장 현황의 작업위치는 「오늘 투입」에서 나온다 — 실적이 아니다 */
+  S.crew.push({ id: 's2', date: A.today(), loc: bl, key: 'T-02', st: 'ok', teams: 1,
+                ppl: { wkr: 1 }, eq: [], by: 'LUU', spot: { kind: 'road', f: 0, t: 250 } });
   {
     /* 이 공구만 본다 — 앞 절이 남긴 다른 공구 자료가 섞이지 않게 */
     const r = A.siteRows(A.flt());
@@ -1442,7 +1488,7 @@ console.log('\n[42] 요약 띠 · 공구 표 (v2.18.0)');
     ok(/\.sp2:hover \.sp2__all/.test(css) && /\.sp2:focus-within \.sp2__all/.test(css),
        '★터치에서도 펼쳐진다 — hover만 두면 태블릿에서 못 본다');
   }
-  S.crew.pop(); S.work.pop(); A.setFlt(bl); A.go(1);
+  S.crew.pop(); S.crew.pop(); A.setFlt(bl); A.go(1);
 }
 
 /* ── 43 업체별 묶기 (v2.17.5 사용자 지시) ────────────────
@@ -1660,7 +1706,7 @@ console.log('\n[47] 작업위치 — 표 하나로 독립');
   const bl = { s: 'civil', p: 3, c: 1 };
   A.setRole('admin'); S.lang = 'ko'; A.setFlt(bl);
   S.plan[A.locKey(bl)] = S.plan[A.locKey(bl)] || {}; S.plan[A.locKey(bl)]['T-02'] = 500;
-  /* ★작업위치는 기본이 오늘이다(v2.18.1) — 검사 자료도 오늘로 넣는다 */
+  /* ★작업량·작업위치는 기본이 오늘이다(v2.19.13) — 검사 자료도 오늘로 넣는다 */
   S.work.push({ id: 'l1', date: A.today(), loc: bl, key: 'T-02', qty: 10, st: 'ok',
                 by: 'LUU', spot: { kind: 'road', f: 0, t: 250 } });
   S.work.push({ id: 'l2', date: A.today(), loc: bl, key: 'T-02', qty: 7, st: 'ok',
@@ -1724,9 +1770,8 @@ console.log('\n[49] 묶기 분리 · 작업위치 기본 오늘 · 공구 첫 �
 
   /* 49-1. 스크롤 상태 클래스 이름 충돌 */
   ok(!/classList\.add\('dn'\)/.test(tsrc), '★body에 dn을 붙이지 않는다');
-  ok(/classList\.add\('scr-dn'\)/.test(tsrc), 'scr-dn으로 갈랐다');
+  /* ★v2.19.9 — scr-dn 자체가 없어졌다(0-D). .dn과 겹치지 않는 것만 남는다 */
   ok(/^\.dn\{color:var\(--danger\)\}/m.test(css), '.dn(고장 표시)은 그대로 있다');
-  ok(/body\.scr-dn \.sb\{transform/.test(css), '요약 띠 규칙이 새 이름을 쓴다');
 
   /* 49-2. 묶기 단추가 표마다 따로 */
   A._grpBy('ppl', 'work'); A._grpBy('eq', 'work');
@@ -1743,10 +1788,18 @@ console.log('\n[49] 묶기 분리 · 작업위치 기본 오늘 · 공구 첫 �
     const h = bag.view.innerHTML;
     const i = h.indexOf(A.T('sp_loc'), h.indexOf(A.T('ro_out')));
     const seg = h.slice(i, i + 1200);
-    ok(seg.indexOf('2020-01-01') < 0, '★작업위치 기본은 오늘 — 과거가 안 섞인다');
-    ok(seg.indexOf(A.today()) > 0, '오늘 것은 나온다');
+    ok(seg.indexOf('2020-01-01') < 0, '★작업위치 기본 기간 밖은 안 섞인다');
+    ok(seg.indexOf(A.today()) > 0, '★오늘 것이 나온다 — 반영된 날이 기준(v2.19.13)');
   }
-  ok(/RNG_DEF = \{ loc: 'today' \}/.test(tsrc), '표별 기본 기간 체계가 있다');
+  /* ★v2.19.13에서 뒤집었다 — 종전에는 out·loc이 'yday'인 것을 통과 조건으로
+     못 박고 있었다. 사용자 지시로 「반영된 날짜 기준」 = 오늘로 통일했다.
+     진행률·생산성은 RNG_DEF에 없다(전 기간) — 그것이 누계 유지의 근거다. */
+  ok(/out: 'today', loc: 'today', ppl: 'today', eq: 'today'/.test(tsrc),
+     '★표별 기본 기간 — 기간 있는 표는 전부 오늘');
+  ok(!/\bout: 'yday'|\bloc: 'yday'/.test(tsrc), '★어제 기본값이 남아 있지 않다');
+  ok(!/prog:\s*'/.test(tsrc), '★진행률은 RNG_DEF에 없다 — 누계 그대로(사용자 확정)');
+  ok(/insp: 'today', surv: 'today', mat: 'today'/.test(tsrc),
+     '★검측·측량·자재는 오늘 (사용자 지시)');
 
   /* 49-4. 검측·측량·자재 첫 칸이 공구 — 자료가 있어야 표가 그려진다 */
   S.insp.push({ id: 'z1', date: A.today(), loc: bl, key: 'T-02', st: 'apply',
@@ -1762,5 +1815,1703 @@ console.log('\n[49] 묶기 분리 · 작업위치 기본 오늘 · 공구 첫 �
   S.insp.pop(); S.surv.pop(); S.work.pop(); S.work.pop(); A.go(1);
 }
 
-console.log(fail ? `\n✗ 실패 ${fail}건\n` : '\n✓ 전부 통과\n');
+/* ── 50 파일명으로 위치 판별 (v2.18.2 사용자 지시) ────────── */
+console.log('\n[50] 설계수량 — 파일명으로 위치 판별');
+{
+  const tsrc = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+
+  /* 50-1. 페이즈 */
+  [['BNCP_P3-1_설계수량.xlsx', 'Phase 3-1'],
+   ['3-1 물량산출.csv', 'Phase 3-1'],
+   ['Phase3-1.xlsx', 'Phase 3-1'],
+   ['P 3 - 1 내역서.xlsx', 'Phase 3-1'],
+   ['P6-2.xlsx', 'Phase 6-2']].forEach(function (x) {
+    const r = A.locFromName(x[0]);
+    ok(r.ok && A.locLabel(r.loc) === x[1], `${x[0]} → ${x[1]}`);
+  });
+
+  /* 50-2. 블럭 — 타운 글자가 앞에 온다 */
+  [['B-7 설계.xlsx', 'Town B · Block 7'],
+   ['B7BL_수량.csv', 'Town B · Block 7'],
+   ['B7 내역서.xlsx', 'Town B · Block 7'],
+   ['C6BL 수량.csv', 'Town C · Block 6']].forEach(function (x) {
+    const r = A.locFromName(x[0]);
+    ok(r.ok && A.locLabel(r.loc) === x[1], `${x[0]} → ${x[1]}`);
+  });
+
+  /* 50-3. 못 정하면 묻는다 — 틀린 곳에 조용히 넣지 않는다 */
+  {
+    const a = A.locFromName('설계수량.xlsx');
+    ok(!a.ok && !a.many, '★이름에 없으면 묻는다');
+    const b = A.locFromName('P3-1_and_P4-2.xlsx');
+    ok(!b.ok && b.many && b.hits.length === 2, '★여럿이면 묻는다');
+    const c = A.locFromName('BL7 물량.xlsx');
+    ok(!c.ok && c.blockOnly === 7, '★블럭만 알면 타운을 묻는다');
+    const d = A.locFromName('2026-08-17 보고.xlsx');
+    ok(!d.ok, '★날짜를 위치로 오인하지 않는다');
+    /* 없는 블럭 번호는 안 잡는다 — Town D는 5블럭까지다 */
+    ok(!A.locFromName('D9 수량.xlsx').ok, '★없는 블럭 번호는 안 잡는다');
+  }
+
+  /* 50-4. 상단 필터를 보지 않는다 · 안내와 목록이 같은 변수를 본다 */
+  ok(/var det = A\.locFromName\(f\.name\)/.test(tsrc), '★업로드가 파일명을 본다');
+  ok(!/var loc = pkLoc\('w'\);\s*\n\s*var done/.test(tsrc), '★상단 필터로 정하지 않는다');
+  ok(/if \(!det\.ok\) \{ planAsk\(f, det\)/.test(tsrc), '못 정하면 읽지 않고 묻는다');
+  ok(/var loc = planLoc \|\| pkLoc\('w'\);/.test(tsrc), '★목록이 그 위치를 따라간다');
+  ok(/A\.locKey\(planLoc \|\| pkLoc\('w'\)\), v = Number/.test(tsrc),
+     '★고치기도 같은 위치를 본다 — 화면과 저장처가 어긋나지 않게');
+}
+
+/* ── 51 설계량 서버 저장 (v2.18.4 사용자 지적) ──────────── */
+console.log('\n[51] 설계량 — 서버에 남는다');
+{
+  const tsrc = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+  const bl = { s: 'civil', p: 3, c: 1 };
+  A.setRole('admin'); S.lang = 'ko'; A.setFlt(bl);
+
+  ok(/function txPlan\(/.test(tsrc) && /function txPlanAll\(/.test(tsrc),
+     '★설계량 전송 함수가 있다');
+  ok(/api\.send\('plan'/.test(tsrc), "종류 'plan'으로 보낸다");
+  ok(/id: A\.locKey\(loc\) \+ '\|' \+ code/.test(tsrc),
+     '★id가 위치키|공종코드 — 고쳐 다시 보내면 그 줄을 덮어쓴다');
+
+  /* 올린 뒤·고친 뒤·지운 뒤 모두 보낸다 */
+  ok(/txPlanAll\(loc\);/.test(tsrc), '파일을 올리면 보낸다');
+  ok(/if \(boqLoc\) txPlanAll\(boqLoc\);/.test(tsrc), '내역서에 공종을 붙여도 보낸다');
+  ok(/txPlan\(planLoc \|\| pkLoc\('w'\), el\.dataset\.plq, v\)/.test(tsrc), '수량을 고치면 보낸다');
+  ok(/txPlan\(planLoc \|\| pkLoc\('w'\), b\.dataset\.pld, 0\)/.test(tsrc), '지우면 0으로 보낸다');
+
+  /* 읽는 길이 하나뿐이다 — 두 벌이면 한쪽만 고쳐져 어긋난다 */
+  ok((tsrc.match(/A\.readPlanRows\(rows, loc\)/g) || []).length === 1,
+     '★읽는 곳이 한 군데다 (planReadInto)');
+  ok(/planReadInto\(f, det\.loc\);/.test(tsrc), '업로드도 그 한 곳을 부른다');
+
+  /* 수신 — 서버에서 받은 설계량이 자리에 앉는다 */
+  {
+    const lk = A.locKey(bl);
+    delete S.plan[lk];
+    const r = { id: lk + '|T-02', type: 'plan', date: A.today(),
+                s: 'civil', p: 3, c: 1, key: 'T-02', qty: 777 };
+    A._unpack ? A._unpack(r) : null;
+  }
+  ok(/if \(r\.type === 'plan'\)/.test(tsrc), '★받은 설계량을 S.plan에 앉힌다');
+  ok(/if \(q > 0\) S\.plan\[lk\]\[r\.key\] = q; else delete/.test(tsrc),
+     '0으로 오면 지운다 — 삭제도 다른 PC에 전해진다');
+}
+
+/* ── 52 저장 용량 (v2.18.5 사용자 지적) ─────────────────── */
+console.log('\n[52] 저장 용량 — 터지기 전에 알린다');
+{
+  const bl = { s: 'civil', p: 3, c: 1 };
+  A.setRole('admin'); S.lang = 'ko'; A.setFlt(bl);
+
+  ok(typeof A.usage === 'function' && A.usage().pct >= 0, '★사용량을 잰다');
+  ok(A.KEEP_DAYS === 90, '화면은 최근 90일');
+
+  /* 오래된 확인분만 덜어낸다 — 미처리 건은 남긴다 */
+  const n0 = S.work.length;
+  S.work.push({ id: 'cap_old_ok', date: '2020-01-01', loc: bl, key: 'T-02', qty: 1, st: 'ok' });
+  S.work.push({ id: 'cap_old_sub', date: '2020-01-01', loc: bl, key: 'T-02', qty: 1, st: 'sub' });
+  S.work.push({ id: 'cap_new', date: A.today(), loc: bl, key: 'T-02', qty: 1, st: 'ok' });
+  S.surv.push({ id: 'cap_surv_open', date: '2020-01-01', loc: bl, key: 'T-02', done: false });
+  const r = A.trim(90);
+  const ids = S.work.map(x => x.id);
+  ok(ids.indexOf('cap_old_ok') < 0, '★90일 지난 확인분은 덜어낸다');
+  ok(ids.indexOf('cap_old_sub') >= 0, '★미처리 건은 오래돼도 남긴다 — 밀린 일이 사라지면 안 된다');
+  ok(ids.indexOf('cap_new') >= 0, '최근 것은 그대로');
+  ok(S.surv.some(x => x.id === 'cap_surv_open'), '★미처리 측량도 남긴다');
+  ok(r.n >= 1 && /^\d{4}-\d{2}-\d{2}$/.test(r.cut), `덜어낸 건수·기준일 (${r.n}건 / ${r.cut})`);
+
+  /* 기준 자료는 안 건드린다 */
+  {
+    const lk = A.locKey(bl);
+    S.plan[lk] = S.plan[lk] || {}; S.plan[lk]['T-02'] = 500;
+    const vn = S.vend.length;
+    A.trim(90);
+    ok(S.plan[lk]['T-02'] === 500, '★설계량은 안 덜어낸다 — 쌓이는 자료가 아니다');
+    ok(S.vend.length === vn, '★업체 명부도 안 건드린다');
+  }
+
+  /* 화면 — 준비에 용량 칸 */
+  A._setup('cap'); A.go(1);
+  {
+    const h = bag.view.innerHTML;
+    ok(h.indexOf(A.T('cap_t')) > 0, '★준비에 저장 용량 칸이 있다');
+    ok(/class="cap__b"/.test(h), '사용량 막대가 있다');
+    ok(/id="capTrim"/.test(h), '직접 덜어내는 단추가 있다');
+  }
+  A._setup('');
+
+  /* 덜어냈으면 반드시 알린다 — 조용히 지우면 「내 자료가 왜 없지」가 된다 */
+  {
+    const tsrc = fs.readFileSync(path.join(ROOT, 'assets/js/core.js'), 'utf8');
+    ok(/S\.trimMsg = A\.T\('cap_trimmed'\)/.test(tsrc), '★자동으로 덜어내면 알린다');
+    ok(/catch \(e\) \{\s*\/\*[\s\S]{0,200}var r = A\.trim/.test(tsrc),
+       '★저장이 터지면 덜어내고 한 번 더 시도한다');
+  }
+  S.work = S.work.filter(x => !/^cap_/.test(x.id));
+  S.surv = S.surv.filter(x => !/^cap_/.test(x.id));
+  A.go(1);
+}
+
+/* ── 53 확인한 것이 되살아나던 문제 (v2.18.6 사용자 지적) ── */
+console.log('\n[53] 확인 처리가 서버에 남는다');
+{
+  const tsrc = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+  const bl = { s: 'civil', p: 3, c: 1 };
+  A.setRole('admin'); S.lang = 'ko'; A.setFlt(bl);
+
+  /* 53-1. 되돌려 보내는 길이 생겼다 */
+  ok(/function txBack\(type, row\)/.test(tsrc), '★관리자 화면에 전송 함수가 있다');
+  ok(/txBack\(kind, x\);/.test(tsrc), '실적·인원장비 확인을 보낸다');
+  /* ★v2.20.0에서 뒤집었다 — 옛 [완료] 토글(txBack('surv', x))이 사라졌다.
+     참·거짓 하나로는 「측량팀이 못 했다」와 「스탭이 조치 중이다」를 못 가른다.
+     이제 결재 흐름 처리기 하나가 두 종류를 다 보낸다. */
+  ok(/txBack\(kind, fRow\(kind, id\)\)/.test(tsrc), '측량·자재 결재 결과를 보낸다');
+  ok(!/txBack\('surv', x\)/.test(tsrc), '★옛 완료 토글이 남아 있지 않다');
+  ok((tsrc.match(/txBack\('insp'/g) || []).length === 3, '검측 상태 변경 3곳 다 보낸다');
+
+  /* ★확인 처리가 시트의 공종명·단위를 비우지 않는다 (v2.18.7 사용자 지적).
+     협력업체 화면(payload)은 처음부터 채워 보내고 있었다 — 되돌려 보내는
+     쪽만 빠져 있었다. 두 쪽이 같은 꼴이어야 한다. */
+  ok(/name: e \? e\.name : '', unit: e \? e\.unit : ''/.test(tsrc),
+     '★되돌려 보낼 때 공종명·단위를 함께 보낸다');
+  ok(/if \(e && e\.spec\) b\.spec = e\.spec;/.test(tsrc), '규격도 보낸다');
+  ok(/b\.qty = row\.teams;\s+\/\* 시트 수량칸엔 조 수/.test(tsrc),
+     '인원장비는 수량칸에 조 수 — 협력업체와 같은 규칙');
+  {
+    const vsrc = fs.readFileSync(path.join(ROOT, 'assets/js/vendor.js'), 'utf8');
+    ok(/base\.name = e \? e\.name : '';/.test(vsrc),
+       '협력업체 쪽도 같은 값을 보낸다(대조 기준)');
+  }
+
+  /* 53-2. 확인하면 st가 바뀌고 전송 대상이 된다 */
+  {
+    S.work.push({ id: 'r53', date: A.today(), loc: bl, key: 'T-02', qty: 5, st: 'sub', by: 'LUU' });
+    const w = S.work.filter(x => x.id === 'r53')[0];
+    w.st = 'ok'; w.ckAt = A.today();
+    ok(w.st === 'ok', '확인하면 ok가 된다');
+  }
+
+  /* 53-3. ★핵심 — 서버의 옛 값이 내 확인을 되돌리지 못한다 */
+  {
+    const rank = { sub: 0, apply: 0, ready: 1, ok: 2, pass: 2, iss: 2 };
+    const older = (local, r) => {
+      if (!local) return false;
+      if (local.done === true && r.done === false) return true;
+      const a = rank[local.st], b = rank[r.st];
+      return (a !== undefined && b !== undefined && b < a);
+    };
+    ok(older({ st: 'ok' }, { st: 'sub' }), '★내가 ok인데 서버가 sub면 무시');
+    ok(older({ st: 'ready' }, { st: 'apply' }), '★내가 ready인데 서버가 apply면 무시');
+    ok(older({ done: true }, { done: false }), '★측량 완료를 미처리로 되돌리지 않는다');
+    ok(!older({ st: 'sub' }, { st: 'ok' }), '서버가 더 앞서면 받는다');
+    ok(!older({ st: 'apply' }, { st: 'pass' }), '검측 합격도 받는다');
+  }
+
+  S.work = S.work.filter(x => x.id !== 'r53');
+  A.go(1);
+}
+
+/* ── 54 협력업체 자재신청이 관리자 화면에 뜬다 (v2.18.8 사용자 지적) ── */
+console.log('\n[54] 자재신청이 관리자 화면에 뜬다');
+{
+  const csrc = fs.readFileSync(path.join(ROOT, 'assets/js/core.js'), 'utf8');
+  const bl = { s: 'civil', p: 3, c: 1 };
+  A.setRole('admin'); S.lang = 'ko'; A.setFlt(bl);
+
+  /* 54-1. 같은 이름이 두 번 정의돼 앞의 것이 죽어 있었다 */
+  {
+    const m = {};
+    for (const x of csrc.matchAll(/\n  A\.(\w+) = function/g)) m[x[1]] = (m[x[1]] || 0) + 1;
+    const dup = Object.keys(m).filter(k => m[k] > 1);
+    ok(dup.length === 0, `core.js A.* 중복 정의 0${dup.length ? ' ★' + dup.join(',') : ''}`);
+  }
+
+  /* 54-2. ★신청만 있는 줄이 살아남는다 — 지급 전이라 다른 칸은 다 비었다 */
+  ok(/return a\.design \|\| a\.iss \|\| a\.req \|\| a\.stock != null;/.test(csrc),
+     '★신청(req)도 남긴다');
+  {
+    const before = S.mreq.length;
+    const m = A.addMreq({ date: A.today(), loc: bl, grp: '우수관', sub: '우수맨홀',
+                          mat: '모래', spec: '', unit: 'M3', qty: 3, by: 'ALSKHAA COMPANY' });
+    ok(m.st === 'req', '협력업체 신청은 req 상태로 들어온다');
+    const hit = A.matRows(A.flt()).filter(r => r.mat === '모래')[0];
+    ok(!!hit, '★신청이 관리자 목록에 뜬다 (종전에는 사라졌다)');
+    ok(hit && hit.req === 3 && hit.iss === 0 && !hit.design,
+       '지급·설계가 없어도 신청 수량만으로 뜬다');
+    A.go(4);
+    ok(bag.view.innerHTML.indexOf(A.T('m_req')) > 0, '★화면에 「신청」 칸이 있다');
+    S.mreq = S.mreq.slice(0, before);
+  }
+  A.go(1);
+}
+
+/* ── 55 반려 (v2.18.8 사용자 지시) ────────────────────── */
+console.log('\n[55] 확인 필요 — 반려 + 독촉 문자');
+{
+  const tsrc = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+  const vsrc = fs.readFileSync(path.join(ROOT, 'assets/js/vendor.js'), 'utf8');
+  const bl = { s: 'civil', p: 3, c: 1 };
+  A.setRole('admin'); S.lang = 'ko'; A.setFlt(bl);
+
+  ok(/data-ckno=/.test(tsrc), '★반려 단추가 있다');
+  ok(/w\.st = 'rej'; w\.ckOk = 1; w\.rejWhy/.test(tsrc), '반려 사유를 남긴다');
+  ok(!/S\.work = S\.work\.filter[\s\S]{0,60}ckno/.test(tsrc),
+     '★반려해도 지우지 않는다 — 무엇을 왜 고칠지 알아야 한다');
+  ok(/rej: 0\.5/.test(tsrc), '★반려가 서버의 sub에 덮이지 않는다');
+
+  /* 협력업체가 본다 — 날짜 무관 */
+  ok(/x\.st === 'rej' && A\.locKey\(x\.loc\) === lk/.test(vsrc),
+     '★협력업체 화면에 반려가 날짜와 무관하게 뜬다');
+
+  /* 독촉 — 마감 전이어도 반려는 바로 */
+  {
+    S.vend.length = 0;
+    S.vend.push({ name: 'LUU', tel: '964770123456', lang: 'en' });
+    S.work.push({ id: 'rj55', date: '2020-01-01', loc: bl, key: 'T-02', qty: 99,
+                  st: 'rej', rejWhy: 'too high', by: 'LUU' });
+    const D = (h, m) => { const d = new Date(A.today() + 'T00:00:00'); d.setHours(h, m, 0, 0); return d; };
+    const early = A.dueList(A.flt(), D(7, 30)).co;
+    ok(early.length === 1 && early[0].rej === 1,
+       '★마감 전이어도 반려는 바로 독촉 대상이다');
+    ok(early[0].miss.indexOf('rej') >= 0, '사유 항목에 반려가 들어간다');
+    A.go(5);
+    ok(bag.view.innerHTML.indexOf(A.T('du_m_rej')) > 0, '독촉 화면에 반려가 뜬다');
+    S.work = S.work.filter(x => x.id !== 'rj55');
+    S.vend.length = 0;
+  }
+  A.go(1);
+}
+
+/* ── 56 v2.19.0 — 요약 띠 보강 · 오늘 기준 · 설계외 자재 · 검측 조회 ── */
+console.log('\n[56] 요약 띠 보강 · 설계외 자재 · 검측 날짜조회');
+{
+  const tsrc = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+  const csrc = fs.readFileSync(path.join(ROOT, 'assets/js/core.js'), 'utf8');
+  const bl = { s: 'civil', p: 3, c: 1 };
+  A.setRole('admin'); S.lang = 'ko'; A.setFlt(bl);
+
+  /* 56-1. 요약 띠에 손봐야 할 것 */
+  S.work.push({ id: 't56a', date: A.today(), loc: bl, key: 'T-02', qty: 5, st: 'sub', by: 'LUU' });
+  S.insp.push({ id: 't56b', date: A.today(), loc: bl, key: 'T-02', st: 'apply', qty: 3, seq: 1, hist: [] });
+  S.work.push({ id: 't56c', date: '2026-08-01', loc: bl, key: 'T-02', qty: 9, st: 'rej', rejWhy: 'x', by: 'LUU' });
+  A.go(1);
+  {
+    const h = bag.view.innerHTML;
+    ok(/class="sb__td"/.test(h), '★요약 띠에 손봐야 할 것이 나온다');
+    ok(/data-sbgo="1"/.test(h), '확인 대기를 누르면 작업현황으로');
+    ok(/data-sbgo="2"/.test(h), '검측을 누르면 검측 탭으로');
+    ok(h.indexOf(A.T('sb_todo')) > 0, '제목이 붙는다');
+  }
+  ok(/function sbTodo/.test(tsrc), 'sbTodo가 있다');
+  ok(/T\('sb_clear'\)/.test(tsrc), '★다 처리했으면 「없음」이라고 알린다');
+
+  /* 56-2. 검측·측량·자재는 오늘 기준 + 날짜 조회 */
+  ok(/insp: 'today', surv: 'today', mat: 'today'/.test(tsrc), '★기본이 오늘');
+  A.go(2);
+  ok(/data-rg="insp"/.test(bag.view.innerHTML), '★검측에 기간 단추가 있다');
+  ok(/A\.dateFlt\.from \|\| A\.dateFlt\.to/.test(csrc),
+     '★기간을 넓히면 끝난 건도 나온다 — 단추가 실제로 듣는다');
+
+  /* 56-3. 설계 외 자재 수동 입력 */
+  A.go(4);
+  ok(/id="mtAddT"/.test(bag.view.innerHTML), '★설계 외 자재 추가 칸이 있다');
+  ok(/data-rg="mat"/.test(bag.view.innerHTML), '자재에도 기간 단추');
+  {
+    const before = S.mreq.length;
+    const m = A.addExtraMat({ loc: bl, mat: '방수시트', spec: 'T=2mm', unit: 'm2', qty: 40 });
+    ok(m.extra === 1 && m.st === 'iss', '★설계 외 표시가 붙고 지급으로 들어간다');
+    ok(A.matExtraCount(A.flt()) >= 1, '설계 외 건수를 센다');
+    const hit = A.matRows(A.flt()).filter(r => r.mat === '방수시트')[0];
+    ok(!!hit && hit.iss === 40, '자재 목록에 뜬다');
+    ok(!hit.design, '★설계수량은 없다 — 설계 대비 차이로 오해하면 안 된다');
+    S.mreq = S.mreq.slice(0, before);
+  }
+
+  S.work = S.work.filter(x => !/^t56/.test(x.id));
+  S.insp = S.insp.filter(x => !/^t56/.test(x.id));
+  A.go(1);
+}
+
+function bagLabelHas(m) {
+  A.setRole('staff'); A.go(4);
+  return bag.view.innerHTML.indexOf(A.T('fm_iss_v')) > 0;
+}
+/* ── 57 자재 신청 처리 (v2.19.1 → v2.20.1 결재 흐름으로 뒤집음) ── */
+console.log('\n[57] 자재 — 결재 흐름 (신청→검토→확인→지급→최종입력)');
+{
+  const tsrc = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+  const bl = { s: 'civil', p: 1, c: 1 };
+  S.lang = 'ko'; A.setFlt(bl);
+  const before = S.mreq.length;
+
+  const m = A.addMreq({ date: A.today(), loc: bl, grp: '부지토목', sub: '도로포장(아스팔트)',
+                        mat: '표층', spec: '#78, T=40MM', unit: 'm2', qty: 600, by: 'LUU' });
+
+  /* ★흐름을 건너뛰던 옛 단추는 없어야 한다.
+     종전 검사는 이 단추들을 **통과 조건으로 못 박고** 있었다 —
+     그 상태가 곧 「스탭 검토도 관리자 확인도 건너뛰고 곧바로 지급」이다. */
+  ok(!/data-mtiss=/.test(tsrc), '★[지급] 직행 단추가 없다');
+  ok(!/data-mtno=/.test(tsrc), '★[미지급] 직행 단추가 없다');
+
+  /* 57-1. 신청은 스탭 차례다 */
+  A.setRole('staff'); A.go(4);
+  ok(A.fst('mat', m) === 'req', '신청은 스탭 검토 대기');
+  ok(A.flowOwn('mat', m) === 'staff', '★내 차례는 스탭');
+  ok(/data-fgo="mat\|/.test(bag.view.innerHTML), '스탭 화면에 결재 단추가 있다');
+
+  /* 57-2. 관리자에게는 아직 아무 단추도 없다 — 남의 차례다 */
+  A.setRole('admin'); A.go(4);
+  ok(!A.flowMine('mat', m), '★관리자 차례가 아니다');
+  ok(!/data-fgo="mat\|/.test(bag.view.innerHTML), '★남의 단계 단추는 안 그린다');
+
+  /* 57-3. 스탭 검토 → 관리자 확인 → 지급 → 최종입력 */
+  A.flowGo('mat', m, 'ok', { by: 'staff' });
+  ok(A.fst('mat', m) === 'chk', '스탭 검토 → 관리자 확인 대기');
+  ok(A.flowOwn('mat', m) === 'admin', '★이제 관리자 차례');
+  A.setRole('admin'); A.go(4);
+  ok(/data-fgo="mat\|/.test(bag.view.innerHTML), '관리자 화면에 단추가 있다');
+
+  A.flowGo('mat', m, 'ok', { by: 'admin' });
+  ok(A.fst('mat', m) === 'ord', '관리자 확인 → 지급 대기');
+  A.flowGo('mat', m, 'ok', { by: 'staff', qty: 500 });
+  ok(A.fst('mat', m) === 'iss' && m.iss === 500,
+     '★신청보다 적게 지급할 수 있다 (600 신청 → 500 지급)');
+  ok(m.qty === 600, '신청 수량은 그대로 남는다 — 차이를 알아야 한다');
+  /* ★지급 뒤는 **양쪽이 확인해야** 끝난다 (v2.20.1 사용자 지시).
+     한쪽만 눌러서는 종료되지 않는다 — 그래야 나중에 「받은 적 없다」가 안 나온다. */
+  A.flowGo('mat', m, 'ok', { by: 'staff', as: 'staff', qty: 500 });
+  ok(A.fst('mat', m) === 'iss' && !A.flowEnd('mat', m),
+     '★스탭만 확인해서는 끝나지 않는다');
+  ok(A.flowMineVendor('mat', m), '★업체 수령확인이 남아 있다');
+  ok(!A.flowMine('mat', m, 'staff'), '★스탭은 이미 눌렀으므로 내 차례가 아니다');
+  ok(A.flowWarn(A.flt()).recv >= 1, '★「수령확인 안 됨」으로 센다');
+  ok(A.T('fm_iss_v') && bagLabelHas(m), '★화면에 「업체 수령확인 대기」로 적힌다');
+  A.flowGo('mat', m, 'ok', { by: 'LUU', as: 'vendor' });
+  ok(A.fst('mat', m) === 'fin' && A.flowEnd('mat', m),
+     '★양쪽이 확인하면 최종 종료');
+  ok(A.flowWarn(A.flt()).recv === 0, '끝난 것은 수령확인 경고에서 빠진다');
+  {
+    const row = A.matRows(A.flt()).filter(x => x.mat === '표층')[0];
+    ok(!!row && row.iss === 500, '★자재 표의 「지급」 칸에 최종 수량이 실린다');
+    ok(!!row && row.req === 600, '★「신청」 칸은 그대로 600 — 차이를 알아야 한다');
+  }
+  ok(!A.flowMine('mat', m, 'staff') && !A.flowMine('mat', m, 'admin'),
+     '★끝난 것은 아무의 차례도 아니다');
+
+  /* 57-4. 반려는 한 칸만 뒤로 간다 — 어디로 갈지 고르지 않는다 */
+  const m2 = A.addMreq({ date: A.today(), loc: bl, grp: '부지토목', sub: '도로포장(아스팔트)',
+                         mat: '기층', spec: 'T=20cm', unit: 'm2', qty: 100, by: 'LUU' });
+  A.flowGo('mat', m2, 'no', { by: 'staff', why: '규격이 다르다' });
+  ok(A.fst('mat', m2) === 'back' && A.flowOwn('mat', m2) === 'vendor',
+     '★스탭 반려 → 업체 재검토 (한 칸만 뒤로)');
+  ok(m2.fwhy === '규격이 다르다', '★사유가 남는다 — 누구 잘못인지 알아야 한다');
+  A.flowGo('mat', m2, 'ok', { by: 'LUU' });        // 업체가 다시 올린다
+  A.flowGo('mat', m2, 'ok', { by: 'staff' });      // 스탭 검토
+  A.flowGo('mat', m2, 'no', { by: 'admin', why: '수량 과다' });
+  ok(A.fst('mat', m2) === 'rej' && A.flowOwn('mat', m2) === 'staff',
+     '★관리자 반려 → 스탭 재검토 (업체까지 안 간다)');
+  ok(A.matRows(A.flt()).some(r => r.mat === '기층'),
+     '★반려여도 목록에서 사라지지 않는다');
+
+  /* 57-5. 화면·문자 독촉 */
+  m2.fat = new Date(Date.now() - 125 * 60000).toISOString();
+  ok(A.flowLate('mat', m2) === 2, '★125분 멈춰 있으면 2차 독촉');
+  m2.fat = new Date(Date.now() - 70 * 60000).toISOString();
+  ok(A.flowLate('mat', m2) === 1, '★70분이면 1차 독촉');
+  m2.fat = new Date().toISOString();
+  ok(A.flowLate('mat', m2) === 0, '방금 넘긴 것은 독촉하지 않는다');
+  m2.fat = new Date(Date.now() - 125 * 60000).toISOString();
+  ok(A.flowDue(A.flt()).some(x => x.own === 'staff' && x.stage === 2),
+     '★문자 독촉 대상에 오른다');
+  ok(A.flowLate('mat', m) === 0, '★끝난 건은 독촉하지 않는다');
+  A.setRole('staff'); A.go(4);
+  ok(/fl_late2|1차|2차|Overdue|তাগিদ/.test(bag.view.innerHTML) ||
+     bag.view.innerHTML.indexOf(A.T('fl_late2')) > 0, '★화면에서도 독촉이 보인다');
+
+  /* 57-6. 옛 기록도 그대로 읽는다 */
+  ok(A.fst('mat', { st: 'iss' }) === 'fin', '★옛 지급건은 끝난 것으로 읽는다');
+  ok(A.fst('mat', { st: 'req' }) === 'req', '★옛 신청건은 검토 대기로 읽는다');
+
+  S.mreq = S.mreq.slice(0, before);
+  A.setRole('admin'); A.go(1);
+}
+
+/* ── 77 측량 결재 흐름 · 측량팀 (v2.20.0 사용자 지시) ────── */
+console.log('\n[77] 측량 — 신청→확인→측량지시→측량팀→최종완료 · 측량팀 로그인');
+{
+  const tsrc = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+  const csrc = fs.readFileSync(path.join(ROOT, 'assets/js/core.js'), 'utf8');
+  const vsrc = fs.readFileSync(path.join(ROOT, 'assets/js/vendor.js'), 'utf8');
+  const gsrc = fs.readFileSync(path.join(ROOT, 'Code.gs'), 'utf8');
+  const bl = { s: 'civil', p: 3, c: 1 };
+  S.lang = 'ko'; A.setFlt(bl);
+  const before = S.surv.length;
+  const key = Object.keys(A.REG || {})[0] || (A.LIST && A.LIST[0] && A.LIST[0].key) || '';
+
+  function mk() {
+    const r = { id: 't77-' + S.surv.length, date: A.today(), loc: bl, key: key,
+                spot: null, why: '중심선 확인', by: 'LUU', done: false,
+                at: new Date().toISOString(), up: 0 };
+    S.surv.push(r); return r;
+  }
+
+  /* 77-1. 측량팀은 별도 역할이다 — 스탭 권한을 물려받지 않는다 */
+  ok(typeof A.isSurv === 'function' && typeof A.isIn === 'function', '측량팀 역할이 있다');
+  A.setRole('surv');
+  ok(A.isSurv() && A.isIn(), '★측량팀도 로그인한 것으로 본다');
+  ok(!A.isStaff(), '★측량팀은 스탭이 아니다');
+  ok(!A.can('stock') && !A.can('prod') && !A.can('notice') && !A.can('recon'),
+     '★관리 기능은 하나도 못 쓴다 — 스탭보다 좁다');
+  ok(/PW_SURVEY/.test(gsrc) && /role: 'surv'/.test(gsrc), '★서버가 측량팀 비밀번호를 검사한다');
+  ok(!/PW_SURVEY['\"]?\s*[:=]\s*['\"][^'\"]+/.test(gsrc.replace(/getProperty\('PW_SURVEY'\)/g, '')),
+     '★비밀번호가 소스에 적혀 있지 않다');
+  ok(/A\.isSurv\(\) \? \[3\]/.test(tsrc), '★측량팀에게는 측량 탭 하나만');
+
+  /* 77-2. 단계마다 차례가 넘어간다 */
+  const r1 = mk();
+  ok(A.fst('surv', r1) === 'req' && A.flowOwn('surv', r1) === 'staff', '신청은 스탭 확인 대기');
+  A.setRole('surv'); A.go(3);
+  ok(!A.flowMine('surv', r1), '★측량팀 차례가 아니다');
+  ok(!/data-fgo="surv\|/.test(bag.view.innerHTML), '★남의 단계 단추는 안 그린다');
+
+  A.flowGo('surv', r1, 'ok', { by: 'staff' });
+  ok(A.fst('surv', r1) === 'chk' && A.flowOwn('surv', r1) === 'admin',
+     '★스탭이 「측량 필요」로 보면 관리자에게 올라간다');
+  A.flowGo('surv', r1, 'ok', { by: 'admin' });
+  ok(A.fst('surv', r1) === 'ord' && A.flowOwn('surv', r1) === 'surv',
+     '★관리자 측량지시 → 측량팀 차례');
+
+  A.setRole('surv'); A.go(3);
+  ok(A.flowMine('surv', r1), '★이제 측량팀 차례');
+  ok(/data-fgo="surv\|/.test(bag.view.innerHTML), '측량팀 화면에 단추가 있다');
+  ok(bag.view.innerHTML.indexOf(A.T('b_sdone')) > 0 &&
+     bag.view.innerHTML.indexOf(A.T('b_sfail')) > 0, '★[측량 완료]와 [미완료] 둘뿐이다');
+
+  A.flowGo('surv', r1, 'ok', { by: 'surv' });
+  ok(A.fst('surv', r1) === 'sdone' && A.flowOwn('surv', r1) === 'staff',
+     '★측량팀 완료 → 스탭 확인 차례');
+  A.flowGo('surv', r1, 'ok', { by: 'staff' });
+  ok(A.fst('surv', r1) === 'fin' && A.flowEnd('surv', r1) && r1.done === true,
+     '★스탭 최종완료로 끝난다');
+
+  /* 77-3. 측량팀이 못 했을 때 — 사유가 남고 스탭이 조치한다 */
+  const r2 = mk();
+  A.flowGo('surv', r2, 'ok', { by: 'staff' });
+  A.flowGo('surv', r2, 'ok', { by: 'admin' });
+  A.flowGo('surv', r2, 'no', { by: 'surv', why: '장비 고장' });
+  ok(A.fst('surv', r2) === 'sfail' && r2.fwhy === '장비 고장',
+     '★완료 못한 사유가 남는다');
+  ok(A.flowOwn('surv', r2) === 'staff', '★스탭이 확인·조치할 차례');
+  ok(r2.done === false, '★미완료는 끝난 것이 아니다');
+  A.flowGo('surv', r2, 'no', { by: 'staff', why: '자재 반입 대기' });
+  ok(A.fst('surv', r2) === 'delay' && !A.flowEnd('surv', r2),
+     '★지연도 끝난 것이 아니다 — 스탭 목록에 남는다');
+  A.flowGo('surv', r2, 'ok', { by: 'staff' });
+  ok(A.fst('surv', r2) === 'fin', '조치 뒤 최종완료');
+
+  /* 77-4. ★스탭 선에서 끝나는 길 — 관리자까지 안 올린다 */
+  const r3 = mk();
+  A.flowGo('surv', r3, 'alt', { by: 'staff', why: '기존 측량으로 갈음' });
+  ok(A.fst('surv', r3) === 'none' && A.flowEnd('surv', r3),
+     '★「측량 불필요」는 스탭 선에서 종결된다');
+  ok(!A.flowMineList(A.flt(), 'admin').some(x => x.row.id === r3.id),
+     '★관리자 목록에 안 뜬다 — 정말 필요한 것만 본다');
+
+  /* 77-5. 반려는 한 칸만 뒤로 */
+  const r4 = mk();
+  A.flowGo('surv', r4, 'no', { by: 'staff', why: '위치가 틀렸다' });
+  ok(A.fst('surv', r4) === 'back' && A.flowOwn('surv', r4) === 'vendor',
+     '★스탭 반려 → 업체 재검토');
+  A.flowGo('surv', r4, 'ok', { by: 'LUU' });
+  A.flowGo('surv', r4, 'ok', { by: 'staff' });
+  A.flowGo('surv', r4, 'no', { by: 'admin', why: '측량 대상 아님' });
+  ok(A.fst('surv', r4) === 'rej' && A.flowOwn('surv', r4) === 'staff',
+     '★관리자 반려 → 스탭 재검토 (업체까지 안 간다)');
+
+  /* 77-6. 독촉 — 화면과 문자 */
+  const r5 = mk();
+  A.flowGo('surv', r5, 'ok', { by: 'staff' });          // 관리자 차례
+  r5.fat = new Date(Date.now() - 130 * 60000).toISOString();
+  ok(A.flowLate('surv', r5) === 2, '★130분 멈춰 있으면 2차 독촉');
+  ok(A.flowDue(A.flt()).some(x => x.own === 'admin' && x.surv > 0),
+     '★문자 독촉 대상이 「관리자」로 잡힌다');
+  ok(A.flowLate('surv', r3) === 0, '★종결된 것은 독촉하지 않는다');
+  ok(A.flowLate('surv', r4) === 0 || A.flowOwn('surv', r4) !== 'vendor',
+     '★업체 차례는 여기서 안 센다 — dueList가 이미 맡고 있다');
+  A.setRole('admin'); A.go(3);
+  ok(bag.view.innerHTML.indexOf(A.T('fl_late2')) > 0, '★화면에서도 독촉이 보인다');
+  ok(bag.view.innerHTML.indexOf(A.T('fl_mine')) > 0, '★「내 차례」 카드가 있다');
+
+  /* 77-7. 옛 기록을 버리지 않는다 */
+  ok(A.fst('surv', { done: true }) === 'fin', '★옛 완료 기록은 끝난 것으로 읽는다');
+  ok(A.fst('surv', { done: false }) === 'req', '★옛 미완료 기록은 확인 대기로 읽는다');
+
+  /* 77-8. 서버·수신 — 단계가 넘어가야 다른 PC에서도 같은 상태다 */
+  ok(/b\.fst = A\.fst\(type, row\)/.test(tsrc), '★결재 단계를 서버로 보낸다');
+  ok(/r\.type === 'mat'/.test(tsrc), '★자재 신청 수신 갈래가 있다 (종전에는 없었다)');
+  ok(tsrc.indexOf("r.type === 'mat'") < tsrc.indexOf('if (!r.key) return null;'),
+     '★자재 갈래가 key 검사보다 위에 있다 — 밑에 두면 전부 걸러진다');
+  ok(/frank/.test(tsrc), '★서버의 옛 단계가 내 처리를 되돌리지 못한다');
+
+  /* 77-9. 협력업체 화면 */
+  ok(/FSTV/.test(vsrc), '★업체 화면에도 지금 단계가 보인다');
+  ok(/data-vre=/.test(vsrc), '★돌아온 줄은 업체가 스스로 되올린다');
+  ok(/f === 'back'/.test(vsrc), '★돌아온 줄은 날짜와 무관하게 뜬다');
+
+  /* 77-10. 엔진은 한 벌이다 */
+  ok(/A\.FLOW = \{[\s\S]*mat:[\s\S]*surv:/.test(csrc), '★자재와 측량이 같은 엔진을 쓴다');
+  ['mat', 'surv'].forEach(k => {
+    Object.keys(A.FLOW[k]).forEach(st => {
+      const d = A.FLOW[k][st];
+      if (d.end) return;
+      ['ok', 'no', 'alt'].forEach(dir => {
+        if (d[dir]) ok(!!A.FLOW[k][d[dir]], `★${k}.${st}.${dir} → ${d[dir]} 가 실재하는 단계다`);
+      });
+    });
+  });
+
+  S.surv = S.surv.slice(0, before);
+  A.setRole('admin'); A.go(1);
+}
+
+/* ── 78 양쪽 확인 · 현황판 결재 경고 (v2.20.1 사용자 지시) ──── */
+console.log('\n[78] 지급 후 양쪽 확인 · 현황판 경고');
+{
+  const tsrc = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+  const vsrc = fs.readFileSync(path.join(ROOT, 'assets/js/vendor.js'), 'utf8');
+  const bl = { s: 'civil', p: 2, c: 1 };
+  S.lang = 'ko'; A.setFlt(bl);
+  const before = S.mreq.length;
+
+  function upto(qty) {                       // 지급까지 밀어 올린다
+    const r = A.addMreq({ date: A.today(), loc: bl, grp: '부지토목', sub: '관로공',
+                          mat: '우수관', spec: 'D=600mm', unit: 'm', qty: qty, by: 'KEW' });
+    A.flowGo('mat', r, 'ok', { as: 'staff' });
+    A.flowGo('mat', r, 'ok', { as: 'admin' });
+    A.flowGo('mat', r, 'ok', { as: 'staff', qty: qty });
+    return r;
+  }
+
+  /* 78-1. 순서가 반대여도 똑같이 동작한다 */
+  {
+    const r = upto(100);
+    A.flowGo('mat', r, 'ok', { as: 'vendor', by: 'KEW' });
+    ok(A.fst('mat', r) === 'iss' && !A.flowEnd('mat', r), '★업체만 확인해서는 끝나지 않는다');
+    ok(A.flowMine('mat', r, 'staff'), '★스탭 확인이 남아 있다');
+    ok(!A.flowMineVendor('mat', r), '★업체는 이미 눌렀다');
+    A.flowGo('mat', r, 'ok', { as: 'staff' });
+    ok(A.fst('mat', r) === 'fin', '★업체 먼저여도 양쪽이면 종료');
+  }
+
+  /* 78-2. 라벨이 「누가 남았는지」를 말한다 */
+  {
+    const r = upto(50);
+    A.setRole('staff'); A.go(4);
+    ok(bag.view.innerHTML.indexOf(A.T('fm_iss_b')) > 0, '★둘 다 안 눌렀으면 「양쪽 확인 대기」');
+    A.flowGo('mat', r, 'ok', { as: 'staff' });
+    A.go(4);
+    ok(bag.view.innerHTML.indexOf(A.T('fm_iss_v')) > 0, '★스탭이 눌렀으면 「업체 수령확인 대기」');
+    A.flowGo('mat', r, 'ok', { as: 'vendor' });
+  }
+
+  /* 78-3. ★확인 안 하면 경고한다 */
+  {
+    const r = upto(70);
+    r.fat = new Date(Date.now() - 130 * 60000).toISOString();
+    ok(A.flowLate('mat', r) === 2, '★지급 후 확인이 없으면 독촉 대상이다');
+    const due = A.flowDue(A.flt());
+    ok(due.some(x => x.own === 'staff'), '★스탭이 독촉 대상에 오른다');
+    ok(due.some(x => x.own === 'vendor' && x.name === 'KEW'),
+       '★업체는 **이름**으로 잡힌다 — 그래야 보낼 곳이 있다');
+    ok(/x\.own === 'vendor' \? \(x\.name/.test(tsrc), '★문안도 업체 이름 앞으로 간다');
+    ok(/wa\.me/.test(tsrc.slice(tsrc.indexOf('fd.forEach'), tsrc.indexOf('fd.forEach') + 900)),
+       '★업체에는 왓츠앱 링크가 붙는다');
+    A.flowGo('mat', r, 'ok', { as: 'staff' });
+    A.flowGo('mat', r, 'ok', { as: 'vendor' });
+  }
+
+  /* 78-4. ★현황판만 봐도 승인이 안 되고 있는 것이 보인다 */
+  {
+    const r = upto(90);
+    const a = A.flowWarn(A.flt());
+    ok(a.wait >= 1 && a.recv >= 1, '★현황판 집계에 잡힌다');
+    ok((a.byOwn.staff || 0) >= 1 && (a.byOwn.vendor || 0) >= 1,
+       '★스탭·업체 양쪽이 대기로 잡힌다');
+    A.setRole('admin'); A.go(1);
+    const h = bag.view.innerHTML;
+    ok(h.indexOf(A.T('sb_appr')) > 0, '★현황판에 「결재 대기」 칸이 뜬다');
+    ok(/data-sbgo="4"/.test(h), '★누르면 자재 탭으로 간다');
+    ok(h.indexOf(A.T('fl_recv')) > 0, '★「수령확인 안 됨」이 보인다');
+
+    r.fat = new Date(Date.now() - 130 * 60000).toISOString();
+    A.go(1);
+    ok(A.flowWarn(A.flt()).late >= 1 && /class="bad"/.test(bag.view.innerHTML),
+       '★멈춘 것이 있으면 빨강으로 붙는다');
+
+    A.flowGo('mat', r, 'ok', { as: 'staff' });
+    A.flowGo('mat', r, 'ok', { as: 'vendor' });
+    A.go(1);
+    ok(A.flowWarn(A.flt()).wait === 0, '다 처리하면 0');
+    ok(bag.view.innerHTML.indexOf(A.T('sb_appr')) < 0,
+       '★0이면 칸 자체를 만들지 않는다 — 늘 0이 떠 있으면 눈이 건너뛴다');
+  }
+
+  /* 78-5. 뒤로 가면 확인 표시가 지워진다 */
+  {
+    const r = upto(30);
+    A.flowGo('mat', r, 'ok', { as: 'staff' });
+    ok(r.okS === 1, '스탭 확인이 켜졌다');
+    A.flowGo('mat', r, 'no', { as: 'admin', why: '되돌림' });   // iss엔 no가 없다
+    ok(A.fst('mat', r) === 'iss', 'iss에는 반려 길이 없다 — 그대로다');
+    /* 앞 단계로 되돌리는 길을 직접 태워 확인한다 */
+    r.fst = 'chk'; A.flowGo('mat', r, 'no', { as: 'admin', why: '수량 정정' });
+    ok(A.fst('mat', r) === 'rej' && !r.okS && !r.okV,
+       '★뒤로 가면 양쪽 확인 표시가 지워진다 — 안 지우면 한쪽만 눌러도 종료된다');
+  }
+
+  /* 78-6. 서버·수신 */
+  ok(/b\.okS = row\.okS/.test(tsrc), '★확인 표시를 서버로 보낸다');
+  ok(/okS: r\.okS \? 1 : 0/.test(tsrc), '★수신에서도 복원한다');
+  ok(/local\.okS && !r\.okS/.test(tsrc),
+     '★같은 단계면 켜진 쪽이 이긴다 — 서로의 확인이 상대를 지우면 영영 안 끝난다');
+
+  /* 78-7. 협력업체 화면 */
+  ok(/flowMineVendor/.test(vsrc), '★업체 화면이 수령확인 차례를 안다');
+  ok(/as: 'vendor'/.test(vsrc), '★업체가 눌렀다는 것을 역할로 실어 보낸다');
+  ok(/Received/.test(vsrc), '★[수령확인] 단추가 있다');
+  ok(/!recv && !\(x\.date === d/.test(vsrc),
+     '★수령확인 줄은 날짜와 무관하게 뜬다 — 어제 받은 것을 오늘 누른다');
+
+  S.mreq = S.mreq.slice(0, before);
+  A.setRole('admin'); A.go(1);
+}
+
+/* ── 58 공종 수동 추가 · 공종별 담당자 (v2.19.2 사용자 지시) ── */
+console.log('\n[58] 공종 직접 추가 · 공종별 담당자');
+{
+  const tsrc = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+  const vsrc = fs.readFileSync(path.join(ROOT, 'assets/js/vendor.js'), 'utf8');
+  const bl = { s: 'civil', p: 3, c: 1 };
+  A.setRole('admin'); S.lang = 'ko'; A.setFlt(bl);
+
+  /* 58-1. 빠진 공종을 손으로 넣는다 */
+  const lk = A.locKey(bl);
+  S.plan[lk] = S.plan[lk] || {}; S.plan[lk]['T-02'] = 500;
+  A._setup('plan'); A.go(1);
+  ok(/id="plAddT"/.test(bag.view.innerHTML), '★공종 직접 추가 칸이 있다');
+  ok(/data-pld=/.test(bag.view.innerHTML), '지우는 단추도 있다');
+  ok(/id="plClrAll"/.test(bag.view.innerHTML), '한 번에 지우기도 있다');
+  ok(/S\.plan\[lk\]\[k\] = q;/.test(tsrc), '★있는 코드는 덮어쓴다 — 중복 줄을 안 만든다');
+  ok(/items = A\.itemsOf\(site\)\.filter/.test(tsrc), '★이미 올린 공종은 고를 목록에서 뺀다');
+  A._setup('');
+
+  /* 58-2. 공종별 담당자 */
+  {
+    const vn = S.vend.length;
+    S.vend.length = 0;
+    A.vendAdd('LUU', 'LUU', '토공|Ahmed', '964770000000');
+    A.vendAdd('LUU', 'LUU', '포장공|Kareem', '');
+    A.vendAdd('LUU', 'LUU', 'Ali', '');
+    ok(S.vend[0].staff.length === 3, '담당자 3명이 담긴다');
+    ok(A.staffFor('LUU', '토공').pick === 'Ahmed', '★토공을 고르면 Ahmed');
+    ok(A.staffFor('LUU', '포장공').pick === 'Kareem', '★포장공을 고르면 Kareem');
+    ok(A.staffFor('LUU', '우수공').pick === 'Ali',
+       '★맡은 사람이 없으면 공종 없는 기본 담당자');
+    ok(A.staffFor('LUU', '토공').all.length === 3,
+       '★틀리면 고를 수 있게 전원 목록도 준다');
+    ok(A.vendStaffList({ staff: ['Ali'] })[0].grp === '',
+       '★옛 자료(이름만)도 그대로 읽힌다 — 마이그레이션 불필요');
+    S.vend.length = 0;
+    ok(vn >= 0, '명부 정리');
+  }
+  ok(/function byFld/.test(vsrc), '협력업체 화면에 담당자 칸이 있다');
+  ok(/if \(!info\.all\.length\)/.test(vsrc),
+     '★명부에 담당자가 없으면 종전처럼 자유 입력 — 안 채운 현장이 막히지 않는다');
+  ok(/if \(f === 'grp' \|\| f === 'key'\)/.test(vsrc), '★공종을 바꾸면 담당자를 다시 잡는다');
+
+  A.go(1);
+}
+
+/* ── 59 증분 수신 (v2.19.3 사용자 지시) ────────────────── */
+console.log('\n[59] 증분 수신 — 바뀐 것만');
+{
+  const tsrc = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+  const API = sb.BNCP_API;
+
+  /* 가짜 서버로 실제 동작을 재현한다 */
+  const server = [
+    { id: 'x1', type: 'work', rx: '2026-08-19T01:00:00.000Z' },
+    { id: 'x2', type: 'work', rx: '2026-08-19T02:00:00.000Z' }
+  ];
+  let asked = [];
+  /* ★검사판에는 fetch가 없어 live()가 막힌다. changed의 판단 부분만
+     그대로 재현해 본다 — 실제 코드와 같은 규칙인지는 아래에서 원본을 본다. */
+  API.meta = function () {
+    const last = server.reduce((m, r) => r.rx > m ? r.rx : m, '');
+    return Promise.resolve({ ok: true, last: last, count: server.length });
+  };
+  API.rows = function (type, since) {
+    asked.push(since || '');
+    const out = server.filter(r => !since || r.rx > since);
+    const last = server.reduce((m, r) => r.rx > m ? r.rx : m, '');
+    if (last) API.last = last;
+    return Promise.resolve(out);
+  };
+  API.changed = function () {
+    return API.meta().then(function (m) {
+      if (!m) return null;
+      if (API.last && m.last && m.last === API.last) return [];
+      return API.rows('', API.last || '');
+    });
+  };
+
+  return API.changed().then(function (a) {
+    ok(a && a.length === 2, `처음에는 전부 받는다 (${a && a.length})`);
+    ok(API.last === '2026-08-19T02:00:00.000Z', '서버가 알려준 시각을 기억한다');
+
+    return API.changed().then(function (b) {
+      ok(b && b.length === 0, '★바뀐 게 없으면 빈 배열 — 조회를 안 한다');
+      ok(asked.length === 1, '★두 번째는 본문 요청 자체를 안 보낸다');
+
+      server.push({ id: 'x3', type: 'work', rx: '2026-08-19T03:00:00.000Z' });
+      return API.changed().then(function (c) {
+        ok(c && c.length === 1 && c[0].id === 'x3',
+           '★새로 들어온 것만 받는다 (전체가 아니다)');
+        ok(asked[1] === '2026-08-19T02:00:00.000Z', 'since로 직전 시각을 보낸다');
+
+        ok(/function syncNow\(quiet, force\)/.test(tsrc), '전체 다시 받기 통로가 있다');
+        ok(/if \(force\) \{ api\.last = ''; S\.rxLast = ''; \}/.test(tsrc),
+           '★전체 받기는 기준점을 지운다');
+        ok(/if \(!api\.last && S\.rxLast\) api\.last = S\.rxLast;/.test(tsrc),
+           '★새로 고쳐도 이어 받는다 — 기준점을 저장소에 남긴다');
+        ok(/id="syncAll"/.test(tsrc), '[전체 다시 받기] 단추가 있다');
+
+        /* ★위는 재현판이다. 원본이 같은 규칙인지 글자로 대조한다 —
+           재현판만 맞고 원본이 다르면 검사가 거짓으로 통과한다. */
+        {
+          const asrc = fs.readFileSync(path.join(ROOT, 'assets/js/api.js'), 'utf8');
+          const body = asrc.slice(asrc.indexOf('API.changed = function'),
+                                  asrc.indexOf('/* ── 로그인'));
+          ok(/if \(!m\) return null;/.test(body), '원본 — 통신 실패는 null');
+          ok(/if \(API\.last && m\.last && m\.last === API\.last\) return \[\];/.test(body),
+             '원본 — 바뀐 게 없으면 빈 배열');
+          ok(/return API\.rows\('', API\.last \|\| ''\);/.test(body),
+             '원본 — 있을 때만 since로 받는다');
+        }
+
+        /* ── 60 내역서 확인필요가 화면에 뜬다 (v2.19.4) ────────
+           ★사고 : P3-2.csv를 올렸는데 33개만 들어가고 67개가 어디에도
+             안 보였다. 인식 실패가 아니라 **화면에 그릴지 정하는 조건**이
+             틀린 것이었다 — boqHere가 pkLoc('w')(안 따라가는 옛 변수)와
+             대조했다. 저장은 정상인데 영영 안 뜬다.
+           ★그래서 여기서는 「함수가 있다」가 아니라 **실제 파일을 읽어
+             실제로 그려 보고 글자가 나오는지**를 본다. */
+          /* 새 판을 하나 더 띄운다 — boqNeed·boqLoc은 tabs.js가 읽힐 때
+           S.boq에서 한 번 정해지는 모듈 변수라, 이미 떠 있는 판에
+           S.boq를 넣어 봐야 반영되지 않는다(새로 고침과 같은 상황). */
+        function boot(seed) {
+          const bag2 = {};
+          function El2(id) {
+            return { id, innerHTML: '', textContent: '', value: '', src: '', style: {}, dataset: {},
+              options: [{ text: '' }], files: [], setAttribute() {}, getAttribute() { return null; },
+              addEventListener() {}, appendChild() {}, remove() {}, select() {},
+              closest() { return null; }, querySelector() { return null; }, querySelectorAll() { return []; } };
+          }
+          ['logo','appt','hmeta','tabs','view','fltBox','wipe','vendorBtn'].forEach(i => bag2[i] = El2(i));
+          const st = {};
+          if (seed) st['bncp.dash.v2'] = JSON.stringify(seed);
+          const s2 = {
+            console: { log() {}, warn() {}, error() {} },
+            localStorage: { getItem: k => (k in st ? st[k] : null),
+                            setItem: (k, v) => { st[k] = String(v); },
+                            removeItem: k => { delete st[k]; } },
+            navigator: {}, location: { reload() {} }, alert() {}, confirm: () => false,
+            prompt: () => 'test', Blob: function () {},
+            URL: { createObjectURL: () => '', revokeObjectURL() {} },
+            setTimeout: () => 0, XLSX: null, scrollTo() {}, TextDecoder,
+            document: { documentElement: {}, addEventListener() {}, createElement: () => El2('t'),
+              body: { appendChild() {} },
+              querySelector(s) { const m = /^#([A-Za-z0-9_-]+)$/.exec(s); return m && bag2[m[1]] ? bag2[m[1]] : null; },
+              querySelectorAll() { return []; } }
+          };
+          s2.window = s2; vm.createContext(s2);
+          ['version','i18n','data','master','materials','materials2','work_i18n','prod','equip',
+           'core','spot','api','matmaster_api','wx','tabs']
+            .forEach(f => vm.runInContext(fs.readFileSync(path.join(ROOT, 'assets/js', f + '.js'), 'utf8'), s2, { filename: f }));
+          return { A: s2.APP, view: bag2.view };
+        }
+
+        /* 브라우저 decodeCsv와 같은 규칙 — utf-8이 깨지면 euc-kr */
+        function readSample(A2, name) {
+          const u8 = new Uint8Array(fs.readFileSync(path.join(ROOT, 'sample', name)));
+          let txt;
+          try { txt = new TextDecoder('utf-8', { fatal: true }).decode(u8); }
+          catch (e) { txt = new TextDecoder('euc-kr').decode(u8); }
+          return A2.parseCSV(txt);
+        }
+
+        console.log('\n[60] 내역서 확인필요 — 화면에 실제로 뜬다');
+        {
+          /* 60-1 실제 파일 두 개로 숫자가 재현되는가 */
+          const P = boot(null).A;
+          const r31 = readSample(P, 'P3-1.csv'), r32 = readSample(P, 'P3-2.csv');
+          ok(P.locFromName('P3-1.csv').ok && P.locFromName('P3-1.csv').loc.c === 1, 'P3-1.csv → Phase 3-1');
+          ok(P.locFromName('P3-2.csv').ok && P.locFromName('P3-2.csv').loc.c === 2, 'P3-2.csv → Phase 3-2');
+          ok(P.isBoq(r31) && P.isBoq(r32), '둘 다 내역서로 판별된다');
+          const b31 = P.readBoqRows(r31, { s:'civil', p:3, c:1 });
+          const b32 = P.readBoqRows(r32, { s:'civil', p:3, c:2 });
+          ok(b31.ok === 104 && b31.need.length === 5, `P3-1 104/109 · 확인필요 5 (실제 ${b31.ok}/${b31.total} · ${b31.need.length})`);
+          ok(b32.ok === 85 && b32.need.length === 15, `P3-2 85/100 · 확인필요 15 (실제 ${b32.ok}/${b32.total} · ${b32.need.length})`);
+
+          /* 60-2 ★핵심 — 화면 위치가 어긋나도 67개가 뜨는가.
+             새 판의 pk('w')는 flt 초기값을 따라 Phase 1-1이 된다.
+             올린 파일은 Phase 3-2다 — 사고가 났던 그 조합 그대로. */
+          /* ★v:2가 없으면 load()가 통째로 버린다 — 빈 판이 떠서 검사가
+             「카드가 없다」로 거짓 실패한다. 실제 저장 모양과 같아야 한다. */
+          const B = boot({ v: 2, boq: { need: b32.need, loc: { s:'civil', p:3, c:2 } } });
+          B.A.setRole('admin');
+          B.A.go(1);
+          const h = B.view.innerHTML;
+          ok(/내역서 — 확인 필요/.test(h), '★파일명(3-2)과 화면(1-1)이 어긋나도 카드가 뜬다');
+          ok(h.indexOf('Phase 3-2') >= 0, '★어느 위치에 들어갈 것인지 카드에 적혀 있다');
+          ok((h.match(/data-bq="/g) || []).length === 15, `★확인필요 15줄이 전부 그려진다 (실제 ${(h.match(/data-bq="/g) || []).length})`);
+          ok(/규준틀/.test(h), '못 붙인 줄의 내용이 그대로 보인다(부대공 › 규준틀)');
+          const dO2 = (h.match(/<div\b/g)||[]).length, dC2 = (h.match(/<\/div>/g)||[]).length;
+          ok(dO2 === dC2, `카드를 넣어도 div가 맞는다 (${dO2}/${dC2})`);
+
+          /* 60-3 확인필요가 없으면 카드도 없다 — 항상 뜨는 것이 아니다 */
+          const E = boot({ v: 2 });
+          E.A.setRole('admin'); E.A.go(1);
+          ok(!/내역서 — 확인 필요/.test(E.view.innerHTML), '확인필요가 없으면 카드도 안 뜬다');
+        }
+
+        /* ── 61 내역서 자동매칭 규칙 (v2.19.5) ──────────────── */
+        console.log('\n[61] 자동매칭 — 대분류 해제 · near 제외 · 느슨한 별칭');
+        {
+          const M = boot({ v: 2 }).A;
+          const r31 = readSample(M, 'P3-1.csv'), r32 = readSample(M, 'P3-2.csv');
+          const L31 = { s:'civil', p:3, c:1 }, L32 = { s:'civil', p:3, c:2 };
+
+          /* 61-1 대분류를 풀면 붙는 수가 는다. P3-1은 그대로여야 한다 */
+          const a31 = M.readBoqRows(r31, L31), a32 = M.readBoqRows(r32, L32);
+          ok(a31.ok === 104, `P3-1은 종전 그대로 104 (실제 ${a31.ok})`);
+          ok(a32.ok === 85, `★P3-2 33 → 85 (실제 ${a32.ok})`);
+          ok(a32.need.filter(it => !it.cands.length).length <= 2,
+             `★후보 없는 줄이 62 → 2 이하 (실제 ${a32.need.filter(it => !it.cands.length).length})`);
+
+          /* 61-2 ★near가 엉뚱한 것을 집지 않는다.
+             대분류를 풀면 후보가 마스터 전체로 넓어져 「표지판설치」가
+             「기초설치」에 붙었다. 기초설치 수량이 두 배가 된다. */
+          const sign = M.boqItems(r32).filter(it => it.n === '표지판설치');
+          ok(sign.length === 3, `표지판설치가 3줄 있다 (실제 ${sign.length})`);
+          /* ★readBoqRows로 봐야 한다. 겹침을 물리는 것은 파일 전체를 봐야
+             알 수 있어서 boqMatch(한 줄만 본다)에서는 판단할 수 없다. */
+          const r2 = M.readBoqRows(r32, L32);
+          ok(r2.need.filter(it => it.n === '표지판설치').length === 3,
+             '★표지판설치 3줄이 확인필요로 남는다 — 기초설치를 뺏지 않는다');
+          ok(r2.need.filter(it => it.n === '표지판설치').every(it => it.cands.length),
+             '물린 줄에도 후보가 달려 있다');
+          const pl = M.S.plan[M.locKey(L32)];
+          ok(pl['P-13'] === 107 && pl['P-16'] === 140 && pl['P-19'] === 22,
+             `★기초설치 수량이 두 배가 되지 않는다 (${pl['P-13']}/${pl['P-16']}/${pl['P-19']})`);
+
+          /* 61-3 ★한 번 고르면 다른 페이즈에도 붙는다 (사용자 지시).
+             P3-2는 「부대공 › 아스콘 포장 › 표층」,
+             P3-1은 「포장공 › 아스콘 포장 › 표층」 — 대분류만 다르다. */
+          const top = a32.need.filter(it => it.n === '표층')[0];
+          ok(!!top, '고를 대상이 확인필요에 있다(표층 #78)');
+          M.applyBoqPick(top, 'P-30', L32);
+          const top31 = M.boqItems(r31).filter(it => it.n === '표층' && it.g === '포장공')[0];
+          const m31 = M.boqMatch(top31, 'civil');
+          ok(m31.code === 'P-30' && /^alias/.test(m31.how),
+             `★P3-2에서 고른 것이 P3-1에도 붙는다 (${m31.code}/${m31.how})`);
+          ok(M.readBoqRows(r31, L31).ok === 105, '다시 읽으면 104 → 105');
+
+          /* 61-4 ★느슨한 별칭이 갈리면 안 쓴다.
+             「토공 › 터파기 · m3」는 우수공·오수공·상수공에 똑같이 있다.
+             대분류를 뺀 열쇠로는 이 셋이 한 칸에 겹친다. */
+          const digWS = { g:'우수공', m:'토공', n:'터파기', sp:'', u:'m3' };
+          const digSS = { g:'오수공', m:'토공', n:'터파기', sp:'', u:'m3' };
+          ok(M.aliasKey2(digWS) === M.aliasKey2(digSS), '대분류를 빼면 열쇠가 겹친다');
+          M.setAlias(digWS, 'WS-01');
+          ok(M.S.alias2[M.aliasKey2(digWS)] === 'WS-01', '처음 고른 것은 기억한다');
+          M.setAlias(digSS, 'SS-01');
+          ok(M.S.alias2[M.aliasKey2(digWS)] === '*',
+             '★서로 다른 것에 붙는 순간 느슨한 별칭을 막는다');
+          ok(M.boqMatch(digWS, 'civil').code === 'WS-01',
+             '★우수공 터파기는 여전히 WS-01 — 오수공 것이 밀고 들어오지 않는다');
+          ok(M.boqMatch(digSS, 'civil').code === 'SS-01', '오수공 터파기도 제자리');
+
+          /* 61-5 ★구조가 별칭보다 먼저다.
+             느슨한 별칭을 맨 앞에서 보면 구조로 정확히 붙는 줄까지 덮어쓴다. */
+          const src = fs.readFileSync(path.join(ROOT, 'assets/js/core.js'), 'utf8');
+          const body = src.slice(src.indexOf('A.boqMatch = function'), src.indexOf('A.readBoqRows = function'));
+          ok(body.indexOf("S.alias2 || {}") > body.indexOf("how: 'bag-'"),
+             '★느슨한 별칭은 구조적 일치가 전부 실패한 뒤에 본다');
+          ok(/if \(gKnown && sc\.length/.test(body),
+             '★대분류를 못 찾았으면 near를 쓰지 않는다');
+        }
+
+        /* ── 62 대분류 판정 (v2.19.6) ─────────────────────────
+           ★뿌리는 파서였다. 대분류를 「번호가 튀면 올린다」로 정하는 바람에
+             토공의 부대공(6번, 앞이 4번이라 5를 건너뛴다)이 대분류로 올라갔고,
+             gn=6이 되어 뒤따르는 포장공·우수공·오수공·상수공이 전부 아래로
+             밀렸다. 그래서 100줄 중 67줄이 g='부대공'이 됐다. */
+        console.log('\n[62] 대분류 — 번호와 이름이 목차와 둘 다 맞아야 한다');
+        {
+          const G = boot({ v: 2 }).A;
+          const items = G.boqItems(readSample(G, 'P3-2.csv'));
+          const gs = []; const seen = {};
+          items.forEach(it => { if (!seen[it.g]) { seen[it.g] = 1; gs.push(it.g); } });
+          ok(gs.indexOf('부대공') < 0, '★부대공이 대분류로 올라가지 않는다');
+          ['토공', '포장공', '우수공', '오수공', '상수공'].forEach(function (g) {
+            ok(gs.indexOf(g) >= 0, `대분류 ${g}을 놓치지 않는다`);
+          });
+          /* ★부대공은 공종마다 하나씩 있다 — 토공의 부대공, 오수의 부대공 …
+             블럭공사(부대토목)와는 다른 것이다. */
+          const bd = items.filter(it => /부대공/.test(it.m));
+          ok(bd.length >= 5, `공종별 부대공이 여러 공종에 걸쳐 있다 (${bd.length}줄)`);
+          ok(bd.filter(it => it.g === '토공' && it.n === '규준틀').length === 1,
+             '★규준틀은 토공의 부대공이다');
+          ok(bd.filter(it => it.g === '상수공' && it.n === '수압시험').length === 1,
+             '★수압시험은 상수공의 부대공이다');
+
+          /* ★부지 → 부대(블럭공사)로 새지 않는다. 후보 풀은 site로 잠겨 있다. */
+          let leak = 0;
+          items.forEach(it => {
+            const m = G.boqMatch(it, 'civil');
+            if (m.code && /^A-/.test(m.code)) leak++;
+            (m.cands || []).forEach(c => { if (/^A-/.test(c)) leak++; });
+          });
+          ok(leak === 0, `★부지토목 내역서가 부대토목 코드에 붙지 않는다 (${leak})`);
+          ok(G.locFromName('B-7.csv').loc.s === 'anc', '블럭 파일은 부대토목으로 간다');
+          ok(G.locFromName('P3-2.csv').loc.s === 'civil', '페이즈 파일은 부지토목으로 간다');
+
+          /* 62-2 같은 이름이 아래 단계에도 나온다 — 번호가 되돌아가면 대분류가 아니다.
+             「1. 토공」은 대분류로도, 우수공·오수공 아래에도 나온다. */
+          ok(items.filter(it => it.g === '우수공' && it.m === '토공').length > 0,
+             '★우수공 아래의 토공은 대분류로 오해되지 않는다');
+          /* ★오수공 아래에도 「1. 토공」이 있으나 세 줄 모두 수량이 비어 있어
+             항목으로 나오지 않는다. 파싱 문제가 아니라 내역서가 그렇다.
+             수량이 있는 상수공으로 본다. */
+          ok(items.filter(it => it.g === '상수공' && it.m === '토공').length > 0,
+             '상수공 아래의 토공도 마찬가지');
+        }
+
+        /* ── 63 옛 목록에서 빠져나가는 길 (v2.19.7) ──────────
+           ★v2.19.4에서 「저장돼 있으면 무조건 보인다」로 바꾼 뒤, 예전에
+             만들어진 확인필요 목록이 브라우저에 남아 계속 떠 있었다.
+             매칭 규칙을 33→85로 고쳐도 화면에는 옛 67건이 그대로였다.
+             저장된 옛 결과이기 때문이다. 지울 길이 없었다. */
+        console.log('\n[63] 확인 필요 목록 — 지우는 길과 캐시');
+        {
+          const src = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+          ok(/id="bqDrop"/.test(src), '★목록 지우기 단추가 있다');
+          ok(/bqDrop'\)\)\s*\$\('#bqDrop'\)\.onclick/.test(src), '단추가 연결돼 있다');
+          ok(/confirm\(T\('bq_dropq'\)\)/.test(src), '★되돌릴 수 없으므로 묻는다');
+          ['bq_drop', 'bq_dropq', 'bq_dropped'].forEach(function (k) {
+            const i18 = fs.readFileSync(path.join(ROOT, 'assets/js/i18n.js'), 'utf8');
+            ok((i18.match(new RegExp('\\b' + k + ":'", 'g')) || []).length === 3,
+               `${k}이 3개 언어에 다 있다`);
+          });
+
+          /* 63-2 ★캐시 — 새 파일을 올려도 브라우저가 옛 JS를 쓰면 소용없다 */
+          const ver = /'([\d.]+)'/.exec(fs.readFileSync(path.join(ROOT, 'assets/js/version.js'), 'utf8'))[1];
+          ['index.html', 'vendor.html'].forEach(function (f) {
+            const h = fs.readFileSync(path.join(ROOT, f), 'utf8');
+            const bare = h.match(/(?:src|href)="assets\/[^"]*?"(?!\?)/g) || [];
+            const noV = bare.filter(x => x.indexOf('?v=') < 0 && !/\.svg"/.test(x));
+            ok(noV.length === 0, `★${f} — 버전이 안 붙은 js·css가 없다 (${noV.join(',')})`);
+            ok(h.indexOf('?v=' + ver) > 0, `${f}의 버전이 version.js와 같다 (${ver})`);
+          });
+        }
+
+        /* ── 64 부대 → 부지 한 방향 폴백 (v2.19.8 — 사용자 지시) ──
+           「부대토목에 없는 것은 부지토목에서 갖다 쓴다.」
+           ★반대는 절대 열지 않는다 — [62]가 그쪽을 지킨다. */
+        console.log('\n[64] 부대토목에 없으면 부지토목에서 — 한 방향만');
+        {
+          const F = boot({ v: 2 }).A;
+          const mk = (g, m, n, sp, u) => ({ g: g, m: m, n: n, sp: sp, u: u });
+
+          /* 64-1 부대토목에 있으면 부대토목이 이긴다 */
+          const a1 = F.boqMatch(mk('단지내 부대토목-토공', '표토제거', '표토제거', '', 'm3'), 'anc');
+          ok(a1.code === 'A-T-01', `★부대토목에 있으면 부대토목 코드 (${a1.code})`);
+          const a2 = F.boqMatch(mk('단지내 부대토목-우수공', '우수관로', 'Φ400mm', '모래기초360˚', 'm'), 'anc');
+          ok(a2.code === 'A-WS-06', `관로도 부대토목에서 (${a2.code})`);
+
+          /* 64-2 ★부대토목에 없으면 부지토목에서 갖다 쓴다 */
+          const b1 = F.boqMatch(mk('단지내 부대토목-토공', '부대공', '규준틀', '', 'ea'), 'anc');
+          ok(b1.code === 'T-08' && /@civil$/.test(b1.how),
+             `★규준틀은 부지토목에서 (${b1.code}/${b1.how})`);
+          const b2 = F.boqMatch(mk('단지내 부대토목-오수공', '부대공', '관로표식테이프', '흑갈색, 10cm', 'm'), 'anc');
+          ok(b2.code === 'SS-36' && /@civil$/.test(b2.how),
+             `★관로표식테이프도 부지토목에서 (${b2.code}/${b2.how})`);
+
+          /* 64-3 ★순서 — 부대토목을 다 찾아본 뒤에만 부지토목을 본다.
+             바뀌면 부대토목에 제 짝이 있는 줄까지 부지토목이 가로챈다. */
+          const c = F.boqMatch(mk('단지내 부대토목-상수공', '부대공', '수압시험', '', 'ea'), 'anc');
+          ok(!c.code, '중분류가 어긋나면 확인필요로 남는다');
+          ok(c.cands[0] === 'A-WW-12',
+             `★후보도 부대토목이 먼저다 (${c.cands.slice(0, 3).join(',')})`);
+          ok(c.cands.some(x => !/^A-/.test(x)), '부지토목 후보도 뒤에 달려 있다');
+
+          /* 64-4 ★반대는 막혀 있다 */
+          let leak = 0;
+          [mk('토공', '부대공', '규준틀', '', 'ea'),
+           mk('우수공', '토공', '터파기', '', 'm3'),
+           mk('포장공', '기층/보조기층', '기층', '', 'm3')].forEach(function (x) {
+            const m = F.boqMatch(x, 'civil');
+            if (/^A-/.test(m.code || '')) leak++;
+            (m.cands || []).forEach(y => { if (/^A-/.test(y)) leak++; });
+          });
+          ok(leak === 0, `★부지토목은 부대토목 코드를 절대 안 본다 (${leak})`);
+
+          /* 64-5 손으로 고를 때도 부지토목이 보인다 */
+          const tsrc2 = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+          ok(/site === 'anc' \? A\.itemsOf\('civil', ''\) : \[\]/.test(tsrc2),
+             '★부대토목 화면에서만 부지토목 목록을 덧붙인다');
+          const i18b = fs.readFileSync(path.join(ROOT, 'assets/js/i18n.js'), 'utf8');
+          ok((i18b.match(/\bbq_allc:'/g) || []).length === 3, 'bq_allc이 3개 언어에 다 있다');
+        }
+
+        /* ── 65 요약 띠가 공구 표 머리행을 덮지 않는다 (v2.19.9 · 0-D 가) ── */
+        console.log('\n[65] 요약 띠 — 고정하지 않는다 (표 머리행 가림 해소)');
+        {
+          const css = fs.readFileSync(path.join(ROOT, 'assets/css/app.css'), 'utf8');
+          const tsrc = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+
+          /* 65-1 ★겹침을 만드는 세 조각이 모두 없다.
+             하나라도 남으면 증상이 그대로 돌아온다 — 셋이 한 벌이다. */
+          /* ★v2.19.15 — 고정을 되살렸다(사용자 지시). 0-D가 「되살리려면
+             겹침부터 풀 것」이라 적어 둔 그 겹침을 푸는 것이 [71]이다. */
+          /* ★v2.19.21 — 고정은 기둥(.pg__side)이 한다. .sb는 안 한다. */
+          ok(!/\.sb\{position:sticky/.test(css) && /\.pg__side\{[^}]*position:sticky/.test(css),
+             '★기둥이 고정하고 .sb는 고정하지 않는다');
+          ok(!/scr-dn/.test(css), '★scr-dn 규칙이 CSS에 없다');
+          ok(!/scr-dn/.test(tsrc.replace(/\/\*[\s\S]*?\*\//g, '')),
+             '★scr-dn을 붙이는 코드가 없다');
+          ok(!/--tabh/.test(css), '★쓰지 않게 된 --tabh를 남기지 않았다');
+
+          /* 65-2 표 쪽은 종전 그대로다 — 덮인 것이 문제였지 없던 것이 아니다.
+             .tw의 자체 스크롤(520px)과 상자 안 sticky 머리행은 손대지 않는다. */
+          /* ★v2.19.17 — 자체 스크롤을 없앴다. 띠를 고정한 채로 머리행이
+             안 묻히려면 머리행이 **페이지 기준**으로 붙어야 한다(0-D의 「나」). */
+          ok(/\.tw\{overflow:visible\}/.test(css), '★.tw의 자체 스크롤을 없앴다');
+          ok(/\.tw th\{\s*position:sticky;top:0/.test(css),
+             '★머리행이 화면 맨 위에 붙는다 (위에 아무것도 없다)');
+
+          /* 65-3 ★실제로 그려서 확인 — 공구 표 카드와 머리 8칸이 다 나온다.
+             (가림은 화면에서만 보이는 것이라 여기서는 「있다」까지만 지킨다.
+              눈으로 보는 확인은 사용자 몫 — 인수인계서 2-C) */
+          const K = boot({ v: 2, crew: [{
+            id: 'k1', date: A.today(), loc: { s: 'civil', p: 1, c: 1 }, key: 'T-02',
+            by: 'LUU', st: 'ok', teams: 1, ppl: { eng: 1, fmn: 1, wkr: 8 },
+            eq: [{ cat: 'Dump Truck', size: '15Ton', run: 3, brk: 0, rep: 0 }]
+          }] });
+          K.A.setRole('admin'); K.A.go(1);
+          const hk = K.view.innerHTML;
+          const th = (hk.match(/<th[ >]/g) || []).length;
+          ok(/sb__in/.test(hk) && /<thead>/.test(hk), '요약 띠와 표 머리행이 같이 그려진다');
+          ok(th >= 8, `공구 표 머리 8칸이 있다 (실제 th ${th}개)`);
+        }
+
+        /* ── 66 요약 띠의 장비 = 오늘 (v2.19.9 · 사용자 지시) ── */
+        console.log('\n[66] 요약 띠 장비 — 인원·장비현황 카드와 같은 「오늘」');
+        {
+          const L = { s: 'civil', p: 1, c: 1 };
+          function crew(id, date, run) {
+            return { id: id, date: date, loc: L, key: 'T-02', by: 'LUU', st: 'ok',
+                     teams: 1, ppl: { eng: 0, fmn: 1, wkr: 5 },
+                     eq: [{ cat: 'Dump Truck', size: '15Ton', run: run, brk: 0, rep: 0 }] };
+          }
+          /* 오늘 3대, 옛날 30대 — 누계로 세면 33이 뜬다 */
+          const D = boot({ v: 2, crew: [crew('c1', A.today(), 3), crew('c2', '2020-01-01', 30)] });
+          D.A.setRole('admin'); D.A.go(1);
+          const h = D.view.innerHTML;
+          const band = (h.split('sb__d')[1] || '').split('</span>')[0];
+          const m = /<i class="ok"><\/i>([\d,]+)/.exec(band);
+          const runShown = m ? Number(m[1].replace(/,/g, '')) : -1;
+          ok(runShown === 3, `★띠의 가동은 오늘 3대다 (실제 ${runShown} · 누계면 33)`);
+
+          /* 66-2 아래 장비현황 카드와 숫자가 같아야 한다 — 어긋난 것이 사고였다 */
+          const card = h.split('data-eqo=')[1] || '';
+          ok(/class="r em">3</.test(card), '★장비현황 카드도 같은 3대다');
+
+          /* 66-3 ★오늘 입력이 없으면 띠도 조용해야 한다.
+             종전에는 카드가 「대조할 게 없습니다」인데 띠에만 숫자가 남았다. */
+          const Z = boot({ v: 2, crew: [crew('c3', '2020-01-01', 30)] });
+          Z.A.setRole('admin'); Z.A.go(1);
+          const hz = Z.view.innerHTML;
+          const mz = /<i class="ok"><\/i>([\d,]+)/.exec((hz.split('sb__d')[1] || '').split('</span>')[0]);
+          ok(!mz || Number(mz[1].replace(/,/g, '')) === 0,
+             `★오늘 것이 없으면 띠도 0이다 (실제 ${mz ? mz[1] : '없음'})`);
+          ok(/대조할 게 없습니다/.test(hz), '카드는 종전대로 「대조할 게 없습니다」');
+
+          /* 66-4 인원은 종전 그대로 오늘이다 — 같이 흔들리지 않았는지 본다.
+             ★인원 = 3직군 6명 + 장비기사 3명(A.crewTotal은 가동대수를 기사로 센다) = 9.
+             옛 자료 30대짜리는 오늘이 아니므로 기사도 안 붙는다. */
+          const mp = /sb__v"><b>(\d+)<\/b>/.exec(h);
+          ok(mp && mp[1] === '9', `★띠의 인원도 오늘 9명 그대로 (실제 ${mp ? mp[1] : '없음'})`);
+        }
+
+        /* ── 67 확인필요 카드 자리 · 공구 표 열 너비 (v2.19.10 사용자 지시) ── */
+        console.log('\n[67] 내역서 확인필요는 요약 띠 아래 · 공구 표 열 너비');
+        {
+          const L = { s: 'civil', p: 3, c: 2 };
+          const P = boot({ v: 2 }).A;
+          const u8 = new Uint8Array(fs.readFileSync(path.join(ROOT, 'sample', 'P3-2.csv')));
+          let txt;
+          try { txt = new TextDecoder('utf-8', { fatal: true }).decode(u8); }
+          catch (e) { txt = new TextDecoder('euc-kr').decode(u8); }
+          const bq = P.readBoqRows(P.parseCSV(txt), L);
+
+          const O = boot({ v: 2, boq: { need: bq.need, loc: L }, crew: [{
+            id: 'o1', date: A.today(), loc: { s: 'civil', p: 1, c: 1 }, key: 'T-02',
+            by: 'LUU', st: 'ok', teams: 1, ppl: { eng: 1, fmn: 1, wkr: 8 },
+            eq: [{ cat: 'Dump Truck', size: '15Ton', run: 3, brk: 0, rep: 0 }]
+          }] });
+          O.A.setRole('admin'); O.A.go(1);
+          const h = O.view.innerHTML;
+          /* ★자리는 카드 제목으로 잡는다. tw--site(열 너비용 클래스)로 잡으면
+             그 클래스만 빠져도 -1이 되어 「뒤에 있다」가 거짓으로 통과한다(3-B). */
+          const iSb = h.indexOf('sb__in'), iSite = h.indexOf(O.A.T('sb_t')),
+                iBq = h.indexOf('내역서 — 확인 필요'), iPpl = h.indexOf(O.A.T('ro_ppl'));
+          ok(iSb > 0 && iSite > 0 && iBq > 0 && iPpl > 0, '넷 다 화면에 있다');
+
+          /* 67-1 ★네 자리가 이 순서여야 한다.
+             확인필요가 위에 있으면 50건짜리 카드가 화면을 채워 오늘 숫자가 묻힌다. */
+          ok(iSb > 0 && iSite > 0 && iSite < iSb,
+             '★현장 현황은 본문, 현황판은 오른쪽 기둥 (v2.19.21)');
+          ok(iBq > iSite, `★현장 현황 → 내역서 확인필요 (${iSite}/${iBq})`);
+          ok(iPpl > iBq, '내역서 확인필요 → 인원');
+          ok((h.match(/data-bq="/g) || []).length === bq.need.length,
+             `확인필요 ${bq.need.length}줄이 자리를 옮겨도 그대로 그려진다`);
+          const dO = (h.match(/<div\b/g) || []).length, dC = (h.match(/<\/div>/g) || []).length;
+          ok(dO === dC, `자리를 옮겨도 div가 맞는다 (${dO}/${dC})`);
+
+          /* 67-2 열 너비는 이 표에만 건다 — 진행률·자재 표는 종전 그대로 */
+          const css2 = fs.readFileSync(path.join(ROOT, 'assets/css/app.css'), 'utf8');
+          ok(/\.tw--site th,\.tw--site td\{width:1%;white-space:nowrap\}/.test(css2),
+             '★공구 표 칸은 내용만큼만 쓴다');
+          ok(/\.tw--site th:nth-child\(5\),\.tw--site td:nth-child\(5\)\{width:auto\}/.test(css2),
+             '★남는 폭은 작업위치(5번째 칸)가 받는다');
+          ok(/<div class="tw tw--site">/.test(h), '공구 표에만 tw--site가 붙는다');
+          ok((h.match(/tw--site/g) || []).length === 1, '다른 표에는 안 붙는다');
+        }
+
+        /* ── 68 직영현황 — 관리자 작업현황 쪽에도 기간이 붙는다 (v2.19.11) ── */
+        console.log('\n[68] 직영현황 — 관리자 작업현황에서도 오늘 · 기간 조회');
+        {
+          /* ★관리자는 탭7이 없고 작업현황 안에서 본다(4-A). 스탭 탭7은
+             smoke_direct [D9]가 지킨다. 같은 v7()이지만 두 화면 다 확인한다. */
+          const G = boot({ v: 2, direct: [
+            { id: 'g-now', date: A.today(), loc: { s: 'civil', p: 1, c: 1 },
+              task: '오늘직영', teams: 1, ppl: { eng: 0, fmn: 0, wkr: 4 }, eq: [] },
+            { id: 'g-old', date: '2026-07-29', loc: { s: 'civil', p: 1, c: 1 },
+              task: '옛날직영', teams: 1, ppl: { eng: 0, fmn: 0, wkr: 4 }, eq: [] }
+          ] });
+          G.A.setRole('admin'); G.A.go(1);
+          const h = G.view.innerHTML;
+          ok(/data-rg="dir"/.test(h), '★기간 단추가 작업현황의 직영 카드에도 있다');
+          ok(h.includes('오늘직영') && !h.includes('옛날직영'),
+             '★기본이 오늘이라 옛 기록은 안 뜬다');
+          ok(h.includes('직영작업현황'), '★이름이 「직영작업현황」이다');
+          ok(!h.includes('직영 작업 기록'), '옛 이름이 남아 있지 않다');
+        }
+
+        /* ── 69 장비 파일 — 형식을 가리지 않는다 (v2.19.12 사용자 지시) ── */
+        console.log('\n[69] 지급장비 — 4열이든 가로 표든 읽는다');
+        {
+          const W = boot({ v: 2 }).A;
+          const L = { s: 'civil', p: 1, c: 1 };
+          const u8 = new Uint8Array(fs.readFileSync(path.join(ROOT, 'sample', '장비현황-1.csv')));
+          let txt;
+          try { txt = new TextDecoder('utf-8', { fatal: true }).decode(u8); }
+          catch (e) { txt = new TextDecoder('euc-kr').decode(u8); }
+          const rows = W.parseCSV(txt);
+
+          /* 69-1 ★실제 현장 파일로 실제로 읽어 본다(글자 대조가 아니다).
+             종전에는 이 파일이 한 줄도 안 읽혔다 — 4열 판독기는 장비 열을
+             못 찾아 전부 건너뛴다. */
+          ok(W.readIssueRows(rows, L).ok === 0, '★4열 판독기로는 0줄이다 (종전 상태)');
+          ok(typeof W.readEquipFile === 'function', '★형식을 가리지 않는 입구가 있다');
+          W.S.issue = [];
+          const r = W.readEquipFile(rows, L, W.today());
+          ok(r.wide === true, '가로 표로 알아본다');
+          ok(r.ok >= 25, `★장비 ${r.ok}종을 읽었다 (25종 이상)`);
+          ok(r.miss.length === 0, `못 알아본 열 머리 0 (실제 ${r.miss.length})`);
+          ok(W.S.issue.length === r.ok, '읽은 만큼 지급대장에 들어간다');
+
+          /* 69-2 숫자가 제대로 갈렸는가 — ㎥의 3을 규격 숫자로 읽던 실수 */
+          const by = {};
+          W.S.issue.forEach(x => { by[x.cat + '|' + x.size] = x.cnt; });
+          ok(by['Excavator(crawler)|1.2m3'] > 0 && by['Excavator(crawler)|2.9m3'] > 0,
+             '★1.2㎥와 2.9㎥가 서로 다른 규격으로 들어간다');
+          ok(by['Dozer (D3K)|7.8ton'] > 0 && by['Dozer(D6R)|18ton'] > 0,
+             '★「Dozer18 Ton」처럼 글자와 숫자가 붙어 있어도 갈라 읽는다');
+          ok(W.eqFindName('Excavator0.7㎥(Wheel)').cat === 'Excavator(wheel)',
+             'crawler와 wheel을 가른다');
+          ok(W.eqFindName('Fork Lift (16 Ton )').how === 'near',
+             '★마스터에 없는 규격(16톤)은 근사로 표시한다');
+          ok(W.eqFindName('Dump Truck (25 Ton )').how === 'exact', '있는 규격은 정확이다');
+          ok(r.near.length > 0 && r.near.length < 10, `근사 ${r.near.length}건을 따로 알린다`);
+
+          /* 69-3 4열 양식은 종전 그대로 — 새 길이 옛 길을 막지 않는다 */
+          const T4 = boot({ v: 2 }).A;
+          const tpl = T4.parseCSV('날짜,장비,규격,대수\n2026-08-21,Dump Truck,15ton,3\n');
+          const r4 = T4.readEquipFile(tpl, L, T4.today());
+          ok(r4.ok === 1 && r4.wide === false, '★4열 양식은 4열로 읽는다');
+          ok(T4.S.issue[0].cat === 'Dump Truck' && T4.S.issue[0].cnt === 3, '값이 그대로 들어간다');
+
+          /* ── [70] 장비 보유 = 업체 축 (v2.19.14, 인수인계서 0-I) ──────
+             사용자 확정 두 가지
+               ①「장비는 업체에 주는 것이지 부지·부대에 주는 게 아니다」
+               ②「한번 올린 지급 대수는 내가 회수할 때까지 지급한 것이다.
+                  그날그날 지급하는 게 아니다」
+             ★검사를 만들고 옛 코드로 되돌려 실제로 실패하는 것을 확인했다. */
+          console.log('\n[70] 장비 보유 — 업체 축 · 회수할 때까지 유효');
+          {
+            const E = boot({ v: 2 }).A;
+            const L1 = { s: 'civil', p: 3, c: 1 }, L2 = { s: 'civil', p: 4, c: 1 };
+            const wide = E.parseCSV(txt);
+
+            /* 70-1 ★두 번 올려도 안 쌓인다 (종전 push는 두 배가 됐다) */
+            E.readEquipFile(wide, L1, E.today(), '한국건설');
+            const n1 = E.S.issue.length;
+            const g1 = E.S.issue.reduce((a, x) => a + (Number(x.cnt) || 0), 0);
+            E.readEquipFile(wide, L1, E.today(), '한국건설');
+            ok(E.S.issue.length === n1, `★같은 파일을 두 번 올려도 줄이 안 는다 (${n1})`);
+            ok(E.S.issue.reduce((a, x) => a + (Number(x.cnt) || 0), 0) === g1,
+               '★대수도 두 배가 되지 않는다');
+
+            /* 70-2 ★업체가 갈린다 */
+            E.readEquipFile(wide, L2, E.today(), '바그다드토건');
+            ok(E.S.issue.length === n1 * 2, '★업체가 다르면 자리가 갈린다');
+            const cos = {};
+            E.S.issue.forEach(x => { cos[x.by || ''] = 1; });
+            ok(!!cos['한국건설'] && !!cos['바그다드토건'] && !cos[''],
+               '★올린 업체가 by에 박힌다 (빈 업체 없음)');
+
+            /* 70-3 ★위치를 좁혀도 보유가 안 줄어든다 — 업체 축이므로 */
+            E.setFlt({ s: 'civil', p: 0, c: 0 });
+            const all = E.eqRecon(E.flt()).reduce((a, r) => a + (r.gv || 0), 0);
+            E.setFlt(L1);
+            const one = E.eqRecon(E.flt()).reduce((a, r) => a + (r.gv || 0), 0);
+            ok(all > 0 && one === all, `★Phase 하나로 좁혀도 보유 그대로 (${all})`);
+
+            /* 70-4 ★기간을 좁혀도 안 줄어든다 — 회수할 때까지 지급한 것이다 */
+            E.setFlt({ s: 'civil', p: 0, c: 0 });
+            E.dateFlt.from = '2020-01-01'; E.dateFlt.to = '2020-01-02';
+            const old = E.eqRecon(E.flt()).reduce((a, r) => a + (r.gv || 0), 0);
+            E.dateFlt.from = ''; E.dateFlt.to = '';
+            ok(old === all, '★기간을 딴 해로 돌려도 보유 그대로 (상태값)');
+            const st1 = E.eqRecon(E.flt(), E.today());
+            ok(st1.reduce((a, r) => a + (r.gv || 0), 0) === all,
+               '★요약 띠(withDay)에서도 보유는 그대로');
+
+            /* 70-5 ★업체 필터는 듣는다 */
+            E.coFlt = '한국건설';
+            const mine = E.eqRecon(E.flt()).reduce((a, r) => a + (r.gv || 0), 0);
+            E.coFlt = '';
+            ok(mine > 0 && mine < all, `★업체로 좁히면 그 업체 것만 (${mine}/${all})`);
+
+            /* 70-6 ★회수만이 보유를 줄인다 */
+            const c0 = E.eqRecon(E.flt()).filter(r => r.gv > 0)[0];
+            E.setEqQty(L1, c0.cat, c0.size, 'take', 1, '한국건설');
+            const after = E.eqRecon(E.flt()).filter(r => r.id === c0.id)[0];
+            ok(after && after.tk === 1 && (after.gv - after.tk) === c0.gv - 1,
+               '★회수하면 그만큼 보유가 준다');
+
+            /* 70-7 ★가동은 종전대로 위치별이다 — 축이 섞이지 않았다 */
+            E.S.crew.push({ id: 'q1', date: E.today(), loc: L1, st: 'ok', by: '한국건설',
+                            ppl: {}, eq: [{ cat: c0.cat, size: c0.size, run: 2, brk: 0, rep: 0 }] });
+            E.setFlt(L1);
+            const rHere = E.eqRecon(E.flt()).filter(r => r.id === c0.id)[0];
+            E.setFlt(L2);
+            const rThere = E.eqRecon(E.flt()).filter(r => r.id === c0.id)[0];
+            ok(rHere && rHere.run === 2, '★가동은 그 위치에서 보인다');
+            ok(rThere && rThere.run === 0 && rThere.gv === rHere.gv,
+               '★다른 위치에서는 가동 0 · 보유는 그대로');
+            E.setFlt({ s: 'civil', p: 0, c: 0 });
+
+            /* 70-8 손입력도 같은 통로 — 두 번 넣어도 안 쌓인다 */
+            E.setEqQty(L1, 'Dump Truck', '25ton', 'give', 5, '한국건설');
+            const m0 = E.S.issue.length;
+            E.setEqQty(L1, 'Dump Truck', '25ton', 'give', 7, '한국건설');
+            ok(E.S.issue.length === m0, '★손입력도 같은 자리를 고친다 (줄이 안 느다)');
+            const dt = E.S.issue.filter(x => x.cat === 'Dump Truck' && x.size === '25ton' &&
+                                             x.by === '한국건설' && x.kind !== 'take');
+            ok(dt.length === 1 && dt[0].cnt === 7, '마지막 값만 남는다 (합계되지 않는다)');
+
+            /* 70-9 ★업체 없이 올리는 길이 막혀 있다 */
+            const tsrc3 = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+            ok(/if \(!co\) \{[\s\S]{0,120}e_pickco/.test(tsrc3),
+               '★업체를 안 고르면 파일이 안 올라간다');
+            ok(/coSel\('isCo'\)/.test(tsrc3) && /coSel\('eqCo'\)/.test(tsrc3),
+               '★업로드·손입력 둘 다 업체 칸이 있다');
+            ok(!/by: ''/.test(fs.readFileSync(path.join(ROOT, 'assets/js/core.js'), 'utf8')),
+               '★by를 빈 값으로 박아 넣는 자리가 없다');
+          }
+
+          /* ── [71] 현황판·이름·여백 (v2.19.15 사용자 지시 8건) ────── */
+          console.log('\n[71] 현황판 손질 — 고정 · 업체별 · 눈금 · 위치 이름');
+          {
+            const css2 = fs.readFileSync(path.join(ROOT, 'assets/css/app.css'), 'utf8');
+            const t5 = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+
+            /* 71-1 ★띠 고정 — 겹침을 푸는 짝이 같이 있어야 한다.
+               0-D의 교훈 : 고정만 되살리면 증상도 그대로 돌아온다. */
+            ok(!/\.sb\{position:sticky/.test(css2), '★띠가 아니라 기둥이다 (v2.19.21)');
+            /* ★v2.19.21 — 기둥이 되면서 기준점 자체가 필요 없어졌다.
+               `--sbh`가 v2.19.17~20을 헛돌게 만든 장본인이다 — 한 번만 재고
+               날씨가 늦게 도착하면 낡은 값으로 남았다. **되살리지 않는다.** */
+            ok(!/var\(--sbh/.test(css2), '★--sbh 기준점을 안 쓴다');
+            ok(!/setProperty\('--sbh'/.test(t5), '★재는 코드도 남아 있지 않다');
+            ok(/\.tw th\{\s*position:sticky;top:0/.test(css2), '★머리행이 화면 맨 위에 붙는다');
+            ok(!/scr-dn/.test(css2), '★스크롤 방향 감시는 되살리지 않았다');
+
+            /* 71-2 ★이름 셋 */
+            ok(A.T('d_list') === '직영작업현황', '★직영현황 → 직영작업현황');
+            ok(A.T('sb_todo').indexOf('미확인') >= 0, '★「손봐야 할 것」 → 「미확인 · 확인요청」');
+            ok(A.T('sb_todo').indexOf('손봐야') < 0, '옛 이름이 남아 있지 않다');
+            ok(A.T('sb_sec') === '작업 위치', '★「작업 공구」 → 「작업 위치」');
+            {
+              const I2 = sb.I18N;
+              ['ko', 'en', 'bn'].forEach(l => {
+                ok(!!I2[l].sb_todo && !!I2[l].sb_sec, `${l} 사전에 새 문구가 있다`);
+              });
+              ok(!I2.ar.sb_sec || typeof I2.ar.sb_sec === 'string',
+                 '★ar은 협력업체 전용 부분 사전 — 벵골어가 섞이지 않았다');
+            }
+
+            /* 71-3 ★직영 카드에 아래 여백 — 작업량 카드와 붙어 있었다 */
+            {
+              const D = boot({ v: 2, direct: [{ id: 'd1', date: A.today(),
+                loc: { s: 'civil', p: 1, c: 1 }, task: '정리', teams: 1,
+                ppl: { eng: 0, fmn: 0, wkr: 3 }, eq: [] }] });
+              D.A.setRole('admin'); D.A.go(1);
+              const hh = D.view.innerHTML;
+              const at = hh.indexOf(D.A.T('d_list'));
+              ok(at > 0, '직영작업현황 카드가 있다');
+              ok(/margin-bottom:16px">.{0,80}?직영작업현황/s.test(hh) ||
+                 hh.slice(Math.max(0, at - 400), at).indexOf('margin-bottom:16px') >= 0,
+                 '★직영 카드가 여백 있는 상자 안에 들어 있다');
+            }
+
+            /* 71-4 ★그래프 — 눈금 숫자 · 7일 · 오늘이 오른쪽 */
+            {
+              const P = boot({ v: 2 });
+              const days = [];
+              for (let k = 6; k >= 0; k--) {
+                const dd = new Date(Date.parse(P.A.today() + 'T00:00:00Z') - k * 864e5)
+                  .toISOString().slice(0, 10);
+                days.push(dd);
+                P.A.S.crew.push({ id: 'p' + k, date: dd, loc: { s: 'civil', p: 1, c: 1 },
+                  key: 'T-02', st: 'ok', by: '가업체',
+                  ppl: { eng: 0, fmn: 0, wkr: 100 + k * 30 }, eq: [] });
+              }
+              P.A.setRole('admin'); P.A.go(1);
+              const hh = P.view.innerHTML;
+              ok(/<text[^>]*font-size="11"[^>]*>\d+<\/text>/.test(hh),
+                 '★세로 눈금에 숫자가 있다 (v2.19.18에서 8px→11px)');
+              ok(hh.indexOf(days[0].slice(5)) > 0 && hh.indexOf(days[6].slice(5)) > 0,
+                 '★7일 전부터 오늘까지 날짜가 붙는다');
+              ok(/stroke="var\(--line-2\)"/.test(hh), '눈금선이 그려진다');
+            }
+
+            /* 71-5 ★작업 위치를 이름으로 — 「2 공구」로 읽히던 것 */
+            {
+              const Q = boot({ v: 2, crew: [
+                { id: 'c1', date: A.today(), loc: { s: 'civil', p: 3, c: 1 }, key: 'T-02',
+                  st: 'ok', by: '가업체', ppl: { eng: 0, fmn: 0, wkr: 5 }, eq: [] },
+                { id: 'c2', date: A.today(), loc: { s: 'civil', p: 4, c: 2 }, key: 'T-02',
+                  st: 'ok', by: '나업체', ppl: { eng: 0, fmn: 0, wkr: 7 }, eq: [] }
+              ] });
+              Q.A.setRole('admin'); Q.A.go(1);
+              const hh = Q.view.innerHTML;
+              ok(/sb__loc/.test(hh), '★위치 칸이 숫자 칸이 아니다');
+              ok(hh.indexOf(Q.A.locLabel({ s: 'civil', p: 3, c: 1 })) > 0,
+                 '★Phase·Section 이름이 그대로 나온다');
+
+              /* 71-6 ★업체가 둘이면 업체별 + 합계 */
+              ok(/sb__cos/.test(hh), '★업체별 줄이 나온다');
+              ok(hh.indexOf('가업체') > 0 && hh.indexOf('나업체') > 0, '두 업체가 다 나온다');
+              const tot = hh.indexOf(Q.A.T('tot_t'), hh.indexOf('sb__cos'));
+              ok(tot > 0, '★합계가 같이 나온다');
+
+              /* 한 곳뿐이면 줄을 만들지 않는다 — 위 칸과 같은 숫자다 */
+              const R = boot({ v: 2, crew: [
+                { id: 'r1', date: A.today(), loc: { s: 'civil', p: 3, c: 1 }, key: 'T-02',
+                  st: 'ok', by: '가업체', ppl: { eng: 0, fmn: 0, wkr: 5 }, eq: [] }
+              ] });
+              R.A.setRole('admin'); R.A.go(1);
+              ok(!/sb__cos/.test(R.view.innerHTML), '★업체가 하나면 줄을 만들지 않는다');
+            }
+          }
+
+          /* ── [72] 날씨 (v2.19.16 사용자 지시) ────────────────────
+             ★이 시스템에서 유일하게 밖에서 자료를 받아오는 곳이다.
+               「받아와진다」보다 **「안 받아와져도 멀쩡하다」**가 중요하다 —
+               현장 인터넷은 끊긴다. 검사도 그쪽에 무게를 둔다.
+             ★검사판에는 fetch도 geolocation도 없다. 그 상태가 곧 「막힌 현장」이다. */
+          console.log('\n[72] 날씨 — 막혀도 화면이 멀쩡하다');
+          {
+            const wsrc = fs.readFileSync(path.join(ROOT, 'assets/js/wx.js'), 'utf8');
+            const t6 = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+            const css3 = fs.readFileSync(path.join(ROOT, 'assets/css/app.css'), 'utf8');
+
+            /* 72-1 ★fetch도 위치정보도 없는 판에서 화면이 다 그려진다 */
+            const X = boot({ v: 2, crew: [{ id: 'x1', date: A.today(),
+              loc: { s: 'civil', p: 1, c: 1 }, key: 'T-02', st: 'ok', by: '가업체',
+              ppl: { eng: 0, fmn: 0, wkr: 9 }, eq: [] }] });
+            X.A.setRole('admin');
+            let threw = '';
+            try { X.A.go(1); } catch (e) { threw = String(e); }
+            ok(!threw, '★fetch도 위치정보도 없어도 예외가 없다 (' + (threw || 'ok') + ')');
+            const hx = X.view.innerHTML;
+            ok(/id="wxBox"/.test(hx), '★날씨 자리가 띠에 있다');
+            ok(hx.indexOf(X.A.T('u_pax')) > 0, '★다른 숫자는 그대로 그려진다');
+
+            /* 72-2 ★못 받아왔을 때 문구가 나온다 — 빈칸이 아니다 */
+            ok(hx.indexOf(X.A.T('wx_wait')) > 0 || hx.indexOf(X.A.T('wx_off')) > 0,
+               '★못 받아오면 그 사실을 적는다');
+
+            /* 72-3 ★자료가 오면 기온·풍속·강수·시정·7일이 다 나온다 */
+            X.A.WX = { st: 'ok', fb: false, at: Date.now(), place: 'Baghdad',
+              cur: { t: 41.4, ft: 44.2, hum: 12, rain: 0, code: 0, wind: 6.3, vis: 9000 },
+              days: ['2026-08-21','2026-08-22','2026-08-23','2026-08-24',
+                     '2026-08-25','2026-08-26','2026-08-27'].map((d, k) => ({
+                d: d, code: k === 2 ? 45 : (k === 4 ? 61 : 0),
+                hi: 42 - k, lo: 28 - k, rain: k === 4 ? 3.2 : 0, wind: 5 + k }))
+            };
+            const wh = X.A.wxHTML();
+            ok(wh.indexOf('41°') > 0, '★현재 기온이 나온다');
+            ok(wh.indexOf(X.A.T('wx_wind')) > 0 && wh.indexOf('6.3') > 0, '★풍속이 나온다');
+            ok(wh.indexOf(X.A.T('wx_rain')) > 0, '★강수가 나온다');
+            ok(wh.indexOf(X.A.T('wx_vis')) > 0 && wh.indexOf('9') > 0, '★시정이 나온다');
+            ok((wh.match(/class="wx__d/g) || []).length === 7, '★7일 예보가 일곱 칸이다');
+            ok(wh.indexOf(X.A.T('wx_fog')) > 0, '★안개인 날은 안개로 적는다');
+            ok(!/wx_site/.test(wh) && wh.indexOf(X.A.T('wx_site')) < 0,
+               'PC 위치를 받았으면 「현장 좌표」 표시가 없다');
+
+            /* 72-4 ★시정이 나쁘면 알린다 — WMO 코드에 모래바람이 없다 */
+            ok(X.A.wxLowVis(800) === true && X.A.wxLowVis(9000) === false,
+               '★시정 2km 미만이면 나쁨으로 본다');
+            X.A.WX.cur.vis = 700;
+            ok(X.A.wxHTML().indexOf(X.A.T('wx_dust')) > 0, '★안개·모래바람을 알린다');
+
+            /* 72-5 ★위치를 못 받으면 현장 좌표로 가고 **그 사실을 적는다** */
+            X.A.WX.fb = true;
+            ok(X.A.wxHTML().indexOf(X.A.T('wx_site')) > 0, '★짐작을 숨기지 않는다');
+
+            /* 72-6 ★화면을 통째로 다시 그리지 않는다 (입력 중인 칸이 날아간다) */
+            ok(!/A\.render\(\)/.test(wsrc.replace(/\/\*[\s\S]*?\*\//g, '')),
+               '★wx.js가 A.render를 부르지 않는다 (설명만 남는다)');
+            ok(/querySelector\('#wxBox'\)/.test(wsrc), '★칸 하나만 갈아 끼운다');
+
+            /* 72-7 ★키·가입이 필요 없는 곳을 쓴다 — 현장에 관리거리를 안 만든다 */
+            ok(/api\.open-meteo\.com/.test(wsrc), 'Open-Meteo를 쓴다');
+            ok(!/api[_-]?key|apikey|token=/i.test(wsrc), '★키를 박아 넣은 자리가 없다');
+
+            /* 72-8 ★위치를 무한정 기다리지 않는다 — 창을 무시하면 영영 「받는 중」 */
+            ok(/setTimeout/.test(wsrc) && /8000/.test(wsrc), '★8초면 포기하고 현장 좌표로 간다');
+
+            /* 72-9 ★사전 — ko/en/bn 셋만. ar은 협력업체 전용이라 안 건드린다 (3-C) */
+            {
+              const I3 = sb.I18N;
+              ['ko', 'en', 'bn'].forEach(l => {
+                ok(!!I3[l].wx_t && !!I3[l].wx_fog && !!I3[l].wx_dow,
+                   `${l} 사전에 날씨 문구가 있다`);
+              });
+              ok(I3.ar.wx_t === undefined, '★ar에는 넣지 않았다 (부분 사전)');
+              ok(String(I3.ko.wx_dow).split(',').length === 7, '요일이 일곱이다');
+            }
+
+            /* 72-10 ★띠에 자리가 잡혀 있다 */
+            ok(/\.sb__wx\{/.test(css3), '날씨 칸 폭이 정해져 있다');
+            ok(/\.wx__fc\{/.test(css3), '7일 예보 줄이 있다');
+            ok(/A\.wxHTML\(\)/.test(t6), '띠가 날씨 칸을 그린다');
+          }
+
+          /* ── [73] 띠가 아무것도 가리지 않는다 · 눌러서 찾아간다 (v2.19.17) ──
+             ★사용자 캡처 : 「전부 가리고 있어」. v2.19.15에서 내가 낸 구멍이다.
+               scroll-margin-top은 손 스크롤에 안 먹는데 그걸로 막았다고 적었다. */
+          console.log('\n[73] 띠 가림 해소 · 띠 칸을 눌러 찾아가기');
+          {
+            const css4 = fs.readFileSync(path.join(ROOT, 'assets/css/app.css'), 'utf8');
+            const t7 = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+
+            ok(!/max-height:520px/.test(css4), '★520px 상자 스크롤이 없다');
+            ok(/\.tw\{overflow:visible\}/.test(css4), '★.tw가 스크롤 상자가 아니다');
+            ok(/\.tw th\{\s*position:sticky;top:0/.test(css4),
+               '★머리행이 화면 맨 위에 붙는다 — 위에 덮는 것이 없다');
+            ok(!/\.tw\{scroll-margin-top/.test(css4),
+               '★손 스크롤에 안 먹는 scroll-margin-top으로 막아 둔 자리가 없다');
+            ok(/\.pg__side\{[^}]*position:sticky/.test(css4), '★기둥이 스크롤을 따라온다');
+
+            const Y = boot({ v: 2, crew: [{ id: 'y1', date: A.today(),
+              loc: { s: 'civil', p: 3, c: 1 }, key: 'T-02', st: 'ok', by: '가업체',
+              ppl: { eng: 1, fmn: 1, wkr: 8 }, eq: [] }] });
+            Y.A.setRole('admin'); Y.A.go(1);
+            const hy = Y.view.innerHTML;
+            ['cdPpl', 'cdEq', 'cdSite'].forEach(k => {
+              ok(hy.indexOf('data-sbcd="' + k + '"') > 0, `★띠에 ${k}로 가는 칸이 있다`);
+              ok(hy.indexOf('id="' + k + '"') > 0, `★${k} 카드에 이름표가 달려 있다`);
+            });
+            ok(/\.card\{scroll-margin-top/.test(css4),
+               '★찾아갈 때는 띠 높이만큼 비켜선다 (이쪽은 scrollIntoView라 먹는다)');
+            ok(/scrollIntoView/.test(t7), '★탭을 옮기지 않고 그 자리로 굴린다');
+            ok(/data-sbcd/.test(t7) && /onkeydown/.test(t7), '★키보드로도 눌린다');
+            ok(/\.sb__k--go\{cursor:pointer/.test(css4), '★누를 수 있다는 표시가 있다');
+            ok(/if \(!el \|\| !el\.scrollIntoView\) return;/.test(t7),
+               '★없는 카드로 보내려 하지 않는다');
+          }
+
+          /* ── [74] 띠 균형 — 글씨 크기와 빈자리 (v2.19.18 사용자 캡처) ──
+             ★「위에 글씨는 너무작고 빈공간도 많아 · 일기예보 글씨가 너무작아」
+             ★크기는 화면으로만 판정된다. 여기서는 **다시 작아지지 않는 것**만
+               지킨다 — 아래 하한을 못 지키면 그때 그 크기로 돌아간 것이다. */
+          console.log('\n[74] 띠 균형 — 글씨가 다시 작아지지 않는다');
+          {
+            const css5 = fs.readFileSync(path.join(ROOT, 'assets/css/app.css'), 'utf8');
+            const t8 = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+            function px(sel, prop) {
+              const m = css5.match(new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') +
+                '\\{[^}]*?' + prop + ':(\\d+)px'));
+              return m ? +m[1] : 0;
+            }
+            /* 라벨 — 10px에 --faint였다. 무슨 숫자인지가 안 보였다 */
+            ok(px('.sb__l', 'font-size') >= 12, `★띠 라벨 12px 이상 (${px('.sb__l','font-size')})`);
+            ok(!/\.sb__l\{[^}]*var\(--faint\)/.test(css5), '★라벨이 --faint가 아니다');
+            /* ★v2.19.20에서 32→27px. 띠 높이를 깎느라 한 단계 내렸다.
+               하한은 유지한다 — 26px 아래로 내려가면 균형이 다시 깨진다. */
+            ok(px('.sb__v b', 'font-size') >= 26, '★큰 숫자가 26px 이상');
+            ok(px('.sb__loc', 'font-size') >= 16, '★작업 위치 이름이 16px 이상');
+            /* 날씨 — 8~10px이었다 */
+            ok(px('.wx__d em', 'font-size') >= 11, '★예보 요일 11px 이상');
+            ok(px('.wx__d b', 'font-size') >= 14, '★예보 최고기온 14px 이상');
+            ok(px('.wx__d u', 'font-size') >= 11, '★예보 최저기온 11px 이상');
+            /* ★v2.19.20 — 예보 칸의 강수·바람 **줄**을 뺐다(띠 높이).
+               자료를 뺀 것이 아니라 짚으면 나오게 옮겼다. 그것을 여기서 지킨다. */
+            ok(!/\.wx__d span\{/.test(css5), '★예보 강수·바람 줄이 없다');
+            ok(/T\('wx_rain'\)[\s\S]{0,200}title="/.test(t8) ||
+               /var tip = [\s\S]{0,300}wx_wind/.test(t8),
+               '★강수·바람은 짚으면 나온다 (자료를 버리지 않았다)');
+            ok(px('.wx__now i', 'font-size') >= 12, '★현재 날씨 상세 12px 이상');
+            /* 그래프 — SVG는 CSS가 아니라 코드에 박힌다 */
+            ok(!/font-size="8"/.test(t8), '★그래프에 8px 글씨가 남아 있지 않다');
+            ok(/font-size="11"/.test(t8), '★그래프 눈금·날짜가 11px');
+            /* 가운데를 통째로 밀던 스페이서를 없앴다 */
+            ok(/\.sb__sp\{display:none\}/.test(css5), '★가운데를 미는 스페이서가 없다');
+            ok(/\.sb__in\{[^}]*flex-direction:column/.test(css5),
+               '★칸들이 세로로 쌓인다 (v2.19.21 기둥)');
+          }
+
+          /* ── [75] 측점이 작업위치에 뜬다 (v2.19.19 사용자 확정 「가」) ──
+             ★증상 : 작업위치 칸이 자료가 아무리 들어와도 항상 「—」.
+             ★원인 : 측점은 **실적 폼**에서만 받는데 작업위치는 **인원·장비**를
+               본다. S.crew의 spot은 일반 공종이면 null, 시설물이면 열 번호라
+               kind:'road'가 될 수가 없었다.
+             ★고침 : 보는 곳(인원·장비)에서 받게 한다. */
+          console.log('\n[75] 측점 — 작업위치에 실제로 뜬다');
+          {
+            const vsrc2 = fs.readFileSync(path.join(ROOT, 'assets/js/vendor.js'), 'utf8');
+            const csrc2 = fs.readFileSync(path.join(ROOT, 'assets/js/core.js'), 'utf8');
+
+            /* 75-1 ★인원·장비 폼에 측점 칸이 붙었다 */
+            ok(/t === 'crew'\) return workHTML\(\) \+ roadHTML\(\)/.test(vsrc2),
+               '★인원·장비 폼에도 측점 칸이 있다');
+            ok(/t === 'work'\) return workHTML\(\) \+ roadHTML\(\)/.test(vsrc2),
+               '실적 폼은 그대로다');
+
+            /* 75-2 ★행은 하나 · 측점은 여럿 — 쪼개면 인원이 중복 계상된다 */
+            ok(/spots: sps\.length \? sps : null/.test(vsrc2),
+               '★한 행에 측점을 여럿 담는다');
+            ok(!/sps\.forEach\(function \(x\) \{[\s\S]{0,200}S\.crew\.push/.test(vsrc2),
+               '★쪽마다 인원 행을 쪼개지 않는다 (중복 계상 방지)');
+
+            /* 75-3 ★실제로 뜬다 — 이것이 이 판의 전부다 */
+            const Z = boot({ v: 2 });
+            const L = { s: 'civil', p: 3, c: 1 };
+            Z.A.S.crew.push({ id: 'z1', date: Z.A.today(), loc: L, key: 'T-02', st: 'ok',
+              by: '가업체', teams: 1, ppl: { eng: 0, fmn: 1, wkr: 9 }, eq: [],
+              spot: null,
+              spots: [{ kind: 'road', w: 20, no: 3, memo: '', side: 'L', f: 1000, t: 1250 },
+                      { kind: 'road', w: 20, no: 3, memo: '', side: 'R', f: 1000, t: 1180 }] });
+            Z.A.setFlt(L);
+            const sr = Z.A.siteRows(Z.A.flt());
+            const row = sr.filter(o => o.key === Z.A.locKey(L))[0];
+            ok(!!row, '현장 현황에 그 자리가 있다');
+            ok(row.spots.length === 2, `★측점이 두 쪽 다 뜬다 (${row.spots.length})`);
+            ok(row.spots.join(' ').indexOf('STA') >= 0, '★STA 표기가 들어 있다');
+            ok(row.pax === 10, '★인원은 한 번만 센다 (쪽 수만큼 안 는다)');
+
+            /* 75-4 ★옛 기록(spot 한 개)도 그대로 읽는다 */
+            const Z2 = boot({ v: 2 });
+            Z2.A.S.crew.push({ id: 'z2', date: Z2.A.today(), loc: L, key: 'T-02', st: 'ok',
+              by: '가업체', teams: 1, ppl: { eng: 0, fmn: 0, wkr: 4 }, eq: [],
+              spot: { kind: 'road', w: 12, no: 1, memo: '', side: 'C', f: 0, t: 300 } });
+            Z2.A.setFlt(L);
+            const r2 = Z2.A.siteRows(Z2.A.flt())[0];
+            ok(r2 && r2.spots.length === 1, '★옛 spot 한 개짜리도 읽는다');
+
+            /* 75-5 ★측점을 안 넣어도 막히지 않는다 — 도로가 아닌 공종이 있다 */
+            const Z3 = boot({ v: 2 });
+            Z3.A.S.crew.push({ id: 'z3', date: Z3.A.today(), loc: L, key: 'T-02', st: 'ok',
+              by: '가업체', teams: 1, ppl: { eng: 0, fmn: 0, wkr: 3 }, eq: [],
+              spot: null, spots: null });
+            Z3.A.setFlt(L);
+            const r3 = Z3.A.siteRows(Z3.A.flt())[0];
+            ok(r3 && r3.pax === 3 && r3.spots.length === 0,
+               '★측점이 없어도 인원은 그대로 뜬다');
+            ok(/return x\.w && x\.no;/.test(vsrc2), '★도로를 안 고르면 측점을 안 담는다');
+          }
+
+          /* ── [76] 띠가 여전히 가리던 진짜 이유 (v2.19.20 사용자 캡처 3회) ──
+             ★v2.19.17에서 「.tw{overflow:visible} + th{top:var(--sbh)}」로
+               고쳤다고 적었다. 그런데 증상이 그대로였다.
+             ★진짜 이유 : **--sbh를 딱 한 번, 화면을 그릴 때만 쟀다.**
+               날씨는 그 **뒤에** 도착한다. 도착하면 띠가 100px 넘게 높아지는데
+               --sbh는 날씨 오기 전의 낮은 값 그대로다 → 머리행이 띠 뒤로 깔린다.
+             ★교훈 : 「기준점을 잰다」로 끝이 아니다. **기준점이 바뀌는 길을
+               전부 세어 봐야 한다.** 여기서는 셋이었다 —
+               다시 그릴 때 · 날씨가 늦게 올 때 · 창 폭이 바뀌어 줄바꿈될 때. */
+          console.log('\n[76] --sbh를 걷어냈다 — 기둥에는 기준점이 필요 없다');
+          {
+            const t9 = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+            const w9 = fs.readFileSync(path.join(ROOT, 'assets/js/wx.js'), 'utf8');
+            const c9 = fs.readFileSync(path.join(ROOT, 'assets/css/app.css'), 'utf8');
+            function nc(x) { return x.replace(/\/\*[\s\S]*?\*\//g, ''); }
+
+            /* ★v2.19.17~20을 헛돌게 만든 장치를 통째로 걷어냈다.
+               가로 띠를 고정하니 「띠 높이만큼 본문을 밀어야」 했고, 그 높이를
+               한 번만 재서 날씨가 늦게 오면 낡은 값이 남았다.
+               ★기둥은 본문 **옆**에 있다. 밀 것이 없으니 잴 것도 없다. */
+            ok(!/setProperty\('--sbh'/.test(nc(t9)), '★높이를 재던 코드가 없다');
+            ok(!/A\.sbHeight/.test(nc(t9)) && !/A\.sbHeight/.test(nc(w9)),
+               '★그것을 부르던 자리도 없다');
+            ok(!/addEventListener\('resize'/.test(nc(t9)), '★창 크기 감시도 필요 없다');
+            ok(!/var\(--sbh/.test(nc(c9)), '★CSS도 그 값을 안 쓴다');
+            ok(/\.tw th\{\s*position:sticky;top:0/.test(c9), '★머리행은 화면 맨 위다');
+
+            /* 기둥이 제 몫을 한다 */
+            ok(/\.pg\{display:grid;grid-template-columns:5fr 2fr/.test(c9), '★5:2 격자');
+            ok(/\.pg__side\{[^}]*position:sticky/.test(c9), '★기둥이 스크롤을 따라온다');
+            ok(/\.sb__in\{[^}]*flex-direction:column/.test(c9), '★현황판이 세로로 쌓인다');
+            ok(/@media \(max-width:1180px\)[\s\S]{0,160}grid-template-columns:1fr/.test(c9),
+               '★좁은 화면에서는 한 칸으로 떨어진다');
+            ok(/@media \(max-width:1180px\)[\s\S]{0,160}position:static/.test(c9),
+               '★★그 화면에서는 고정하지 않는다 — 고정하면 또 덮는다');
+          }
+        }
+
+        console.log(fail ? `\n✗ 실패 ${fail}건\n` : '\n✓ 전부 통과\n');
+        process.exit(fail ? 1 : 0);
+      });
+    });
+  });
+}
 process.exit(fail ? 1 : 0);

@@ -291,10 +291,16 @@
     var mats = (V.mgrp && V.msub) ? A.matItems(V.mgrp, V.msub) : [];
     var cur = (V.mmat !== '' && mats[V.mmat]) ? mats[V.mmat] : null;
     return '<div class="f-row">' +
+      /* ★대분류·세부공종도 번역을 건다 (v2.18.3 사용자 지적).
+         자재명·규격·단위는 tm/ts/tu로 걸려 있었는데 이 둘만 한국어 원문이
+         그대로 나갔다. 방글라 인력이 읽는 화면이다.
+         ★값(value)은 한국어 원문 그대로 둔다 — 값을 바꾸면 matItems 조회가
+           어긋나 자재 목록이 통째로 빈다. 보이는 글자만 바꾼다. */
       bfld('grp', '<select class="in" data-v="mgrp"><option value="">' + esc(window.I18N.en.pick) + '</option>' +
-        opts(grps, V.mgrp) + '</select>') +
+        opts(grps, V.mgrp, null, tm) + '</select>') +
       bfld('sub', '<select class="in" data-v="msub"' + (subs.length ? '' : ' disabled') + '>' +
-        '<option value="">' + esc(window.I18N.en.pick) + '</option>' + opts(subs, V.msub) + '</select>') +
+        '<option value="">' + esc(window.I18N.en.pick) + '</option>' +
+        opts(subs, V.msub, null, tm) + '</select>') +
       '</div><div style="margin-top:12px">' +
       bfld('m_mat', '<select class="in" data-v="mmat"' + (mats.length ? '' : ' disabled') + '>' +
         '<option value="">' + esc(window.I18N.en.pick) + '</option>' +
@@ -375,10 +381,40 @@
   }
 
   /* ── 오늘 내가 넣은 것 ─────────────────────────────── */
+  /* ★공종을 고르면 담당자가 자동으로 뜬다 (v2.19.2 사용자 지시).
+     명부에 「공종|이름」으로 넣어 둔 것을 읽는다. 틀리면 목록에서 고른다.
+     ★명부에 담당자가 없으면 종전처럼 자유 입력이다 — 명부를 안 채운
+       현장이 막히면 안 된다. */
+  function byFld() {
+    var info = (V.comp && A.staffFor) ? A.staffFor(V.comp.name, curGrp()) : { pick: '', all: [] };
+    if (!info.all.length) {
+      return bfld('by', '<input class="in" id="vBy" value="' + esc(V.by) + '" placeholder="Name / الاسم">');
+    }
+    if (!V.by && info.pick) V.by = info.pick;
+    var list = info.all.slice();
+    if (V.by && list.indexOf(V.by) < 0) list.unshift(V.by);
+    return bfld('by', '<select class="in" id="vBy" data-v="staff">' +
+      list.map(function (n2) {
+        return '<option value="' + esc(n2) + '"' + (V.by === n2 ? ' selected' : '') + '>' + esc(n2) + '</option>';
+      }).join('') + '</select>');
+  }
+  function curGrp() {
+    var e = A.item(V.key);
+    return e ? e.grp : (V.grp || '');
+  }
+
   function mineHTML() {
     var d = A.today(), lk = A.locKey(loc()), out = [];
+    /* ★반려된 것은 날짜와 무관하게 맨 위에 띄운다 (v2.18.8).
+       어제 올린 것을 오늘 반려하면 「오늘 것」에 안 걸려 업체가 영영 못 본다.
+       고쳐서 다시 올려야 하는 쪽은 업체이므로 반드시 보여야 한다. */
     S.work.forEach(function (x) {
-      if (x.date === d && A.locKey(x.loc) === lk)
+      if (x.st === 'rej' && A.locKey(x.loc) === lk)
+        out.push(['⚠ Rejected / مرفوض', tw((A.item(x.key) || {}).name || x.key),
+                  nf(x.qty, 2) + (x.rejWhy ? ' — ' + x.rejWhy : ''), 'rej', x.up ? 1 : 0]);
+    });
+    S.work.forEach(function (x) {
+      if (x.st !== 'rej' && x.date === d && A.locKey(x.loc) === lk)
         out.push(['Output / الإنتاج', tw((A.item(x.key) || {}).name || x.key), nf(x.qty, 2), x.st, x.up ? 1 : 0]);
     });
     S.crew.forEach(function (x) {
@@ -390,27 +426,92 @@
       if (x.date === d && A.locKey(x.loc) === lk)
         out.push(['Inspection / الفحص', tw((A.item(x.key) || {}).name || x.key), nf(x.qty, 2), x.st, x.up ? 1 : 0]);
     });
+    /* ★결재 단계를 그대로 보여 준다 (v2.20.0).
+       종전에는 측량이 done/open 둘뿐이라, 업체는 「우리 신청이 지금 어디에
+       걸려 있나」를 알 수 없었다. 자재도 마찬가지였다.
+       ★돌아온 것(back)은 **날짜와 무관하게 맨 위에 뜬다** — 업체가 고쳐서
+         다시 올려야 하는데, 어제 것이 오늘 목록에서 빠지면 영영 못 본다.
+         v2.18.8에서 반려 실적에 적용한 규칙과 같다. */
     S.surv.forEach(function (x) {
-      if (x.date === d && A.locKey(x.loc) === lk)
-        out.push(['Survey / المساحة', tw((A.item(x.key) || {}).name || x.key), '—', x.done ? 'done' : 'open', x.up ? 1 : 0]);
+      var f = A.fst('surv', x);
+      if (f !== 'back' && !(x.date === d && A.locKey(x.loc) === lk)) return;
+      if (f === 'back' && A.locKey(x.loc) !== lk) return;
+      out.push(['Survey / المساحة', tw((A.item(x.key) || {}).name || x.key),
+                (x.fwhy ? '— ' + x.fwhy : '—'), FSTV.surv[f] || f, x.up ? 1 : 0,
+                f === 'back' ? 'surv|' + x.id : '']);
     });
     S.mreq.forEach(function (x) {
-      if (x.date === d && A.locKey(x.loc) === lk)
-        out.push(['Material / المادة', tm(x.mat), nf(x.qty, 2) + ' ' + tu(x.unit), x.st, x.up ? 1 : 0]);
+      var f = A.fst('mat', x);
+      /* ★수령확인이 걸린 줄(recv)도 날짜와 무관하게 뜬다 — 어제 받은 자재를
+         오늘 확인하는 일이 흔한데, 오늘 목록에서 빠지면 영영 못 누른다.
+         v2.18.8의 반려 규칙과 같다. */
+      var recv = A.flowMineVendor('mat', x);
+      if (f !== 'back' && !recv && !(x.date === d && A.locKey(x.loc) === lk)) return;
+      if ((f === 'back' || recv) && A.locKey(x.loc) !== lk) return;
+      out.push(['Material / المادة', tm(x.mat),
+                nf(x.iss != null ? x.iss : x.qty, 2) + ' ' + tu(x.unit) + (x.fwhy ? ' — ' + x.fwhy : ''),
+                FSTV.mat[f] || f, x.up ? 1 : 0,
+                f === 'back' ? 'mat|' + x.id : (recv ? 'recv|mat|' + x.id : '')]);
     });
     if (!out.length) return '<div class="empty">No entries today / لا مدخلات اليوم</div>';
     return '<div class="tw"><table><tbody>' + out.map(function (r) {
       return '<tr><td class="sp">' + esc(r[0]) + '</td><td class="nm">' + esc(r[1]) + '</td>' +
         '<td class="r">' + esc(r[2]) + '</td><td class="c"><span class="bd">' + esc(r[3]) + '</span></td>' +
-        '<td class="c">' + upBadge(r[4]) + '</td></tr>';
+        '<td class="c">' + upBadge(r[4]) +
+        /* ★돌아온 줄은 업체가 스스로 되올린다. 안 그러면 이 줄이 영영
+           목록 맨 위에 남는다 — 아무의 차례도 아닌 상태이기 때문이다. */
+        (r[5]
+          ? (r[5].indexOf('recv|') === 0
+            /* ★서로 확인되어야 끝난다 — 업체가 눌러야 스탭 확인과 짝이 맞는다.
+               한쪽만 누르면 그 자리에 그대로 남고 경고가 계속 뜬다. */
+            ? ' <button class="btn btn--sm" data-vre="' + esc(r[5]) + '">Received / تم الاستلام</button>'
+            : ' <button class="btn btn--sm" data-vre="' + esc(r[5]) + '">Resubmit / إعادة الإرسال</button>')
+          : '') +
+        '</td></tr>';
     }).join('') + '</tbody></table></div>';
   }
+
+  /* 결재 단계 이름 — 이 화면은 영어/아랍어 병기다(i18n 사전을 쓰지 않는다).
+     ★관리자 쪽 세부 단계를 그대로 보여 주지 않는다. 업체가 알아야 하는 것은
+       「우리 차례인가 / 기다리면 되는가 / 끝났는가」 셋뿐이다. */
+  var FSTV = {
+    surv: {
+      req:  'With staff / لدى الطاقم',      rej:  'With staff / لدى الطاقم',
+      chk:  'With manager / لدى المدير',    ord:  'Survey team / فريق المساحة',
+      sdone:'Surveyed / تم المسح',          sfail:'Not surveyed / لم يتم المسح',
+      delay:'Delayed / متأخر',              fin:  'Closed / منتهي',
+      none: 'Not needed / غير مطلوب',       back: 'Returned to you / أُعيد إليك'
+    },
+    mat: {
+      req:  'With staff / لدى الطاقم',      rej:  'With staff / لدى الطاقم',
+      chk:  'With manager / لدى المدير',    ord:  'To be issued / قيد الصرف',
+      iss:  'Confirm receipt / أكد الاستلام', fin: 'Closed / منتهي',
+      back: 'Returned to you / أُعيد إليك'
+    }
+  };
 
   /* 목록만 다시 그린다(전체 render는 입력값을 날리므로 쓰지 않는다) */
   function paintMine() {
     var m = $('#vMine');
     if (!m) return;
     m.innerHTML = rcHTML() + retryHTML() + mineHTML();
+    A.$$('[data-vre]').forEach(function (b2) {
+      b2.onclick = function () {
+        var q = String(b2.dataset.vre).split('|');
+        var recv = (q[0] === 'recv');
+        if (recv) q.shift();
+        var kind = q[0], id = q[1];
+        var r = kind === 'mat'
+          ? S.mreq.filter(function (x) { return x.id === id; })[0]
+          : S.surv.filter(function (x) { return x.id === id; })[0];
+        if (!r) return;
+        /* ★as:'vendor'를 반드시 실어 보낸다. 이름(by)으로는 누가 눌렀는지
+           가릴 수 없다 — 비어 있을 수도, 스탭 이름과 같을 수도 있다. */
+        A.flowGo(kind, r, 'ok', { by: V.by || '', as: 'vendor' });
+        toServer(kind, r);
+        paintMine();
+      };
+    });
     A.$$('[data-rcans]').forEach(function (el) {
       el.onchange = function () {
         S.work.forEach(function (w) {
@@ -426,20 +527,38 @@
   /* ── 탭 본문 ───────────────────────────────────────── */
   function body() {
     var t = V.tab;
+    /* ★실적도 오늘이다 (v2.19.13 사용자 지시). 종전 기본값은 어제였다.
+       작업량 표를 오늘로 통일했으므로 폼도 같이 바꾼다 — 한쪽만 바꾸면
+       올린 실적이 표에 안 나온다(0-H와 같은 사고). 날짜는 손으로 고칠 수 있다. */
     if (t === 'work') return workHTML() + roadHTML() +
       '<div class="f-row" style="margin-top:12px">' +
-      bfld('date', '<input class="in" id="vDate" type="date" value="' + A.yday() + '">') +
+      bfld('date', '<input class="in" id="vDate" type="date" value="' + A.today() + '">') +
       bfld('qty', '<input class="in num" id="vQty" type="number" step="any" placeholder="0"' +
            (V.side.length ? ' value="' + esc(totalLen() ? nf(totalLen(), 2).replace(/,/g, '') : '') + '" readonly' : '') + '>') +
-      bfld('by', '<input class="in" id="vBy" value="' + esc(V.by) + '" placeholder="Company / الشركة">') +
+      byFld() +
       '</div>' +
       '<div style="margin-top:10px">' + inspCk() + '</div>';
 
-    if (t === 'crew') return workHTML() +
+    /* ★인원·장비는 「오늘」이다 (v2.19.12 — v2.18.9에서 빠진 짝).
+       v2.18.9에서 「실적은 어제 · 투입은 오늘」로 갈랐는데, 관리자 표만
+       오늘로 바꾸고 **업체 입력 폼은 어제로 남겨 뒀다.** 업체가 기본값
+       그대로 올리면 어제 날짜로 저장돼, 오늘 기준인 관리자 인원·장비 표에
+       영영 안 나온다 — 「오늘 투입 인원 0명 · 장비 0대」의 원인이다.
+       실적(work) 폼은 어제 그대로다. 그쪽은 어제 한 일을 오늘 올리는 것이 맞다. */
+    /* ★★측점을 인원·장비 폼에서도 받는다 (v2.19.19 사용자 확정 「가」).
+       ★종전에는 측점이 **실적 폼에만** 있었다. 그런데 관리자 화면의
+         「작업위치」는 인원·장비(S.crew)를 본다(v2.18.9 — 「오늘 어디에
+         나와 있나는 투입이 답한다」). 받는 곳과 보는 곳이 어긋나
+         **작업위치 칸이 자료가 아무리 들어와도 항상 「—」였다.**
+       → 보는 곳에서 받게 한다. 뜻에도 맞는다 — 오늘 어느 측점에 나와
+         있는지는 투입이 답할 일이다.
+       ★측점은 **선택**이다. 도로가 아닌 공종에서 막으면 안 된다.
+         도로·쪽만 골라도 그만큼은 뜬다. */
+    if (t === 'crew') return workHTML() + roadHTML() +
       '<div class="f-row" style="margin-top:12px">' +
-      bfld('date', '<input class="in" id="vDate" type="date" value="' + A.yday() + '">') +
+      bfld('date', '<input class="in" id="vDate" type="date" value="' + A.today() + '">') +
       bfld('teams', '<input class="in num" id="vTeams" type="number" min="1" step="1" value="1">') +
-      bfld('by', '<input class="in" id="vBy" value="' + esc(V.by) + '" placeholder="Company / الشركة">') +
+      byFld() +
       '</div>' +
       '<div class="vsec">' + bl('people') + '</div><div id="vDial">' + dialHTML() + '</div>' +
       '<div class="vsec">' + bl('equip') + '</div><div id="vEq">' + eqHTML() + '</div>';
@@ -449,7 +568,7 @@
     if (t === 'surv') return workHTML() +
       '<div class="f-row" style="margin-top:12px">' +
       bfld('date', '<input class="in" id="vDate" type="date" value="' + A.today() + '">') +
-      bfld('by', '<input class="in" id="vBy" value="' + esc(V.by) + '" placeholder="Name / الاسم">') +
+      byFld() +
       '</div>' +
       '<div style="margin-top:12px">' + bfld('reason',
         '<textarea class="in" id="vWhy" rows="3" placeholder="TBM / CP point check ... / فحص نقطة"></textarea>') + '</div>';
@@ -458,7 +577,7 @@
       '<div class="f-row" style="margin-top:12px">' +
       bfld('date', '<input class="in" id="vDate" type="date" value="' + A.today() + '">') +
       bfld('qty', '<input class="in num" id="vQty" type="number" step="any" placeholder="0">') +
-      bfld('by', '<input class="in" id="vBy" value="' + esc(V.by) + '" placeholder="Company / الشركة">') +
+      byFld() +
       '</div>';
   }
 
@@ -507,6 +626,11 @@
         var f = el.dataset.v;
         V[f] = (f === 'p' || f === 'c' || f === 'b' || f === 'spot') ? +el.value : el.value;
         if (f === 's') { V.grp = ''; V.key = ''; V.spot = -1; V.p = 1; V.c = 1; V.t = 'A'; V.b = 1; }
+        /* ★공종이 바뀌면 담당자를 다시 잡는다 — 공종별로 사람이 다르다 */
+        if (f === 'grp' || f === 'key') {
+          var q = (V.comp && A.staffFor) ? A.staffFor(V.comp.name, curGrp()) : { pick: '', all: [] };
+          if (q.all.length && q.pick) V.by = q.pick;
+        }
         if (f === 'grp') { V.key = ''; V.spot = -1; }
         if (f === 'key') V.spot = -1;
         if (f === 't') V.b = 1;
@@ -802,7 +926,18 @@
       var tm = Math.max(0, parseInt(str('#vTeams'), 10) || 0);
       if (!tm) return say('Enter crews / أدخل عدد الأطقم');
       if (!A.pplSum(V.ppl) && !V.eq.length) return say('Enter manpower or equipment / أدخل العمالة أو المعدات');
-      var crow = { id: A.uid(), date: d, loc: g.loc, key: g.key, spot: g.spot, teams: tm,
+      /* ★고른 쪽마다 측점 하나씩 — 그러나 **행은 하나다** (v2.19.19).
+         실적(work)은 쪽마다 행을 쪼갠다(쪽마다 수량이 다르므로). 인원·장비를
+         똑같이 쪼개면 **같은 사람이 쪽 수만큼 중복 계상된다.**
+         그래서 행은 하나로 두고 측점만 여러 개 담는다. */
+      var SP = window.BNCP_SPOT;
+      var sps = V.side.map(function (id) {
+        var sv = V.sta[id] || {};
+        return { kind: 'road', w: V.rw, no: V.rno, memo: V.rmemo, side: id,
+                 f: SP.sta(sv.fk, sv.fm), t: SP.sta(sv.tk, sv.tm) };
+      }).filter(function (x) { return x.w && x.no; });
+      var crow = { id: A.uid(), date: d, loc: g.loc, key: g.key, spot: g.spot,
+                   spots: sps.length ? sps : null, teams: tm,
                    ppl: JSON.parse(JSON.stringify(V.ppl)), eq: JSON.parse(JSON.stringify(V.eq)),
                    by: V.by, st: 'sub', up: 0 };
       S.crew.push(crow);

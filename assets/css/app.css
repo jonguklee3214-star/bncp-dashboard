@@ -23,7 +23,6 @@
   --r:2px;
   --pad:24px;
   --hd:64px;
-  --tabh:51px;   /* 탭 줄 높이 — sticky 기준점 계산용 (v2.16.2) */
 
   --f:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,
       "Segoe UI","Noto Sans KR","Malgun Gothic",sans-serif;
@@ -179,10 +178,27 @@ textarea.in{resize:vertical;min-height:60px}
 .btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 
 /* ── 테이블 ───────────────────────────────────────────────── */
-.tw{overflow:auto;max-height:520px}
+/* ══ 표 상자 — 자체 스크롤을 없앴다 (v2.19.17) ══════════════
+   ★v2.19.15에서 띠를 고정했더니 **표 머리행·카드 제목이 통째로 띠 뒤에
+     묻혔다**(사용자 캡처 — 「전부 가리고 있어」).
+   ★그때 넣은 scroll-margin-top은 **엉뚱한 것을 고친 것이었다.**
+     그 속성은 scrollIntoView·앵커 이동에만 먹고 **손으로 굴리는 스크롤에는
+     아무 효과가 없다.** 그래서 증상이 그대로였다. 내가 낸 구멍이다.
+   ★진짜 원인은 0-D가 이미 적어 둔 그대로다 — `.tw`가 **자체 스크롤 상자**라
+     머리행이 「상자 안 top:0」에 붙는다. 페이지를 내리면 상자째로 띠 뒤에
+     들어가고, 상자 안에서는 여전히 맨 위이므로 머리행도 같이 묻힌다.
+     0-D는 이것을 「나를 골랐다면 풀어야 했던 자리」라고 남겨 뒀다.
+   → 상자 스크롤을 없애고 머리행을 **페이지 기준**으로 붙인다.
+   ★v2.19.21 — 현황판이 오른쪽 기둥으로 가면서 본문 위에 아무것도 없다.
+     그래서 `top:0`이다. 종전의 그 기준점 기준점은 지웠다.
+   ★스크롤 막대가 하나로 준다 — 상자 안 스크롤과 페이지 스크롤이 겹쳐
+     굴리던 것이 어느 쪽인지 헷갈리던 것도 같이 없어진다.
+   ★대신 표가 길면 페이지가 길어진다. 520px 상자는 없다. */
+.tw{overflow:visible}
+.card{scroll-margin-top:12px}
 .tw table{font-size:12px}
 .tw th{
-  position:sticky;top:0;z-index:2;background:var(--wash);
+  position:sticky;top:0;z-index:5;background:var(--wash);
   padding:8px 10px;text-align:left;font-size:10px;font-weight:700;
   color:var(--mute);letter-spacing:.05em;white-space:nowrap;
   border-bottom:1px solid var(--line);
@@ -576,35 +592,139 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
 /* ══ 요약 띠 + 공구 표 (v2.18.0) ═══════════════════════════
    ★오른쪽 기둥을 철거하고 가로로 눕혔다. 기둥은 가로 29%를 늘 먹었고
      세로로 회색 막대만 아홉 줄이었다(사용자 지적).
-   ★고정하지 않는다 — 아래로 내리면 자리를 완전히 비켜준다.
-     위로 올릴 때만 도로 내려온다. 세로도 가로도 내주지 않는다. */
-.sb{margin:0 0 16px;border:1px solid var(--line);border-radius:var(--r);background:var(--bg)}
-.sb__in{display:flex;align-items:center;gap:26px;padding:12px 16px;flex-wrap:wrap}
-.sb__sp{flex:1}
-.sb__k{display:flex;flex-direction:column;gap:3px;min-width:0}
-.sb__l{font-size:10px;font-weight:700;color:var(--faint);letter-spacing:.02em;
-       text-transform:uppercase;white-space:nowrap}
+   ★고정하지 않는다 (v2.19.9 — sticky를 아예 걷어냈다).
+     종전에는 「위로 올릴 때만 도로 내려온다」였다. 그런데 이 띠는
+     불투명하고 **화면 기준**으로 떠 있고, 바로 밑 공구 표의 머리행은
+     **.tw 상자 안 기준**(top:0)이라 상자 윗부분이 띠 뒤로 들어가면
+     머리행도 카드 제목도 같이 묻혔다(사용자 캡처 — 값만 덩그러니 남았다).
+     z-index로는 못 푼다. 띠를 밑에 깔면 이번엔 표가 띠를 덮고 지나간다.
+     겹치는 구조 자체를 없앤다 — 띠는 본문과 같이 스크롤돼 올라간다. */
+/* ══ 5:2 두 칸 (v2.19.21 사용자 확정 「세로로 바꾸자」) ═══════
+   ★가로 띠는 **고정하는 순간 반드시 뭔가를 덮는다.** 네 판을 깎아 봤지만
+     화면 위쪽을 그만큼 영구히 먹는 것은 변하지 않았다.
+   ★기둥은 덮지 않는다 — 자기 칸 안에 있어 본문과 자리를 다투지 않는다.
+     가로 폭을 내주는 대신 **세로를 하나도 안 먹는다.**
+   ★좁은 화면에서는 한 칸으로 떨어뜨린다. 그때는 기둥이 위로 올라오는데,
+     그 화면에서는 고정하지 않는다(고정하면 또 덮는다). */
+.pg{display:grid;grid-template-columns:5fr 2fr;gap:16px;align-items:start}
+.pg__main{min-width:0}
+.pg__side{min-width:0;position:sticky;top:16px;align-self:start}
+@media (max-width:1180px){
+  .pg{grid-template-columns:1fr}
+  .pg__side{position:static;order:-1}
+}
+
+/* ══ 현황판 ═══════════════════════════════════════════════
+   ★v2.19.21 — **오른쪽 기둥**이다(사용자 확정 「세로로 바꾸자」).
+   ★v2.19.15~20에 걸쳐 **가로 띠를 고정한 채 네 번 깎아 봤다.** 안 됐다.
+     가로 띠는 고정하는 순간 화면 위쪽을 그만큼 영구히 먹는다 —
+     글씨를 줄이든 여백을 줄이든 「덮는다」는 성질 자체가 안 없어진다.
+   → 기둥은 자기 칸 안에 있어 본문과 자리를 다투지 않는다.
+     가로 폭을 내주는 대신 **세로를 하나도 안 먹는다.**
+   ★고정은 기둥(.pg__side)이 한다. .sb에서 또 고정하면 겹쳐서 엉킨다. */
+/* ★기둥 안에 있으므로 .sb 자체는 고정하지 않는다 — 기둥(.pg__side)이 이미
+   sticky다. 여기서 또 고정하면 고정이 겹쳐 스크롤이 엉킨다. */
+.sb{border:1px solid var(--line);border-radius:var(--r);background:var(--bg)}
+/* ★가로 균형 (v2.19.18 사용자 지적 「빈공간도 많아」).
+   종전에는 .sb__sp가 flex:1로 **가운데를 통째로 밀어** 왼쪽 칸들이 한 덩어리로
+   뭉치고 그 오른쪽이 뻥 비었다. 스페이서를 없애고 space-between으로
+   **칸들이 폭을 고르게 나눠 갖게** 한다. */
+/* ★띠를 낮췄다 (v2.19.20 사용자 지적 「현황판이 너무 커졌어」).
+   가로로 가는 것은 유지한다(사용자 확정 「가로 하자」). 대신 **세로를 깎는다** —
+   띠는 고정이라 높이가 곧 **매 화면에서 영구히 잃는 자리**다.
+   ★라벨을 숫자 위가 아니라 **옆**에 붙여 두 줄을 한 줄로 만든다. */
+/* ★가로 한 줄 → **세로로 쌓는다**. 좁은 칸이라 칸마다 한 줄씩 간다.
+   세로로 가면 높이 걱정이 없으므로 여백을 다시 넉넉하게 준다 — 덮지 않으니까. */
+.sb__in{display:flex;flex-direction:column;align-items:stretch;
+        gap:14px;padding:16px}
+.sb__in > .sb__k{padding-bottom:14px;border-bottom:1px solid var(--line-2)}
+.sb__in > .sb__k:last-child{padding-bottom:0;border-bottom:0}
+.sb__sp{display:none}
+.sb__k{display:flex;flex-direction:column;gap:2px;min-width:0}
+/* ★라벨 (v2.19.18) — 10px에 --faint는 **읽으라고 만든 크기가 아니었다.**
+   숫자만 크고 그게 무슨 숫자인지는 안 보였다. 12px · --mute로 올린다. */
+.sb__l{font-size:12px;font-weight:700;color:var(--mute);letter-spacing:0;
+       white-space:nowrap}
 .sb__v{display:flex;align-items:baseline;gap:4px}
-.sb__v b{font-size:26px;font-weight:800;line-height:1;letter-spacing:-.03em;
+.sb__v b{font-size:27px;font-weight:800;line-height:1;letter-spacing:-.03em;
          font-variant-numeric:tabular-nums}
-.sb__v em{font-style:normal;font-size:11px;color:var(--mute)}
+.sb__v em{font-style:normal;font-size:13px;color:var(--mute)}
 .sb__d{display:inline-flex;align-items:center;gap:4px;margin-left:8px;
-       font-size:11px;font-weight:700;color:var(--mute);font-variant-numeric:tabular-nums}
-.sb__d i{width:7px;height:7px;border-radius:2px;display:inline-block;margin-left:5px}
+       font-size:13px;font-weight:700;color:var(--mute);font-variant-numeric:tabular-nums}
+.sb__d i{width:8px;height:8px;border-radius:2px;display:inline-block;margin-left:6px}
 .sb__d i.ok{background:var(--ok)}
 .sb__d i.bad{background:var(--danger)}
 .sb__d i.idle{background:var(--line)}
 .sb__k svg{display:block}
+/* ★누를 수 있는 칸 (v2.19.17) — 누를 수 있다는 것이 보여야 한다.
+   오렌지 면으로 채우지 않는다(디자인 규칙). 밑줄과 커서로만 알린다. */
+.sb__k--go{cursor:pointer;border-radius:var(--r);padding:2px 6px;margin:-2px -6px}
+.sb__k--go:hover{background:var(--wash)}
+.sb__k--go:hover .sb__l{color:var(--orange)}
+.sb__k--go:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+/* 작업 위치 — 숫자가 아니라 이름 (v2.19.15) */
+.sb__loc{font-size:17px;font-weight:800;line-height:1.25;max-width:100%;
+         letter-spacing:-.02em}
+/* 업체별 줄 — 업체가 둘 이상일 때만 나온다 (v2.19.15) */
+.sb__cos{display:flex;flex-direction:column;gap:6px;padding:0 16px 14px;
+         border-top:1px solid var(--line-2);padding-top:12px}
+.sb__co{display:flex;align-items:baseline;gap:8px;padding:6px 10px;
+        border:1px solid var(--line);border-radius:var(--r);background:var(--wash)}
+.sb__co .sb__con{flex:1}
+.sb__co--t{background:var(--bg);border-color:var(--orange)}
+.sb__con{font-size:13px;font-weight:700;max-width:170px;overflow:hidden;
+         text-overflow:ellipsis;white-space:nowrap}
+.sb__cov{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
+.sb__cov i{font-style:normal;font-size:12px;font-weight:600;color:var(--mute);margin-left:3px}
+.sb__cor{font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
 
-/* 위로 올릴 때만 내려온다 — 아래로 읽는 동안은 자리를 비운다 */
-@media(min-width:1101px){
-  .sb{position:sticky;top:calc(var(--hd) + var(--tabh));z-index:5;
-      transition:transform .18s ease}
-  body.scr-dn .sb{transform:translateY(calc(-100% - var(--hd) - var(--tabh) - 8px))}
-}
-@media print{ .sb{position:static;transform:none} }
+/* ══ 날씨 (v2.19.16) ═══════════════════════════════════════
+   ★띠의 빈자리를 채운다. 오렌지는 안 쓴다 — 날씨는 「알림」이 아니라
+     배경 정보다. 눈에 걸려야 하는 것은 미확인·확인요청 쪽이다.
+   ★못 받아왔을 때도 자리는 그대로다. 칸이 접혔다 폈다 하면 옆 숫자가
+     춤춘다 — 띠는 매일 같은 자리에서 같은 것을 봐야 하는 물건이다. */
+/* ★날씨 글씨 (v2.19.18 사용자 지적 「일기예보 글씨가 너무작아」).
+   8~10px은 **띠에서 읽으라고 만든 크기가 아니었다.** 한 단계씩 올리고
+   칸 폭도 넓혀 일곱 칸이 눌리지 않게 한다. */
+.sb__wx{min-width:0;gap:5px}
+.wx__now{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.wx__now b{font-size:27px;font-weight:800;line-height:1;letter-spacing:-.03em;
+           font-variant-numeric:tabular-nums}
+.wx__now s{text-decoration:none;font-size:18px;line-height:1}
+.wx__now em{font-style:normal;font-size:14px;font-weight:700;color:var(--mute)}
+.wx__now i{font-style:normal;font-size:12px;color:var(--mute);
+           font-variant-numeric:tabular-nums;flex-basis:100%}
+.wx__off{font-size:14px;font-weight:700;color:var(--faint)}
+/* ★「현장 좌표 기준」 안내가 한 줄을 통째로 먹었다 → 라벨 옆 별표로 (v2.19.20).
+   짚으면 무슨 뜻인지 나온다. 짐작을 숨기는 것이 아니라 자리를 줄인 것이다. */
+.wx__fb{color:var(--orange);font-weight:800;cursor:help}
+.wx__warn{font-size:12px;font-weight:700;color:var(--danger)}
+/* 7일 예보 — 한 칸이 하루 */
+.wx__fc{display:flex;gap:3px;margin-top:2px;width:100%}
+.wx__d{display:flex;flex-direction:column;align-items:center;gap:1px;
+       flex:1;min-width:0;padding:3px 3px;border-radius:var(--r);
+       background:var(--wash);font-style:normal;line-height:1.1;cursor:default}
+.wx__d--w{background:var(--orange-w)}
+.wx__d em{font-style:normal;font-size:12px;font-weight:700;color:var(--mute)}
+.wx__d s{text-decoration:none;font-size:16px}
+.wx__d b{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums}
+.wx__d u{text-decoration:none;font-size:12px;font-weight:600;color:var(--faint);
+         font-variant-numeric:tabular-nums;margin-left:3px}
+
+
 
 /* 공구 표 — 작업위치는 평소 한 줄, 올리면 펼쳐진다 */
+/* ══ 현장 현황(공구 표) 열 너비 (v2.19.10) ══════════════════
+   ★값 사이가 텅 비어 보였다(사용자 지적). 칸이 여덟인데 값은 전부 짧아,
+     너비 100%짜리 표가 남는 폭을 **여덟 칸에 고루** 나눠 주고 있었다.
+     공구·업체·인원·장비·검측·측량·자재는 내용만큼만 쓰고, 남는 폭은
+     길이가 들쭉날쭉한 **작업위치 한 칸**이 받는다(측점이 여럿 나열되는 칸이다).
+   ★width:1% + nowrap = 내용만큼만. 이 표(.tw--site)에만 건다 —
+     진행률 표·자재 표는 종전 그대로다. */
+.tw--site table{width:100%}
+.tw--site th,.tw--site td{width:1%;white-space:nowrap}
+.tw--site th:nth-child(5),.tw--site td:nth-child(5){width:auto}
+.tw--site .sp2{max-width:none}
 .sp2{position:relative;display:block;max-width:280px;cursor:default}
 .sp2__1{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
         font-size:11px;color:var(--mute)}
@@ -618,3 +738,31 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
 .lk{background:none;border:0;padding:0;cursor:pointer;font:inherit;font-weight:800;
     color:var(--orange);border-bottom:1px solid currentColor}
 tr[data-sloc]{cursor:pointer}
+
+/* 파일명으로 위치를 못 정했을 때 묻는 줄 (v2.18.2) */
+.ask{margin-top:12px;padding:12px 14px;border:1px solid var(--orange);
+     border-radius:var(--r);background:var(--bg)}
+.ask__h{font-size:12px;margin-bottom:10px;color:var(--mute)}
+.ask__h b{color:var(--ink)}
+
+/* 저장 용량 (v2.18.5) — 터지기 전에 보여야 한다 */
+.cap__b{height:10px;border-radius:5px;background:var(--wash);overflow:hidden}
+.cap__b i{display:block;height:100%;border-radius:5px;background:var(--ok)}
+.cap--w .cap__b i{background:var(--orange)}
+.cap--d .cap__b i{background:var(--danger)}
+.cap__t{margin-top:7px;font-size:12px}
+.cap__t b{font-size:16px;font-weight:800;font-variant-numeric:tabular-nums}
+.cap--d .cap__t b{color:var(--danger)}
+
+/* 요약 띠 — 손봐야 할 것 (v2.19.0) */
+.sb__td{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.td{display:inline-flex;align-items:baseline;gap:4px;cursor:pointer;
+    padding:3px 9px;border:1px solid var(--orange);border-radius:var(--r);
+    background:var(--bg);font:inherit}
+.td b{font-size:15px;font-weight:800;color:var(--orange);font-variant-numeric:tabular-nums}
+.td i{font-style:normal;font-size:10px;color:var(--mute)}
+.td:hover{background:var(--wash)}
+.sb__v b.ok{font-size:15px;color:var(--ok)}
+
+/* 자재 신청 처리 — 지급 / 미지급(사유) (v2.19.1) */
+.mta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:2px 0;font-size:11px}
