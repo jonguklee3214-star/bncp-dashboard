@@ -220,12 +220,25 @@ console.log('\n[V12] 도로 세부위치 — 측점→연장 자동, 좌우는 �
   ok(SP.maxNo('22') === 5 && SP.maxNo('17.5') === 5 && SP.maxNo('15') === 5, '22·17.5·15는 5번까지');
   ok(SP.widths([{ w: '30', max: 9 }]).length === 8, '현장에서 폭 추가 가능');
 
-  // 측점 → 연장
-  ok(SP.sta(0, 0) === 0 && SP.sta(1, 120) === 1120, '측점 km+m 환산');
+  /* 측점 → 연장
+     ★1스테이션 = 20m다 (2026-08-23 현장 확정). 0+19 다음이 1+00이고
+       0+20은 없다. 종전 검사는 흔한 1km 기준(0+000~0+999)을 기대하고
+       있었다 — 그래서 「0+19 다음 1+00」이 **1m가 아니라 981m**로
+       계산되는 것을 못 잡았다. 실적 폼은 이 연장을 작업량에 그대로
+       박아 넣으므로 표기가 아니라 **수량이 틀어지는** 문제였다. */
+  ok(SP.STA_STEP === 20, '★1스테이션 = 20m');
+  ok(SP.sta(0, 0) === 0 && SP.sta(1, 0) === 20 && SP.sta(0, 19) === 19,
+     '★★측점 환산 — 1+00은 20m, 0+19는 19m');
+  ok(SP.len(SP.sta(0, 19), SP.sta(1, 0)) === 1,
+     '★★0+19 ~ 1+00 은 1m다 (종전엔 981m로 셌다)');
+  ok(SP.sta(0, 20) === null && SP.sta(3, 25) === null,
+     '★0+20은 없다 — 1+00으로 적어야 하므로 막는다');
   ok(SP.sta('', 120) === null && SP.sta(0, 'x') === null, '빈 칸은 null');
-  ok(SP.len(SP.sta(0, 0), SP.sta(0, 120)) === 120, '연장 자동계산 120m');
-  ok(SP.len(SP.sta(0, 120), SP.sta(0, 0)) === 120, '순서를 바꿔 넣어도 흡수');
-  ok(SP.staText(120) === '0+120' && SP.staText(1120) === '1+120', '측점 표기 복원');
+  ok(SP.len(SP.sta(0, 0), SP.sta(6, 0)) === 120, '연장 자동계산 120m (=6스테이션)');
+  ok(SP.len(SP.sta(6, 0), SP.sta(0, 0)) === 120, '순서를 바꿔 넣어도 흡수');
+  ok(SP.staText(0) === '0+00' && SP.staText(19) === '0+19' &&
+     SP.staText(20) === '1+00' && SP.staText(500) === '25+00',
+     '★★측점 표기 복원 — 뒤는 두 자리, 20에서 넘어간다');
 
   // 묶음 키 — 좌우가 섞이면 안 된다
   const L = { kind: 'road', w: '50', no: '1', side: 'L', f: 0, t: 120 };
@@ -236,7 +249,7 @@ console.log('\n[V12] 도로 세부위치 — 측점→연장 자동, 좌우는 �
 
   // 범위 계산
   const rng = SP.range([{ spot: { f: 0, t: 120 } }, { spot: { f: 230, t: 350 } }, { spot: { f: 120, t: 230 } }]);
-  ok(rng === 'STA 0+000 ~ 0+350', `묶음 범위 자동 (${rng})`);
+  ok(rng === 'STA 0+00 ~ 17+10', `묶음 범위 자동 (${rng})`);
 
   // 단계와 차수는 다르다
   ok(SP.STAGES.length === 3, '검측 단계 3종(관설치·모래되메우기·되메우기층)');
@@ -286,6 +299,171 @@ console.log('\n[V14] 협력업체 명부 · 링크 고정 · 겹침 차단');
   ok(/function overlap/.test(vsrc), '겹침 판정 있음');
   ok(/Overlaps /.test(vsrc), '겹치면 제출을 막는다');
   ok(/lo < b && a < hi/.test(vsrc), '접하는 구간(끝점 일치)은 겹침이 아니다');
+}
+
+/* ── V-TAG 공종별 표기 (v2.26.0 · 요청 12·13 · 0-P 확정) ── */
+console.log('\n[V-TAG] 표기 — 관로·전기는 도로 대신 도면 라벨을 쓴다');
+{
+  const SP = sb.window.BNCP_SPOT, VD = sb.window.VENDOR, VS = VD.state;
+
+  /* ★함수 존재를 먼저 가린다. 없는 채로 부르면 예외가 나서 검사가 통째로
+     죽고, 어느 줄이 왜 실패했는지 안 보인다 — 옛 파일로 되돌려 확인할 때
+     실제로 그랬다. 없으면 여기서 깨끗이 실패시키고 아래는 건너뛴다. */
+  const hasTag = typeof SP.needTag === 'function' && typeof SP.tagHint === 'function';
+  ok(hasTag, '★SPOT.needTag / tagHint 가 있다 (요청 12·13)');
+  if (!hasTag) { console.log('  (표기 검사 건너뜀 — 위가 실패했다)'); }
+  else {
+
+  /* 표를 직접 본다 — 부지와 부대는 표기가 다르다 */
+  ok(SP.needTag('civil', '우수공') && SP.needTag('civil', '전기/통신/가로등'),
+     '★관로·전기 계열은 표기를 받는다');
+  ok(!SP.needTag('civil', '토공') && !SP.needTag('civil', '포장공'),
+     '★토공·포장은 종전대로 도로·측점이다');
+  ok(SP.tagHint('civil', '우수공').indexOf('C2-55') >= 0,
+     '부지 우수공 예시 (C2-55 D1100 · CM4-66 · CSM6-10)');
+  ok(SP.tagHint('anc', '단지내 부대토목-우수공').indexOf('M1,D315') >= 0,
+     '★부대블록은 쉼표 표기라 예시가 다르다');
+  ok(SP.tagHint('civil', '우수공') !== SP.tagHint('anc', '단지내 부대토목-우수공'),
+     '★부지와 부대 안내가 갈려 있다');
+  /* ★부대블록 전기는 도면(B8-E-1001)에서 확정했다 — 부지 전기와 표기가
+     전혀 다르다. 임시로 부지 것을 쓰고 있던 자리다(v2.28.0). */
+  ok(SP.tagHint('anc', '단지내 부대토목-전기/통신/가로등').indexOf('LP2-6') >= 0,
+     '★★부대 전기는 도면 표기다 (H-8 · M-5 · LP2-6 · 100*4)');
+  ok(SP.tagHint('anc', '단지내 부대토목-전기/통신/가로등') !==
+     SP.tagHint('civil', '전기/통신/가로등'),
+     '★★부대 전기와 부지 전기가 서로 다른 예시를 쓴다');
+
+  /* ★원문 검사로 끝내지 않는다 — 실제로 그려서 어느 칸이 뜨는지 본다.
+     ★앞 검사들이 업체 명부를 등록해 두면 vendGate()가 입력 화면 대신
+       안내 화면을 내놓는다. 여기서는 입력 폼 자체를 봐야 하므로 명부를
+       비워 문을 연다(명부 미등록이면 종전처럼 동작 — 기존 현장 안 막힘). */
+  const saveVend = S.vend; S.vend = [];
+  VS.tab = 'work'; VS.s = 'civil'; VS.grp = '우수공'; VS.key = ''; VS.tag = '';
+  VD.render();
+  const hT = bag.vBody.innerHTML;
+  ok(hT.indexOf('id="vTag"') >= 0, '★★표기 공종을 고르면 표기 칸이 뜬다');
+  ok(hT.indexOf('data-sta=') < 0,
+     '★★표기 공종에는 측점 칸이 안 뜬다 (둘은 배타적이다)');
+  ok(hT.indexOf('C2-55') >= 0, '자리표시에 그 공종의 실제 예시가 들어간다');
+
+  VS.grp = '토공'; VS.side = ['L']; VD.render();
+  const hR = bag.vBody.innerHTML;
+  ok(hR.indexOf('id="vTag"') < 0, '★★도로 공종에는 표기 칸이 안 뜬다');
+  ok(hR.indexOf('data-sta=') >= 0, '★★도로 공종은 종전대로 측점 칸이 뜬다');
+  VS.side = []; VS.sta = {}; S.vend = saveVend;
+
+  /* 공종군이 바뀌면 표기와 도로를 함께 비운다 —
+     안 비우면 화면엔 표기 칸만 뵈는데 저장은 도로로 나간다 */
+  const vs2 = fs.readFileSync(path.join(ROOT, 'assets/js/vendor.js'), 'utf8');
+  ok(/f === 's' \|\| f === 'grp'\) \{ V\.tag = ''; V\.side = \[\]/.test(vs2),
+     "★공종군이 바뀌면 표기·도로를 함께 비운다");
+
+  /* 표기가 저장되고 동기화 양쪽에 실린다 (0-J 사고 재발 방지) */
+  ok(/tag: V\.tag \|\| ''/.test(vs2), '실적·인원장비 줄에 표기가 저장된다');
+  ok(/tag: rows\[0\]\.tag \|\| ''/.test(vs2), '검측은 실적의 표기를 물려받는다');
+  const ts2 = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+  ok(/if \(row\.tag\) b\.tag = row\.tag;/.test(ts2), '★보내는 쪽에 표기가 실린다');
+  ok(/base\.tag = r\.tag \|\| '';/.test(ts2),
+     '★★받는 쪽도 표기를 푼다 — 한쪽만 고치면 0-J와 같은 사고가 난다');
+  }
+}
+
+/* ── V-WHY 측량 사유 선택식 (v2.27.0 · 요청 1) ── */
+console.log('\n[V-WHY] 측량 사유 — 고르는 것이다 (자유입력은 「기타」뿐)');
+{
+  const VD = sb.window.VENDOR, VS = VD.state;
+  const saveVend2 = S.vend; S.vend = [];
+  const saveSurv = S.surv; S.surv = [];
+
+  VS.tab = 'surv'; VS.why = ''; VS.whyEtc = ''; VD.render();
+  const h1 = bag.vBody.innerHTML;
+  ok(h1.indexOf('data-v="why"') >= 0, '★★사유가 고르는 칸이다');
+  /* 12항목 + 기타 = 13 (0-P 우선순위표의 「사유 12항목 + 기타」) */
+  const opts = (h1.match(/<option value="[a-z_]+"/g) || []).length;
+  ok(opts === 13, `★12항목 + 기타 = 13 (${opts})`);
+  ok(h1.indexOf('id="vWhy"') < 0,
+     '★★안 골랐을 때는 직접입력 칸이 없다 — 같은 사유가 두 군데로 갈리지 않게');
+
+  /* ★측량은 도로를 재지 않는다 (0-V) */
+  ok(h1.indexOf('data-sta=') < 0 && h1.indexOf('data-side=') < 0,
+     '★★측량 폼에 도로·측점 칸이 없다 (0-V — 우리는 시공측량을 안 한다)');
+  ok(h1.indexOf('id="vTag"') < 0, '표기 칸도 없다 — 측량은 위치와 사유면 족하다');
+
+  VS.why = 'etc'; VD.render();
+  ok(bag.vBody.innerHTML.indexOf('id="vWhy"') >= 0,
+     '★★「기타」를 골라야 직접입력 칸이 나온다');
+
+  /* 저장은 고른 항목의 **글**이다 — 관리자 화면·독촉 문안이 why를 글로 읽는다 */
+  const vs3 = fs.readFileSync(path.join(ROOT, 'assets/js/vendor.js'), 'utf8');
+  ok(/function whyText/.test(vs3) && /x\.id === V\.why/.test(vs3),
+     '★고른 항목의 영문 글을 why에 넣는다 (코드값이 아니다)');
+  ok(/if \(!V\.why\) return say/.test(vs3), '안 고르면 제출을 막는다');
+  ok(/f === 'why' && el\.value !== 'etc'\) V\.whyEtc = ''/.test(vs3),
+     "★기타에서 다른 항목으로 옮기면 직접입력 글을 버린다");
+  ok(/var wEl = \$\('#vWhy'\); if \(wEl\) V\.whyEtc/.test(vs3),
+     '★제출 직전에 직접입력 글을 거둔다 (화면 상태에만 남지 않게)');
+
+  VS.why = ''; VS.whyEtc = '';
+  S.vend = saveVend2; S.surv = saveSurv;
+}
+
+/* ── V-ANC 부대토목 Road/Station (v2.29.0 · 요청 3·4·5) ── */
+console.log('\n[V-ANC] 부대토목 — 블록-번호 도로 · 측점은 고르는 것');
+{
+  const SP = sb.window.BNCP_SPOT, VD = sb.window.VENDOR, VS = VD.state;
+  const saveVend3 = S.vend; S.vend = [];
+
+  /* ★새 API는 **존재 확인을 앞에 둔다** — 없는 채로 부르면 예외가 나서
+     검사가 통째로 죽고, 어느 줄이 왜 실패했는지 안 보인다(0-W에서 배운 것). */
+  const hasAnc = typeof SP.blkCode === 'function' && typeof SP.staNos === 'function';
+  ok(hasAnc, '★SPOT.blkCode / staNos 가 있다 (부대토목 도로·측점)');
+  if (!hasAnc) { console.log('  (부대토목 검사 건너뜀 — 위가 실패했다)'); }
+  else {
+
+  ok(SP.blkCode({ s: 'anc', t: 'B', b: 6 }) === 'B6', '★위치에서 블록코드가 나온다 (Town B · Block 6 → B6)');
+  ok(SP.blkCode({ s: 'civil', p: 3, c: 1 }) === '', '부지 위치에는 블록코드가 없다');
+  ok(SP.ANC_ROADS === 30, '★블록마다 도로 30개 고정');
+
+  /* ★저장 모양은 부지와 같다 — w에 블록코드. 그래야 이름·묶음·겹침이 그대로 돈다 */
+  const anc = { kind: 'road', w: 'B6', no: 3, side: 'L', f: 0, t: 40 };
+  ok(SP.roadName(anc) === 'B6-3', '★★B6-3으로 읽힌다 (모양을 새로 만들지 않았다)');
+  ok(SP.groupKey(anc) === 'road|B6|3|L', '★검측 묶음 키가 그대로 선다');
+  ok(SP.label(anc) === 'B6-3 · Left · STA 0+00~2+00', '★화면 표기도 그대로');
+
+  VS.tab = 'work'; VS.s = 'anc'; VS.t = 'B'; VS.b = 6;
+  VS.grp = '단지내 부대토목-토공'; VS.key = ''; VS.side = ['L']; VS.sta = {}; VS.rno = '';
+  VD.render();
+  const hA = bag.vBody.innerHTML;
+  ok(hA.indexOf('>B6-1<') >= 0 && hA.indexOf('>B6-30<') >= 0,
+     '★★도로가 B6-1 ~ B6-30으로 나온다');
+  ok(hA.indexOf('>B6-31<') < 0, '★31번은 없다');
+  ok(hA.indexOf('data-v="rw"') < 0,
+     '★★부대에는 도로폭 목록이 안 뜬다 (폭 기준이 없다)');
+  ok(hA.indexOf('value="B6" readonly') >= 0, '블록코드는 위치에서 나와 고정이다');
+
+  /* ★★측점은 고르는 것 — 직접입력 금지 */
+  ok(/<select class="in" data-sta=/.test(hA), '★★측점이 고르는 칸이다');
+  ok(!/data-sta="[LCR]\.[ft][km]" type="number"/.test(hA),
+     '★★직접입력(number) 칸이 남아 있지 않다');
+  /* 0~19만 있고 20은 없다 — 1+20은 존재하지 않는 측점이다 */
+  const mSel = /data-sta="L\.fm"[\s\S]*?<\/select>/.exec(hA);
+  ok(!!mSel && mSel[0].indexOf('>19<') >= 0 && mSel[0].indexOf('>20<') < 0,
+     '★★뒤 칸은 0~19뿐 — 20은 목록에 아예 없다 (다음 스테이션이다)');
+
+  /* 부지는 종전대로 폭-번호 */
+  VS.s = 'civil'; VS.p = 3; VS.c = 1; VS.grp = '토공'; VS.rw = '18'; VD.render();
+  const hC = bag.vBody.innerHTML;
+  ok(hC.indexOf('data-v="rw"') >= 0 && hC.indexOf('>18m<') >= 0,
+     '★부지는 종전대로 폭-번호다');
+  ok(/<select class="in" data-sta=/.test(hC), '측점은 부지·부대 모두 고르는 칸이다');
+
+  /* select에는 input 이벤트가 안 오는 브라우저가 있다 — 둘 다 걸어야 한다 */
+  const vs4 = fs.readFileSync(path.join(ROOT, 'assets/js/vendor.js'), 'utf8');
+  ok(/el\.oninput = el\.onchange = function/.test(vs4),
+     '★★측점에 oninput·onchange를 함께 건다 (select는 input이 안 올 수 있다)');
+
+  VS.side = []; VS.sta = {}; VS.rw = ''; VS.rno = ''; S.vend = saveVend3;
+  }
 }
 
 console.log(fail ? `\n✗ 실패 ${fail}건\n` : '\n✓ 전부 통과\n');

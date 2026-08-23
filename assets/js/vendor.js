@@ -37,6 +37,8 @@
     s: 'civil', p: 1, c: 1, t: 'A', b: 1,
     grp: '', key: '', spot: -1,     // 공종 선택
     rw: '', rno: '', rmemo: '',     // 도로: 폭·번호·설명
+    tag: '',                        // 표기(도면 라벨) — 관로·전기 계열 (v2.26.0)
+    why: '', whyEtc: '',            // 측량 사유: 고른 항목 / 「기타」 직접입력 (v2.27.0)
     side: [], sta: {},              // 좌우 복수선택 + 쪽별 측점
     need: false,                    // 검측 필요 여부(기본 해제)
     stage: 'p1', layer: 1, pick: [], // 검측: 단계·되메우기 층·선택한 실적
@@ -47,6 +49,40 @@
   };
   function loc() {
     return V.s === 'civil' ? { s: 'civil', p: +V.p, c: +V.c } : { s: 'anc', t: V.t, b: +V.b };
+  }
+
+  /* ── 측량 요청 사유 (요청 1 · v2.27.0) ────────────────
+     ★우리는 시공측량을 하지 않는다 (0-V). CP·TBM을 내려주고, **내려준
+       점이 틀리거나 이상하다**고 협력업체가 알려올 때 나간다. 그래서
+       사유도 그 범위 안에서만 나온다 — 도로·구간을 재달라는 것이 아니다.
+     ★종전에는 빈 칸에 자유입력이었다. 업체마다 말이 달라 같은 사유가
+       열 가지로 적혔고, 무엇이 잦은지 셀 수가 없었다.
+     ★★목록이 실제 현장 말과 다르면 **여기만 고치면 된다.** 화면·저장·
+       집계가 전부 이 표를 따라간다. 사용자 확인 필요.
+     ★저장은 **고른 항목의 영문 글**을 그대로 `why`에 넣는다. 관리자 화면과
+       독촉 문안이 종전부터 `why`를 글로 읽고 있어, 코드값으로 바꾸면
+       그쪽을 전부 손봐야 한다. 글로 넣으면 아무 데도 안 깨진다. */
+  var SURV_WHY = [
+    { id: 'cp_lost',  en: 'CP point lost or damaged',        ar: 'نقطة التحكم مفقودة أو تالفة' },
+    { id: 'cp_bad',   en: 'CP coordinates do not match',     ar: 'إحداثيات نقطة التحكم غير مطابقة' },
+    { id: 'tbm_lost', en: 'TBM lost or damaged',             ar: 'نقطة المنسوب مفقودة أو تالفة' },
+    { id: 'tbm_bad',  en: 'TBM level does not match',        ar: 'منسوب النقطة غير مطابق' },
+    { id: 'need_pt',  en: 'No control point in work area',   ar: 'لا توجد نقطة تحكم في منطقة العمل' },
+    { id: 'add_pt',   en: 'Additional point requested',      ar: 'مطلوب نقطة إضافية' },
+    { id: 'dwg_diff', en: 'Drawing does not match site',     ar: 'المخطط لا يطابق الموقع' },
+    { id: 'center',   en: 'Centreline check',                ar: 'فحص المحور' },
+    { id: 'level',    en: 'Level / gradient check',          ar: 'فحص المنسوب والميل' },
+    { id: 'struct',   en: 'Structure setting-out check',     ar: 'فحص توقيع المنشأ' },
+    { id: 'obstr',    en: 'Existing utility position check', ar: 'فحص موقع المرافق القائمة' },
+    { id: 'recheck',  en: 'Re-check after correction',       ar: 'إعادة الفحص بعد التصحيح' }
+  ];
+  var WHY_ETC = 'etc';
+  /** 고른 사유의 저장용 글. 「기타」면 직접 친 글 */
+  function whyText() {
+    if (V.why === WHY_ETC) return String(V.whyEtc || '').trim();
+    var t = '';
+    SURV_WHY.forEach(function (x) { if (x.id === V.why) t = x.en; });
+    return t;
   }
 
   /* ── 위치 선택 (항상 영문 — 층1) ───────────────────── */
@@ -94,19 +130,60 @@
   /* ── 세부위치(도로) 입력 ────────────────────────────
      좌·중앙·우는 복수 선택. 고른 쪽마다 측점을 따로 받는다
      (같이 시공해도 시작·끝이 다를 수 있다). */
-  function roadHTML() {
-    var SP = window.BNCP_SPOT, ws = SP.widths(S.roadX);
-    var wsel = '<select class="in" data-v="rw"><option value="">Width / العرض</option>' +
-      ws.map(function (x) {
-        return '<option value="' + esc(x.w) + '"' + (x.w === V.rw ? ' selected' : '') + '>' + esc(x.w) + 'm</option>';
-      }).join('') + '</select>';
+  /* ── 표기 (요청 12·13 · 0-P 확정) ─────────────────────
+     ★관로·전기 계열은 **도로·측점 대신 도면 라벨**을 위치로 쓴다.
+       협력업체가 도면에 적힌 표기를 그대로 친다 → 스탭이 틀리면 반려 →
+       재입력. 관리자 화면에는 입력한 표기 그대로 뜬다.
+     ★자리표시(placeholder)에 그 공종의 실제 예시를 넣는다 — 안내 문구를
+       따로 두면 아무도 안 읽는다. 부지와 부대는 표기가 달라 예시도 다르다. */
+  function tagHTML() {
+    var SP = window.BNCP_SPOT, ex = SP.tagHint(V.s, V.grp);
+    if (!ex) return '';
+    return '<div class="f-row" style="margin-top:12px">' +
+      fld('Marking / الترميز',
+        '<input class="in" id="vTag" value="' + esc(V.tag) + '" placeholder="' + esc(ex) + '">') +
+      '</div>' +
+      '<div class="sp" style="margin-top:6px">' + esc(ex) + '</div>';
+  }
 
-    var max = V.rw ? SP.maxNo(V.rw, S.roadX) : 0, nos = '';
-    for (var i = 1; i <= max; i++) {
-      nos += '<option value="' + i + '"' + (String(i) === String(V.rno) ? ' selected' : '') + '>' + i + '</option>';
+  /* ★도로 칸과 표기 칸은 **동시에 뜨지 않는다.** 관로에 도로를 물으면
+     업체가 억지로 아무 도로나 고르게 되고, 그러면 겹침 검사가 엉뚱한
+     구간을 막는다. 고른 공종이 어느 쪽인지에 따라 하나만 보인다. */
+  function placeHTML() {
+    return window.BNCP_SPOT.needTag(V.s, V.grp) ? tagHTML() : roadHTML();
+  }
+
+  function roadHTML() {
+    var SP = window.BNCP_SPOT, anc = V.s === 'anc';
+    var wsel, nsel, i;
+
+    if (anc) {
+      /* ★부대토목은 **블록-번호**다 (2026-08-23 확정). 도로폭 기준이 없다.
+         블록코드는 이미 고른 위치에서 나오므로 따로 묻지 않는다 —
+         업체는 번호 하나만 고른다(B6 → B6-1~B6-30, 30개 고정). */
+      var blk = SP.blkCode(loc());
+      V.rw = blk;                       /* 저장 모양은 부지와 같다 — w에 블록코드 */
+      wsel = '<input class="in" value="' + esc(blk) + '" readonly>';
+      var anos = '';
+      for (i = 1; i <= SP.ANC_ROADS; i++) {
+        anos += '<option value="' + i + '"' + (String(i) === String(V.rno) ? ' selected' : '') + '>' +
+          esc(blk) + '-' + i + '</option>';
+      }
+      nsel = '<select class="in" data-v="rno"><option value="">Road / الطريق</option>' + anos + '</select>';
+    } else {
+      var ws = SP.widths(S.roadX);
+      wsel = '<select class="in" data-v="rw"><option value="">Width / العرض</option>' +
+        ws.map(function (x) {
+          return '<option value="' + esc(x.w) + '"' + (x.w === V.rw ? ' selected' : '') + '>' + esc(x.w) + 'm</option>';
+        }).join('') + '</select>';
+
+      var max = V.rw ? SP.maxNo(V.rw, S.roadX) : 0, nos = '';
+      for (i = 1; i <= max; i++) {
+        nos += '<option value="' + i + '"' + (String(i) === String(V.rno) ? ' selected' : '') + '>' + i + '</option>';
+      }
+      nsel = '<select class="in" data-v="rno"' + (max ? '' : ' disabled') + '>' +
+        '<option value="">No. / رقم</option>' + nos + '</select>';
     }
-    var nsel = '<select class="in" data-v="rno"' + (max ? '' : ' disabled') + '>' +
-      '<option value="">No. / رقم</option>' + nos + '</select>';
 
     var sides = SP.SIDES.map(function (x) {
       var on = V.side.indexOf(x.id) >= 0;
@@ -114,17 +191,31 @@
         esc(x.en) + '<span class="sl">/</span><span class="ar">' + esc(x.ar) + '</span></label>';
     }).join('');
 
-    /* 고른 쪽마다 측점 한 줄씩 */
+    /* 고른 쪽마다 측점 한 줄씩
+       ★뒤 칸은 스테이션 **안에서의 미터(0~19)** 다 — 1스테이션=20m이므로
+         0+19 다음은 1+00이다. max=19로 막아 0+20이 들어오는 것을 미리 끊는다
+         (SPOT.sta도 20 이상이면 null을 낸다 — 두 겹으로 막는다). */
+    /* ★★측점은 **고르는 것이다 — 직접입력 금지** (2026-08-23 사용자 확정).
+       손으로 치면 1+20 같은 **없는 측점**이 들어온다. 그러면 같은 지점이 두
+       가지로 적혀 겹침 검사도 연장 계산도 조용히 어긋난다.
+       ★뒤 칸은 0~19까지만 만든다 — 20은 목록에 아예 없다(다음 스테이션이다). */
+    function staSel(id, f, val) {
+      var list = (f === 'fk' || f === 'tk') ? SP.staNos() : SP.staMs();
+      var pad = (f === 'fm' || f === 'tm');
+      return '<select class="in" data-sta="' + id + '.' + f + '">' +
+        '<option value="">–</option>' +
+        list.map(function (n) {
+          var t = pad ? ('0' + n).slice(-2) : String(n);
+          return '<option value="' + n + '"' +
+            (String(n) === String(val) ? ' selected' : '') + '>' + t + '</option>';
+        }).join('') + '</select>';
+    }
     var rows = V.side.map(function (id) {
       var v = V.sta[id] || {};
       return '<div class="starow"><span class="stalab">' + esc(SP.sideName(id)) + '</span>' +
-        '<input class="in num" data-sta="' + id + '.fk" type="number" min="0" step="1" placeholder="0" value="' + esc(v.fk || '') + '">' +
-        '<span class="staplus">+</span>' +
-        '<input class="in num" data-sta="' + id + '.fm" type="number" min="0" step="any" placeholder="000" value="' + esc(v.fm || '') + '">' +
+        staSel(id, 'fk', v.fk) + '<span class="staplus">+</span>' + staSel(id, 'fm', v.fm) +
         '<span class="statil">~</span>' +
-        '<input class="in num" data-sta="' + id + '.tk" type="number" min="0" step="1" placeholder="0" value="' + esc(v.tk || '') + '">' +
-        '<span class="staplus">+</span>' +
-        '<input class="in num" data-sta="' + id + '.tm" type="number" min="0" step="any" placeholder="000" value="' + esc(v.tm || '') + '">' +
+        staSel(id, 'tk', v.tk) + '<span class="staplus">+</span>' + staSel(id, 'tm', v.tm) +
         '<span class="stalen">' + esc(sideLenText(id)) + '</span></div>';
     }).join('');
 
@@ -530,7 +621,7 @@
     /* ★실적도 오늘이다 (v2.19.13 사용자 지시). 종전 기본값은 어제였다.
        작업량 표를 오늘로 통일했으므로 폼도 같이 바꾼다 — 한쪽만 바꾸면
        올린 실적이 표에 안 나온다(0-H와 같은 사고). 날짜는 손으로 고칠 수 있다. */
-    if (t === 'work') return workHTML() + roadHTML() +
+    if (t === 'work') return workHTML() + placeHTML() +
       '<div class="f-row" style="margin-top:12px">' +
       bfld('date', '<input class="in" id="vDate" type="date" value="' + A.today() + '">') +
       bfld('qty', '<input class="in num" id="vQty" type="number" step="any" placeholder="0"' +
@@ -554,7 +645,7 @@
          있는지는 투입이 답할 일이다.
        ★측점은 **선택**이다. 도로가 아닌 공종에서 막으면 안 된다.
          도로·쪽만 골라도 그만큼은 뜬다. */
-    if (t === 'crew') return workHTML() + roadHTML() +
+    if (t === 'crew') return workHTML() + placeHTML() +
       '<div class="f-row" style="margin-top:12px">' +
       bfld('date', '<input class="in" id="vDate" type="date" value="' + A.today() + '">') +
       bfld('teams', '<input class="in num" id="vTeams" type="number" min="1" step="1" value="1">') +
@@ -565,13 +656,28 @@
 
     if (t === 'insp') return inspHTML();
 
+    /* ★측량 요청 — 사유는 고르는 것이다 (v2.27.0 · 요청 1).
+       ★「기타」를 골랐을 때만 직접입력 칸이 나온다. 늘 띄워 두면 고른
+         사람도 습관처럼 거기에 또 적어, 같은 사유가 두 군데로 갈린다.
+       ★측량에는 도로·측점을 안 받는다 (0-V) — placeHTML을 부르지 않는다. */
     if (t === 'surv') return workHTML() +
       '<div class="f-row" style="margin-top:12px">' +
       bfld('date', '<input class="in" id="vDate" type="date" value="' + A.today() + '">') +
       byFld() +
       '</div>' +
-      '<div style="margin-top:12px">' + bfld('reason',
-        '<textarea class="in" id="vWhy" rows="3" placeholder="TBM / CP point check ... / فحص نقطة"></textarea>') + '</div>';
+      '<div style="margin-top:12px">' + fld('Reason / السبب',
+        '<select class="in" data-v="why"><option value="">— select / اختر —</option>' +
+        SURV_WHY.map(function (x) {
+          return '<option value="' + esc(x.id) + '"' + (x.id === V.why ? ' selected' : '') + '>' +
+            esc(x.en + ' / ' + x.ar) + '</option>';
+        }).join('') +
+        '<option value="' + WHY_ETC + '"' + (V.why === WHY_ETC ? ' selected' : '') + '>' +
+        'Other / أخرى</option></select>') + '</div>' +
+      (V.why === WHY_ETC
+        ? '<div style="margin-top:12px">' + fld('Details / التفاصيل',
+            '<textarea class="in" id="vWhy" rows="3" placeholder="Describe / اشرح">' +
+            esc(V.whyEtc) + '</textarea>') + '</div>'
+        : '');
 
     return matHTML() +
       '<div class="f-row" style="margin-top:12px">' +
@@ -631,12 +737,20 @@
           var q = (V.comp && A.staffFor) ? A.staffFor(V.comp.name, curGrp()) : { pick: '', all: [] };
           if (q.all.length && q.pick) V.by = q.pick;
         }
+        /* ★공종군이 바뀌면 표기와 도로를 **함께 비운다** (v2.26.0).
+           안 비우면 도로 공종에서 고른 쪽·측점이 관로 공종으로 넘어가
+           화면에는 표기 칸만 뵈는데 저장은 도로로 나간다. */
+        if (f === 's' || f === 'grp') { V.tag = ''; V.side = []; V.sta = {}; V.rw = ''; V.rno = ''; V.rmemo = ''; }
         if (f === 'grp') { V.key = ''; V.spot = -1; }
         if (f === 'key') V.spot = -1;
         if (f === 't') V.b = 1;
         if (f === 'mgrp') { V.msub = ''; V.mmat = ''; }
         if (f === 'msub') V.mmat = '';
         if (f === 'rw') V.rno = '';
+        /* ★사유가 바뀌면 다시 그린다 — 「기타」 칸이 나타나거나 사라져야 한다.
+           ★기타에서 다른 항목으로 옮기면 직접입력 글도 버린다. 남겨 두면
+             화면엔 안 보이는 글이 저장될 수 있다. */
+        if (f === 'why' && el.value !== 'etc') V.whyEtc = '';
         if (f === 'staff') V.by = el.value;
         if (f === 'eqcat') V.eqsize = (A.eqSizes(el.value) || [])[0] || '';
         render();
@@ -651,9 +765,13 @@
         render();
       };
     });
-    /* 측점 — 입력할 때마다 연장을 다시 계산해 보여준다 */
+    /* 측점 — 고를 때마다 연장을 다시 계산해 보여준다
+       ★`oninput`만 걸면 안 된다 — 측점이 <select>로 바뀌었고(v2.29.0),
+         브라우저에 따라 select에서는 input 이벤트가 안 온다. 그러면 고른
+         뒤에도 연장이 「—」로 남고, 실적 폼의 작업량이 빈 채로 제출된다.
+         ★둘 다 건다. */
     $$('[data-sta]').forEach(function (el) {
-      el.oninput = function () {
+      el.oninput = el.onchange = function () {
         var p = el.dataset.sta.split('.'), id = p[0], k = p[1];
         if (!V.sta[id]) V.sta[id] = {};
         V.sta[id][k] = el.value;
@@ -858,6 +976,10 @@
   function submit() {
     V.by = str('#vBy');
     var t = V.tab, d = str('#vDate') || A.today();
+    /* ★표기(도면 라벨)를 읽어 둔다 (v2.26.0 · 요청 12·13).
+       표기를 받는 공종군일 때만 값이 있다 — 아니면 빈 문자열이다. */
+    var tagEl = $('#vTag'); if (tagEl) V.tag = String(tagEl.value || '').trim();
+    var needTag = window.BNCP_SPOT.needTag(V.s, V.grp);
 
     if (t === 'mat') {
       var m = matGet(); if (!m) return say('Select material / اختر المادة');
@@ -914,7 +1036,10 @@
                A.locKey(w.loc) === A.locKey(g.loc);
       });
       if (dup && !confirm('Same entry already exists. Submit again? / يوجد إدخال مطابق. إرسال مرة أخرى؟')) return;
+      /* ★표기 공종은 표기가 곧 위치다 — 비면 어디서 한 일인지 알 수 없다 */
+      if (needTag && !V.tag) return say('Enter marking / أدخل الترميز');
       var wrow = { id: A.uid(), date: d, loc: g.loc, key: g.key, spot: g.spot,
+                   tag: V.tag || '',
                    qty: q2, by: V.by, st: 'sub', need: !!V.need, insp: '', up: 0 };
       S.work.push(wrow);
       A.save();
@@ -936,7 +1061,9 @@
         return { kind: 'road', w: V.rw, no: V.rno, memo: V.rmemo, side: id,
                  f: SP.sta(sv.fk, sv.fm), t: SP.sta(sv.tk, sv.tm) };
       }).filter(function (x) { return x.w && x.no; });
+      if (needTag && !V.tag) return say('Enter marking / أدخل الترميز');
       var crow = { id: A.uid(), date: d, loc: g.loc, key: g.key, spot: g.spot,
+                   tag: V.tag || '',
                    spots: sps.length ? sps : null, teams: tm,
                    ppl: JSON.parse(JSON.stringify(V.ppl)), eq: JSON.parse(JSON.stringify(V.eq)),
                    by: V.by, st: 'sub', up: 0 };
@@ -961,6 +1088,8 @@
       var irow = {
         id: A.uid(), date: A.today(), loc: rows[0].loc, key: rows[0].key,
         spot: rows[0].spot,
+        /* ★표기도 물려받는다 — 검측은 실적을 그대로 올리는 것이다 */
+        tag: rows[0].tag || '',
         qty: qsum, st: 'apply', stAt: A.today(), at: A.nowISO(), reason: '',
         by: V.by, note: '', seq: 1, hist: [], up: 0,
         /* ★ 단계(stage)와 차수(seq)는 다르다. 섞으면 통계가 흐려진다 */
@@ -976,11 +1105,18 @@
       toServer('insp', irow);
       return;
     } else if (t === 'surv') {
-      var why = str('#vWhy'); if (!why) return say('Enter reason / أدخل السبب');
+      /* 「기타」면 직접 친 글을 먼저 거둔다 — 화면 상태에만 있으면
+         고르고 바로 제출할 때 빈 글이 저장된다. */
+      var wEl = $('#vWhy'); if (wEl) V.whyEtc = String(wEl.value || '').trim();
+      if (!V.why) return say('Select reason / اختر السبب');
+      var why = whyText();
+      if (!why) return say('Enter reason / أدخل السبب');
       var srow = { id: A.uid(), date: d, loc: g.loc, key: g.key, spot: g.spot,
                    why: why, by: V.by, done: false, at: A.nowISO(), up: 0 };
       S.surv.push(srow);
       A.save();
+      V.why = ''; V.whyEtc = '';        /* 같은 사유가 또 눌리는 것 방지 */
+      render();
       toServer('surv', srow);
       return;
     }

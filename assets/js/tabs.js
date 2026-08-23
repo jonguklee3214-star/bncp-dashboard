@@ -375,6 +375,10 @@
     if (!r.key) return null;
     base.key = r.key;
     base.spot = (r.spot === 0 || r.spot) ? r.spot : null;
+    /* ★표기(도면 라벨)도 받는다 (v2.26.0 · 요청 12·13).
+       ★보내는 쪽만 고치고 받는 쪽을 빠뜨리면 0-J와 똑같은 사고가 난다 —
+         내 PC에선 보이는데 다른 PC에선 통째로 비어 있게 된다. 짝으로 고친다. */
+    base.tag = r.tag || '';
 
     if (r.type === 'work') return { box: 'work', row: merge(base, { qty: +r.qty || 0, st: r.st || 'sub' }) };
 
@@ -471,6 +475,7 @@
     };
     if (e && e.spec) b.spec = e.spec;
     if (row.spot === 0 || row.spot) b.spot = row.spot;
+    if (row.tag) b.tag = row.tag;      /* 표기 — 관로·전기 계열의 위치다 */
     /* 구간(STA)도 협력업체 쪽과 같은 이름으로 실어 보낸다 */
     if (row.spot && row.spot.kind === 'road' && window.BNCP_SPOT) {
       b.road = window.BNCP_SPOT.roadName(row.spot);
@@ -2528,11 +2533,21 @@
     S.work.forEach(function (w) {
       if (w.st !== 'ok' || !A.locMatch(w, flt) || !A.inDate(w) || !A.inCo(w)) return;
       var e = A.item(w.key); if (!e) return;
+      /* ★관로·전기는 도로가 아니라 **표기(도면 라벨)** 가 위치다
+         (v2.26.0 · 요청 12·13). 둘은 배타적이라 한 줄에 같이 뜰 일이 없다. */
       var sp = (w.spot && w.spot.kind === 'road' && window.BNCP_SPOT)
-        ? window.BNCP_SPOT.label(w.spot) : '';
-      /* ★BNCP_SPOT.label은 앞에 ' · '를 이미 달고 나온다 — 또 붙이면
-         「Phase 3-1 ·  · STA」처럼 점이 겹친다. 그대로 이어 붙인다. */
-      var loc = A.locLabel(w.loc) + sp;
+        ? window.BNCP_SPOT.label(w.spot) : (w.tag || '');
+      /* ★2026-08-23 요청 2 진단 — 「Road/Station이 관리자 화면에 안 뜬다」는
+         **단순 표시 버그**였다. 입력 구조는 멀쩡했다. 협력업체가 올린
+         w.spot에는 {kind:'road', w, no, side, f, t}가 다 들어오고, 검측
+         그룹핑·상세보기·CSV·초과경고 — 다른 어디서도 문제없이 쓴다.
+         여기 딱 한 곳(A.locLabel(w.loc) + sp)만 구분자 없이 그냥 이어
+         붙여서 「Phase 3-118-2」처럼 위치코드와 도로명이 한 숫자로
+         읽혔다 — 관리자 눈에는 없는 것처럼 보였을 것이다.
+         ★아래 주석(label이 ' · '를 달고 나온다는 가정)이 틀렸다.
+         실제 SPOT.label()은 안 단다 — 다른 4곳은 맞게 ' · '+sp로 짰다.
+         → 3군(위치 입력체계 개편) 크기는 안 커진다. 저장 구조는 온전하다. */
+      var loc = A.locLabel(w.loc) + (sp ? ' · ' + sp : '');
       var k = w.key + '|' + loc;
       if (!m[k]) { m[k] = { e: e, loc: loc, qty: 0, n: 0, last: '', by: {} }; list.push(m[k]); }
       m[k].qty += Number(w.qty) || 0;
@@ -3991,7 +4006,7 @@
         if (w.st !== 'ok' || !A.locMatch(w, flt) || !A.inDate(w) || !A.inCo(w)) return;
         var e = A.item(w.key); if (!e) return;
         var sp = (w.spot && w.spot.kind === 'road' && window.BNCP_SPOT)
-          ? window.BNCP_SPOT.label(w.spot) : '';
+          ? window.BNCP_SPOT.label(w.spot) : (w.tag || '');   /* 표기도 내려받는다 */
         out.push([w.date, A.locLabel(w.loc), sp, e.code || w.key, A.trW(e.name), e.unit, w.qty, w.by || '']);
       });
       A.dl(T('sp_loc') + '.csv', A.toCSV(

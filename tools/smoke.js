@@ -1691,8 +1691,12 @@ console.log('\n[46] 설명문 일소 · 작업위치');
   {
     S.plan[A.locKey(bl)] = S.plan[A.locKey(bl)] || {};
     S.plan[A.locKey(bl)]['T-02'] = 500;
+    /* ★w·no를 반드시 넣는다 — 실제 협력업체 입력(vendor.js roadHTML)은
+       폭·번호 없이 저장되는 일이 없다. 이게 빠지면 SPOT.roadName()이
+       빈 문자열을 내놓아 label()이 우연히 ' · '로 시작해 버려서,
+       위치코드 뒤에 구분자를 또 붙이는 실제 버그(요청 2)를 못 잡는다. */
     S.work.push({ id: 'w46', date: A.today(), loc: bl, key: 'T-02', qty: 10, st: 'ok', by: 'LUU',
-                  spot: { kind: 'road', f: 0, t: 250 } });
+                  spot: { kind: 'road', w: '18', no: '2', side: 'L', f: 0, t: 250 } });
     A.setFlt(bl);
     Object.keys(A._roOpen).forEach(k => delete A._roOpen[k]);
     A.go(1);
@@ -1700,8 +1704,12 @@ console.log('\n[46] 설명문 일소 · 작업위치');
     ok(h.indexOf(A.T('sp_loc')) > 0, '★작업위치는 「작업위치」 표에 나온다');
     const i = h.indexOf(A.T('sp_loc'), h.indexOf(A.T('ro_out')));
     ok(h.slice(i, i + 3000).indexOf('Phase 3-1') > 0, 'Phase가 나온다');
-    ok(/STA/.test(h.slice(i, i + 3000)) || h.slice(i, i + 3000).indexOf('0+000') > 0,
+    ok(/STA/.test(h.slice(i, i + 3000)) || h.slice(i, i + 3000).indexOf('0+00') > 0,
        'STA 구간도 나온다');
+    /* ★★요청 2 (2026-08-23) — 위치코드와 도로명이 눌어붙지 않는다.
+       종전에는 「Phase 3-118-2」로 붙어 관리자 눈에 안 보이는 것처럼 읽혔다. */
+    ok(h.slice(i, i + 3000).indexOf('Phase 3-118-2') < 0,
+       '★★위치코드와 도로명이 안 눌어붙는다');
     S.work.pop();
   }
   A.go(1);
@@ -1715,9 +1723,10 @@ console.log('\n[47] 작업위치 — 표 하나로 독립');
   const bl = { s: 'civil', p: 3, c: 1 };
   A.setRole('admin'); S.lang = 'ko'; A.setFlt(bl);
   S.plan[A.locKey(bl)] = S.plan[A.locKey(bl)] || {}; S.plan[A.locKey(bl)]['T-02'] = 500;
-  /* ★작업량·작업위치는 기본이 오늘이다(v2.19.13) — 검사 자료도 오늘로 넣는다 */
+  /* ★작업량·작업위치는 기본이 오늘이다(v2.19.13) — 검사 자료도 오늘로 넣는다
+     ★w·no 포함 — 46-3과 같은 이유(실제 입력은 폭·번호가 반드시 있다) */
   S.work.push({ id: 'l1', date: A.today(), loc: bl, key: 'T-02', qty: 10, st: 'ok',
-                by: 'LUU', spot: { kind: 'road', f: 0, t: 250 } });
+                by: 'LUU', spot: { kind: 'road', w: '18', no: '2', side: 'L', f: 0, t: 250 } });
   S.work.push({ id: 'l2', date: A.today(), loc: bl, key: 'T-02', qty: 7, st: 'ok',
                 by: 'SHAKAAB', spot: null });
   A.go(1);
@@ -1727,9 +1736,16 @@ console.log('\n[47] 작업위치 — 표 하나로 독립');
   ok(i > h.indexOf(A.T('ro_out')), '★작업량 바로 밑이다');
   {
     const seg = h.slice(i, i + 4000);
-    ok(seg.indexOf('Phase 3-1 · STA 0+000~0+250') > 0, '★구간마다 한 줄');
-    ok(!/Phase 3-1 ·  · STA/.test(seg),
-       '★구분점이 겹치지 않는다 (BNCP_SPOT.label이 이미 · 를 달고 나온다)');
+    ok(seg.indexOf('Phase 3-1 · 18-2 · Left · STA 0+00~12+10') > 0, '★구간마다 한 줄');
+    /* ★★요청 2 (2026-08-23) — 위치코드와 도로명이 눌어붙지 않는다.
+       종전 코드는 label()이 ' · '로 시작한다고 잘못 가정해 구분자를
+       안 붙였다. 실제 label()은 안 달고 나오므로 「Phase 3-118-2」처럼
+       위치와 도로가 한 숫자로 읽혔다 — 그게 사용자가 「Road/Station이
+       관리자 화면에 안 뜬다」고 본 것이었다. */
+    ok(seg.indexOf('Phase 3-118-2') < 0,
+       '★★위치코드와 도로명이 안 눌어붙는다 (요청 2)');
+    ok(!/Phase 3-1 ·  · 18-2/.test(seg),
+       '★구분점이 겹치지도 않는다');
     ok(seg.indexOf('LUU') > 0 && seg.indexOf('SHAKAAB') > 0, '어느 업체가 했는지 나온다');
     ok(seg.indexOf('<td class="r sp">' + A.today() + '</td>') > 0, '마지막 작업일이 나온다');
   }
@@ -3530,10 +3546,17 @@ console.log('\n[59] 증분 수신 — 바뀐 것만');
             const csrc2 = fs.readFileSync(path.join(ROOT, 'assets/js/core.js'), 'utf8');
 
             /* 75-1 ★인원·장비 폼에 측점 칸이 붙었다 */
-            ok(/t === 'crew'\) return workHTML\(\) \+ roadHTML\(\)/.test(vsrc2),
-               '★인원·장비 폼에도 측점 칸이 있다');
-            ok(/t === 'work'\) return workHTML\(\) \+ roadHTML\(\)/.test(vsrc2),
-               '실적 폼은 그대로다');
+            /* ★v2.26.0 — roadHTML() 직접 호출이 placeHTML()로 바뀌었다.
+               placeHTML은 고른 공종군에 따라 **도로 칸 또는 표기 칸** 하나를
+               고른다(요청 12·13). 측점 칸이 사라진 것이 아니다.
+               ★실제 동작은 smoke_vendor의 [V-TAG]가 화면을 그려서 본다 —
+                 원문 검사만으로는 「그 갈래가 실제로 도는가」를 못 본다. */
+            ok(/t === 'crew'\) return workHTML\(\) \+ placeHTML\(\)/.test(vsrc2),
+               '★인원·장비 폼에도 위치 칸이 있다');
+            ok(/t === 'work'\) return workHTML\(\) \+ placeHTML\(\)/.test(vsrc2),
+               '실적 폼도 같은 자리다');
+            ok(/needTag\(V\.s, V\.grp\) \? tagHTML\(\) : roadHTML\(\)/.test(vsrc2),
+               '★표기 공종이면 표기 칸, 아니면 종전대로 도로·측점 칸');
 
             /* 75-2 ★행은 하나 · 측점은 여럿 — 쪼개면 인원이 중복 계상된다 */
             ok(/spots: sps\.length \? sps : null/.test(vsrc2),
@@ -3877,6 +3900,34 @@ console.log('\n[59] 증분 수신 — 바뀐 것만');
              '★ar은 건드리지 않았다 (3-C)');
 
           S.surv = save89; S.mreq = []; A.go(1);
+        }
+
+        /* ── 90 작업위치 표 — 도로명이 위치코드에 안 눌어붙는다 (v2.24.2 · 요청 2) ── */
+        console.log('\n[90] 작업위치 표 — Road/Station 구분자 (요청 2 진단)');
+        {
+          const bl90 = { s: 'civil', p: 3, c: 1 };
+          A.setFlt(bl90);
+          const saveW90 = S.work;
+          S.work = [
+            { id: 'w90a', date: A.today(), loc: bl90, key: 'T-01', qty: 10, st: 'ok', by: 'LUU',
+              spot: { kind: 'road', w: '18', no: '2', memo: '', side: 'L', f: 0, t: 250 } },
+            { id: 'w90b', date: A.today(), loc: bl90, key: 'T-01', qty: 5, st: 'ok', by: 'LUU', spot: null }
+          ];
+          A.setRole('admin'); A.go(1);
+          const h90 = bag.view.innerHTML;
+
+          /* ★핵심 — 위치코드와 도로명이 붙어 「3-118-2」로 읽히면 안 된다.
+             종전 버그를 재현하려면 이 줄이 바뀌기 전 코드로는 실패해야 한다. */
+          ok(h90.indexOf('Phase 3-118-2') < 0,
+             '★★위치코드와 도로명이 안 눌어붙는다 (Phase 3-118-2 금지)');
+          ok(h90.indexOf('Phase 3-1 · 18-2 · Left · STA 0+00~12+10') >= 0,
+             '★★구분자를 넣어 「위치 · 도로 · 쪽 · STA」로 읽힌다');
+
+          /* spot이 없는 줄은 뒤에 군더더기 ' · '가 남지 않는다 */
+          ok(!/Phase 3-1\s*·\s*<\/td>/.test(h90) && h90.indexOf('Phase 3-1</td>') >= 0,
+             'spot 없는 줄은 위치코드만 깔끔하게 뜬다');
+
+          S.work = saveW90; A.go(1);
         }
 
         /* ── 84 서버 용량 계기판 (v2.22.5 · 0-Z-4) ── */
