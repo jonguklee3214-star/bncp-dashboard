@@ -314,19 +314,44 @@
          : r.s === 'anc'   ? { s: 'anc', t: r.t, b: +r.b } : null;
   }
 
+  /* ★검사에서 직접 돌리려고 내보낸다. 글자 대조만으로는 「갈래가 있다」까지만
+     알 수 있고 「그 갈래가 실제로 도는가」는 못 본다 — 0-J가 바로 그 함정이었다. */
   function unpack(r) {
     if (!r || !r.id) return null;
     var loc = rxLoc(r);
     if (!loc) return null;
     var base = { id: r.id, date: r.date, loc: loc, by: r.by || '', up: 1 };
 
+    /* ★자재 신청 수신 — 갈래는 **하나뿐이어야 한다** (v2.22.4에서 합쳤다).
+       v2.20.0에서 결재 단계를 담은 갈래를 아래쪽에 새로 넣었는데, 위쪽에
+       이미 있던 갈래가 `return`으로 끊어 **아래것이 영영 안 돌았다.**
+       그래서 `fst`·`fat`·`fby`·`fwhy`·`okS`·`okV`가 받을 때 **통째로 버려졌다** —
+       스탭이 검토·확인한 자재 신청이 다른 PC에서는 안 눌린 채로 보였다.
+       결재는 여러 사람이 이어서 누르는 것이라 이대로면 흐름이 성립하지 않는다.
+       ★보내는 쪽(485행)은 처음부터 그 칸들을 보내고 있었다. 받는 쪽만 못 받았다.
+       ★자재는 공종코드(key)가 없다 — 아래 `if (!r.key) return null`보다
+         **위에** 있어야 한다. 밑에 두면 전부 걸러진다.
+       ★`if (!r.mat) return null`은 그대로 둔다. 자재명이 없으면 화면에서
+         이름 없는 줄이 되어 손을 댈 수가 없다. (시트의 그런 줄은 0-L) */
     if (r.type === 'mat') {
-      if (!r.mat) return null;
+      if (!r.mat && !r.name) return null;
       return { box: 'mreq', row: merge(base, {
-        grp: r.grp, sub: r.sub, mat: r.mat, spec: r.spec || '', unit: r.unit || '',
-        plant: !!r.plant, qty: +r.qty || 0, st: r.st || 'req', reqAt: r.date || '',
-        apvBy: '', apvAt: '', denyWhy: '', plantReqAt: '',
-        iss: null, issAt: '', noissWhy: '', use: null, useAt: '' }) };
+        grp: r.grp || '', sub: r.sub || '', mat: r.mat || r.name || '',
+        spec: r.spec || '', unit: r.unit || '', plant: !!r.plant,
+        qty: +r.qty || 0, st: r.st || 'req',
+        /* 결재 단계 — ★이 여섯이 v2.20.0부터 유실되고 있던 것이다 */
+        fst: r.fst || '', fat: r.fat || '', fby: r.fby || '', fwhy: r.fwhy || '',
+        okS: r.okS ? 1 : 0, okV: r.okV ? 1 : 0,
+        /* 신청·지급 이력 — 위쪽 갈래에만 있던 칸이다. 빠뜨리면 addMreq가
+           만드는 줄과 모양이 달라져, 화면이 없는 칸을 읽게 된다. */
+        reqAt: r.reqAt || r.date || '',
+        apvBy: r.apvBy || '', apvAt: r.apvAt || '', denyWhy: r.denyWhy || '',
+        plantReqAt: r.plantReqAt || '',
+        iss: (r.iss == null || r.iss === '') ? null : +r.iss,
+        issAt: r.issAt || '', noissWhy: r.noissWhy || '',
+        use: (r.use == null || r.use === '') ? null : +r.use,
+        useAt: r.useAt || '',
+        hist: [] }) };
     }
 
     /* ★설계량 (v2.18.4) — S.plan은 배열이 아니라 {위치키:{공종코드:수량}}이라
@@ -346,21 +371,6 @@
       task: r.name || '', teams: +r.teams || 0,
       ppl: r.ppl || { eng: 0, fmn: 0, wkr: 0 }, eq: r.eq || [],
       note: r.note || '', st: r.st || 'sub' }) };
-
-    /* ★자재 신청 수신 — 종전에는 이 갈래가 **아예 없었다** (v2.20.0에서 발견).
-       box 표에는 mreq가 있는데 unpack에 갈래가 없어, 협력업체가 올린 자재
-       신청이 다른 PC로는 영영 안 갔다. 결재 흐름은 여러 사람이 이어서
-       누르는 것이라 이대로면 성립하지 않는다.
-       ★자재는 공종코드(key)가 없다 — 아래 `if (!r.key) return null`보다
-         **위에** 있어야 한다. 밑에 두면 전부 걸러진다. */
-    if (r.type === 'mat') return { box: 'mreq', row: merge(base, {
-      grp: r.grp || '', sub: r.sub || '', mat: r.mat || r.name || '',
-      spec: r.spec || '', unit: r.unit || '', plant: !!r.plant,
-      qty: +r.qty || 0, st: r.st || 'req',
-      iss: (r.iss == null || r.iss === '') ? null : +r.iss,
-      fst: r.fst || '', fat: r.fat || '', fby: r.fby || '', fwhy: r.fwhy || '',
-      okS: r.okS ? 1 : 0, okV: r.okV ? 1 : 0,
-      hist: [] }) };
 
     if (!r.key) return null;
     base.key = r.key;
@@ -501,6 +511,8 @@
        들어온 줄만 받는다.
      ★force=true면 처음부터 다시 받는다 — 저장소를 비웠거나 자료가
        어긋났을 때 쓴다. */
+  A._unpack = unpack;
+
   function syncNow(quiet, force) {
     var api = window.BNCP_API;
     if (!api || syncing) return;
@@ -650,6 +662,10 @@
       { id: 'plan', t: T('sp_plan'), n: lastPlan ? nf(lastPlan) + T('u_ea') : T('sp_none') },
       { id: 'eqgv', t: T('sp_eq'), n: eqGivenN() ? nf(eqGivenN()) + T('u_unitq') : T('sp_none') },
       { id: 'vend', t: T('vd_t'), n: S.vend.length ? nf(S.vend.length) + T('u_co') : T('sp_none') },
+      /* ★우리 스탭 — 협력업체 명부 바로 뒤다. 둘은 다른 명부이나 성격이 붙어 있다 */
+      { id: 'stff', t: T('st_t'), n: S.staff.length
+          ? nf(S.staff.length) + T('u_person') + (A.me() ? ' · ' + A.me().name : '')
+          : T('sp_none') },
       { id: 'sync', t: T('sync_t'), n: syncLabel() },
       { id: 'cap', t: T('cap_t'), n: A.usage().pct + '%' }
     ];
@@ -665,6 +681,7 @@
     if (setupTab === 'plan') body = planPanel();
     else if (setupTab === 'eqgv') body = eqGvPanel();
     else if (setupTab === 'vend') body = vendPanel();
+    else if (setupTab === 'stff') body = staffPanel();
     else if (setupTab === 'sync') body = syncPanel();
     else if (setupTab === 'cap') body = capPanel();
 
@@ -743,10 +760,38 @@
       '<div class="hint" style="margin-top:8px">' +
       T('cap_n').replace('{d}', A.KEEP_DAYS) + '</div>' +
       (S.trimMsg ? '<div class="alert alert--o" style="margin-top:10px">' + esc(S.trimMsg) + '</div>' : '') +
+      srvCapHTML() +
       '<div class="f-row f-row--sm" style="margin-top:10px">' +
       '<div class="btns"><button class="btn btn--g btn--sm" id="capTrim">' +
       T('cap_trim').replace('{d}', A.KEEP_DAYS) + '</button></div></div>' +
       '<div id="capMsg" class="hint"></div>';
+  }
+
+  /* ★서버 용량 계기판 (v2.22.5 · 0-Z-4).
+     ★위의 것은 **이 기기**의 저장 용량이고, 이것은 **구글 시트**의 용량이다.
+       둘은 전혀 다른 한도다 — 기기는 5MB, 시트는 셀 1,000만 개다.
+     ★사용자 물음 : 「용량이 80% 찰 경우 경고하고 파일 추가하는 거 가능하겠어?」
+       경고는 여기서 한다. **파일 추가는 아직 안 만들었다** — 12열 기준 약 83만
+       줄이라, 하루 100줄이면 22년·500줄이라도 4년이 걸린다. 필요해지는 때를
+       이 숫자가 알려준다. 그때 0-Z-4의 나머지를 만들면 된다.
+     ★서버와 통신한 적이 없으면 아무것도 안 그린다 — 모르는 것을 0%로
+       보여주면 안 찼다고 오해한다. */
+  function srvCapHTML() {
+    var c = (window.BNCP_API && window.BNCP_API.cap) || null;
+    if (!c || c.pct == null) return '';
+    var cls = c.pct >= 80 ? ' cap--d' : (c.pct >= 60 ? ' cap--w' : '');
+    return '<div style="margin-top:14px">' +
+      '<div class="hint" style="margin-bottom:6px"><b>' + T('scap_t') + '</b></div>' +
+      '<div class="cap' + cls + '">' +
+      '<div class="cap__b"><i style="width:' + Math.max(c.pct, 1) + '%"></i></div>' +
+      '<div class="cap__t"><b>' + c.pct + '%</b> ' +
+      '<span class="sp">' + T('scap_n')
+        .replace('{r}', nf(c.rows || 0)).replace('{c}', nf(c.cells || 0)) + '</span>' +
+      '</div></div>' +
+      (c.pct >= 80
+        ? '<div class="alert alert--o" style="margin-top:10px">' + T('scap_w') + '</div>'
+        : '<div class="hint" style="margin-top:8px">' + T('scap_h') + '</div>') +
+      '</div>';
   }
 
   function planPanel() {
@@ -858,6 +903,90 @@
        업체가 둘로 갈라진다. 이제 업체는 한 번 만들고, 담당자는 **골라 붙인다.**
      ★전화번호는 담당자마다 따로다 — 독촉이 **사람에게** 가야 한다.
        대표번호로만 보내면 누가 처리할지 모른 채 업체 안에서 돌기만 한다. */
+  /* ══ 우리 스탭 명부 (v2.23.0) ═══════════════════════════
+     사용자 확정 : 공종그룹 단위(토공·우수공·오수공…) · 이름+전화 ·
+                   「내 차례」에 걸리게 · **중복지정 가능**
+     ★협력업체 명부와 **다른 것**이다. 저쪽은 업체 직원, 이쪽은 우리 직원이다. */
+  var stEdit = null;                      /* 고치는 중인 스탭 id */
+
+  function staffPanel() {
+    var ed = stEdit ? A.staffById(stEdit) : null;
+    if (stEdit && !ed) stEdit = null;
+    var grps = A.staffGrps();
+
+    /* ── 나는 누구 ─────────────────────────────────────
+       ★로그인은 역할로만 되어 있어 사람을 못 가린다. 기기가 기억한다. */
+    var me = A.me();
+    var h = '<div class="hint" style="margin-bottom:6px"><b>' + T('st_me') + '</b> — ' +
+      T('st_me_n') + '</div>' +
+      '<div class="f-row">' +
+      fld(T('st_me'), '<select class="in" id="stMe"><option value="">' + T('st_me_no') + '</option>' +
+        S.staff.map(function (m) {
+          return '<option value="' + esc(m.id) + '"' + (me && me.id === m.id ? ' selected' : '') +
+            '>' + esc(m.name) + '</option>';
+        }).join('') + '</select>') +
+      '</div>' +
+      (me && !(me.grps || []).length
+        ? '<div class="hint">' + T('st_me_nogrp') + '</div>'
+        : '') +
+      '<div class="sb__sp" style="margin:14px 0"></div>';
+
+    /* ── 명부 넣기 ─────────────────────────────────── */
+    h += '<div class="hint" style="margin-bottom:6px"><b>' + T('st_add') + '</b> — ' + T('st_add_n') +
+      (ed ? ' <span class="bd bd--o">' + T('vd_editing') + ': ' + esc(ed.name) + '</span>' : '') +
+      '</div>' +
+      '<div class="f-row">' +
+      fld(T('st_name'), '<input class="in" id="stName" placeholder="Kim" value="' +
+        (ed ? esc(ed.name) : '') + '">') +
+      fld(T('st_tel'), '<input class="in" id="stTel" placeholder="821000000000" value="' +
+        (ed ? esc(ed.tel) : '') + '">') +
+      '</div>' +
+      /* ★그룹은 여러 개를 고른다 — 한 사람이 토공·우수공을 같이 맡는 일이 흔하다 */
+      '<div class="hint" style="margin:8px 0 6px"><b>' + T('st_grps') + '</b> — ' + T('st_grps_n') + '</div>' +
+      '<div class="btns">' + grps.map(function (g) {
+        var on = ed && (ed.grps || []).indexOf(g) >= 0;
+        return '<label class="btn btn--g btn--sm' + (on ? ' btn--o' : '') + '">' +
+          '<input type="checkbox" data-stg="' + esc(g) + '"' + (on ? ' checked' : '') +
+          ' style="margin-right:6px">' + esc(A.trW(g)) + '</label>';
+      }).join('') + '</div>' +
+      '<div class="btns" style="margin-top:10px">' +
+      '<button class="btn" id="stAdd">' + T(ed ? 'st_save' : 'st_mk') + '</button>' +
+      (ed ? ' <button class="btn btn--g" id="stCancel">' + T('vd_cancel') + '</button>' : '') +
+      '</div>';
+
+    /* ── 명부 표 ───────────────────────────────────── */
+    h += '<div class="sb__sp" style="margin:14px 0"></div>';
+    if (!S.staff.length) {
+      h += '<div class="hint">' + T('st_none') + '</div>';
+      return h;
+    }
+    h += '<div class="tw"><table><thead><tr>' +
+      '<th>' + T('st_name') + '</th><th>' + T('st_tel') + '</th>' +
+      '<th>' + T('st_grps') + '</th><th class="noprint">' + T('th_act') + '</th>' +
+      '</tr></thead><tbody>' +
+      S.staff.map(function (m) {
+        var gl = (m.grps || []);
+        return '<tr><td><b class="nm">' + esc(m.name) + '</b>' +
+          (me && me.id === m.id ? ' <span class="bd bd--o">' + T('st_isme') + '</span>' : '') + '</td>' +
+          '<td class="sp">' + (m.tel ? esc(m.tel) : '<span class="sp">—</span>') + '</td>' +
+          '<td>' + (gl.length
+            ? gl.map(function (g) { return '<span class="bd">' + esc(A.trW(g)) + '</span>'; }).join(' ')
+            : '<span class="sp">' + T('st_nogrp') + '</span>') + '</td>' +
+          '<td class="c noprint">' +
+          '<button class="btn btn--g btn--sm" data-sted="' + esc(m.id) + '">' + T('edit') + '</button> ' +
+          '<button class="btn btn--g btn--sm" data-stdel="' + esc(m.id) + '">' + T('del') + '</button>' +
+          '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+
+    /* ★담당이 아무도 없는 그룹을 알려준다 — 주인 없는 일은 아무도 안 한다 */
+    var orphan = grps.filter(function (g) { return !A.staffOf(g).length; });
+    if (orphan.length) {
+      h += '<div class="hint" style="margin-top:10px">' + T('st_orphan')
+        .replace('{n}', nf(orphan.length)) + '</div>';
+    }
+    return h;
+  }
+
   function vendPanel() {
     var ed = vdEdit, edV = null, edQ = null;
     if (ed) {
@@ -956,6 +1085,30 @@
       };
     });
     /* 1단계 — 업체만 만든다 */
+    /* ── 우리 스탭 명부 (v2.23.0) ─────────────────────── */
+    if ($('#stMe')) $('#stMe').onchange = function () { A.setMe(this.value); A.render(); };
+    if ($('#stAdd')) $('#stAdd').onclick = function () {
+      /* 고른 공종그룹을 모은다 — 여럿이어도 되고 하나도 없어도 된다 */
+      var gs = [];
+      $$('[data-stg]').forEach(function (c) { if (c.checked) gs.push(c.dataset.stg); });
+      var nm = val('#stName'), tel = val('#stTel');
+      var r = stEdit ? A.staffUpd(stEdit, { name: nm, tel: tel, grps: gs })
+                     : A.staffAdd({ name: nm, tel: tel, grps: gs });
+      if (!r) { alert(T('st_need')); return; }   /* ★이름이 없으면 안 만든다 */
+      stEdit = null; A.render();
+    };
+    if ($('#stCancel')) $('#stCancel').onclick = function () { stEdit = null; A.render(); };
+    $$('[data-sted]').forEach(function (b) {
+      b.onclick = function () { stEdit = b.dataset.sted; A.render(); };
+    });
+    $$('[data-stdel]').forEach(function (b) {
+      b.onclick = function () {
+        var m = A.staffById(b.dataset.stdel); if (!m) return;
+        if (!confirm(T('st_del_c').replace('{n}', m.name))) return;
+        A.staffDel(b.dataset.stdel); stEdit = null; A.render();
+      };
+    });
+
     if ($('#vdMk')) $('#vdMk').onclick = function () {
       var r = A.vendCreate(val('#vdCode'), val('#vdName'));
       if (!r.ok) { say('#vdMsg', T('vd_need'), false); return; }
@@ -2633,6 +2786,11 @@
      ══════════════════════════════════════════════════ */
   var IST = { apply: ['i_apply', 'bd'], ready: ['i_ready', 'bd bd--k'], sub: ['i_sub', 'bd bd--k'],
               pass: ['i_pass', 'bd bd--ok'], fail: ['i_fail', 'bd bd--d'], delay: ['i_delay', 'bd bd--o'] };
+  /* ★검측 「처리완료」 칸을 펼쳤는가 (v2.24.0 · 요청 10).
+     기본은 접힘이다. 화면 상태일 뿐이므로 저장하지 않는다 — 새로 열면
+     다시 접힌다. 끝난 것이 매번 펼쳐진 채로 뜨면 가른 뜻이 없다. */
+  var iDone = false;
+
   function v2() {
     var list = A.inspList(flt);
     var h = '<div class="alert alert--o"><b>' + T('i_rule') + '</b>' +
@@ -2646,13 +2804,37 @@
       }).join('') + '</div>';
 
     /* ★날짜별 조회 (v2.19.0 사용자 지시). 기본은 오늘이고, 미처리는
-       날짜와 무관하게 늘 뜬다(inspList 규칙). 기간을 넓히면 지난 것도 본다. */
-    h += card(T('h_inspq'), nf(list.length) + T('u_case'),
-        withRng('insp', function () {
-          var L = A.inspList(flt);
-          return L.length ? inspTable(L) : empty(T('z_noreq'), T('z_fromvendor'));
-        }), 'flush',
-        rngBtn('insp') + '<button class="btn btn--g btn--sm noprint" id="iCsv">' + T('csv') + '</button>');
+       날짜와 무관하게 늘 뜬다(inspList 규칙). 기간을 넓히면 지난 것도 본다.
+       ★v2.24.0 (현장 요청 10) — 표를 **미처리 / 처리완료 둘로 가른다.**
+         종전에는 한 표에 섞여 있고 합격이 맨 아래로 밀려 있을 뿐이라,
+         날이 갈수록 끝난 줄이 쌓여 오늘 손댈 것을 찾는 데 스크롤이 필요했다.
+       ★처리완료는 **기본이 접힘**이다. 끝난 것은 평소에 볼 일이 없다.
+       ★목록은 **한 번만** 구해서 가른다 — withRng를 두 번 부르면 그 사이에
+         기간이 바뀔 여지가 생기고, 같은 계산을 두 번 하게 된다.
+       ★기간 단추는 **처리완료 쪽**에 둔다. 미처리는 inspList 규칙상 날짜와
+         무관하게 늘 뜨므로, 미처리 카드 머리에 붙여 두면 눌러도 아무 일이
+         안 일어나는 단추가 된다(4-C).
+       ★카드 머리는 접혀 있어도 보인다 — 그래서 접은 채로도 기간을 고를 수 있다. */
+    var L = withRng('insp', function () { return A.inspList(flt); });
+    var iOpen = L.filter(function (r) { return r.st !== 'pass'; });
+    var iDoneL = L.filter(function (r) { return r.st === 'pass'; });
+
+    h += '<div style="margin-bottom:16px">' +
+      card(T('s_open'), nf(iOpen.length) + T('u_case'),
+        iOpen.length ? inspTable(iOpen) : empty(T('z_noreq'), T('z_fromvendor')), 'flush',
+        '<button class="btn btn--g btn--sm noprint" id="iCsv">' + T('csv') + '</button>') +
+      '</div>';
+
+    /* ★제목은 `i_done_t`(처리완료)다. KPI가 쓰는 `s_done`은 「처리」 한 마디라
+       카드 제목으로는 무엇이 처리됐다는 것인지 읽히지 않는다. */
+    h += card(T('i_done_t'), nf(iDoneL.length) + T('u_case'),
+        iDone
+          ? (iDoneL.length ? inspTable(iDoneL) : empty(T('z_noreq'), T('z_fromvendor')))
+          : '',
+        'flush',
+        rngBtn('insp') +
+        '<button class="btn btn--g btn--sm noprint" data-idone="1">' +
+        T(iDone ? 'i_dhide' : 'i_dshow') + '</button>');
     return h;
   }
   function inspTable(list) {
@@ -2781,9 +2963,27 @@
 
   /** ★「내 차례」 카드 — 역할이 무엇이든 이 카드부터 본다.
       단계가 다섯이어도 각자에겐 한 줄이다. */
-  function mineCard() {
-    var list = A.flowMineList(flt);
+  /* ★kinds — 이 탭에서 볼 「내 차례」 종류. 안 주면 전부(작업현황 탭).
+     v2.23.0 — 측량 탭에 자재가 섞여 나오던 것을 여기서 가른다. */
+  /** ★지금 누구 손에 걸려 있는가 (v2.24.1 · 요청 11).
+      「내 차례」가 0건일 때 종전에는 「내 차례인 것 없음」 한 줄뿐이었다.
+      관리자 화면에서 특히 문제였다 — 업체가 올린 요청은 **스탭 확인**이
+      먼저라 관리자 차례가 아니고, 그래서 화면이 통째로 비어 보였다.
+      「들어오긴 했는데 지금 어디서 멈춰 있는지」를 알 길이 없었다.
+      → 빈 칸에 **누구 앞에 몇 건**인지를 적는다. 관리자는 그것을 보고
+        스탭에게 말하거나, 아래 표에서 직접 확인한다. */
+  function fWhoWait(a) {
+    var t = ['staff', 'admin', 'surv', 'vendor'].filter(function (k) { return a.byOwn[k]; })
+      .map(function (k) { return T('fl_own_' + k) + ' ' + nf(a.byOwn[k]) + T('u_case'); })
+      .join(' · ');
+    return t ? T('fl_wait_who') + ' — ' + t : T('fl_mine_n');
+  }
+
+  function mineCard(kinds) {
+    var list = A.flowMineList(flt, null, null, kinds);
     var late = list.filter(function (x) { return x.late; });
+    /* ★`a`를 body보다 **먼저** 구한다 — 빈 칸 문구가 이 값을 쓴다. */
+    var a = A.flowWarn(flt, null, kinds);
     var h = '';
     if (late.length) h += '<div class="alert alert--d"><b>' + nf(late.length) + T('u_case') + ' ' +
       T('fl_due_t') + '</b><span class="sp">' + T('fl_late_n') + '</span></div>';
@@ -2800,10 +3000,9 @@
             '<td>' + fWhat(x.kind, r) + '</td>' +
             '<td class="c noprint">' + fBtns(x.kind, r) + '</td></tr>';
         }).join('') + '</tbody></table></div>'
-      : empty(T('fl_none'), T('fl_mine_n'));
+      : empty(T('fl_none'), fWhoWait(a));
     /* ★지급받고도 서로 확인이 안 된 것은 따로 알린다 — 지급은 끝났는데
        확인이 안 걸려 있으면 나중에 「받은 적 없다」가 된다. */
-    var a = A.flowWarn(flt);
     if (a.recv) h += '<div class="alert alert--o"><b>' + nf(a.recv) + T('u_case') + ' ' +
       T('fl_recv') + '</b><span class="sp">' + T('fl_dual_n') + '</span></div>';
     return h + '<div style="margin-bottom:16px">' +
@@ -2818,7 +3017,7 @@
      ★측량팀에게는 「내 차례」 카드 하나만 보인다. 전체 표를 주면
        남의 단계까지 눌러 보게 된다. */
   function v3() {
-    if (A.isSurv()) return mineCard();
+    if (A.isSurv()) return mineCard(['surv']);
 
     /* ★v2.22.2 — 종전에는 기간 단추가 **없었다.** RNG_DEF에 surv가 있는데도
        화면에 그리는 곳도, withRng로 감싸는 곳도 없어 A.dateFlt가 늘 비었다.
@@ -2827,13 +3026,23 @@
     var list = withRng('surv', function () { return A.survList(flt); });
     var open = list.filter(function (r) { return !A.flowEnd('surv', r); });
     var late = list.filter(function (r) { return A.flowLate('surv', r); });
-    var h = '<div class="grid g4" style="margin-bottom:16px">' +
+    /* ★흐름 안내 띠 (v2.24.1 · 요청 11 — 사용자 지적)
+       「측량이 어디로 들어오는데, 들어와서 어디에서 처리를 해야 되는지가 없다」
+       ★검측 탭(v2)에는 종전부터 이 띠가 있었다. **측량 탭에만 없었다.**
+         그래서 요청이 협력업체 화면에서 들어온다는 것도, 내 앞 단계가
+         무엇인지도 화면에서 읽을 수 없었다.
+       ★t3d 같은 탭 부제는 v2.17.8에서 없앤 것이다 — 되살리지 않는다.
+         이것은 부제가 아니라 **흐름 한 줄**이고, 검측 탭과 짝을 맞춘 것이다. */
+    var h = '<div class="alert alert--o"><b>' + T('h_survin') + '</b>' +
+      '<span class="sp">' + T('h_survflow') + '</span></div>';
+
+    h += '<div class="grid g4" style="margin-bottom:16px">' +
       kpi('', T('total'), nf(list.length), T('u_case'), '') +
       kpi(open.length ? 'kpi--warn' : '', T('s_open'), nf(open.length), T('u_case'), '') +
       kpi('kpi--lead', T('s_done'), nf(list.length - open.length), T('u_case'), '') +
       kpi(late.length ? 'kpi--warn' : '', T('fl_due_t'), nf(late.length), T('u_case'), '') + '</div>';
 
-    h += mineCard();
+    h += mineCard(['surv']);
     h += card(T('h_survq'), nf(list.length) + T('u_case'),
         list.length ? survTable(list) : empty(T('z_noreq2'), T('z_fromvendor')), 'flush',
         rngBtn('surv') + '<button class="btn btn--g btn--sm noprint" id="sCsv">' + T('csv') + '</button>');
@@ -2879,7 +3088,7 @@
   function v4() {
     if (MAT_FLOW_ON) return v4Full();
     var rows = A.matRows(flt);
-    var h = mineCard();          /* ★내 차례부터 — 아래 표는 전체다 */
+    var h = mineCard(['mat']);   /* ★자재 탭이니 자재만 (v2.23.0) */
     if (!rows.length) {
       return h + card(T('t4'), esc(fltLabel()),
         empty(T('z_nomat'), T('z_nomat_n')) + matAddHTML(), 'flush', rngBtn('mat'));
@@ -2896,7 +3105,10 @@
       '<th class="noprint">' + T('th_act') + '</th></tr></thead><tbody>' +
       rows.map(function (a) {
         var gap = a.design ? a.iss - a.design : null;
-        return '<tr><td><b class="code">' + esc(A.locShort(pkLoc('w'))) + '</b></td>' +
+        /* ★v2.22.3 — 종전에는 `pkLoc('w')`(화면 선택기 위치)를 찍었다.
+           어느 줄이든 선택기 값으로 보여, 시트가 Phase 3-1인데 화면은 P1-1이었다.
+           이제 표가 위치별로 갈리므로 **그 줄의 위치**를 찍는다. */
+        return '<tr><td><b class="code">' + esc(A.locShort(a.loc)) + '</b></td>' +
           '<td><span class="sp">' + esc(A.trM(a.grp)) + ' › ' + esc(A.trM(a.sub)) + '</span><br>' +
           '<b class="nm">' + esc(A.trM(a.mat)) + '</b>' +
           (a.spec ? ' <span class="sp">' + esc(A.trS(a.spec)) + '</span>' : '') +
@@ -2908,7 +3120,8 @@
              여기만 차 있다. 스탭이 가장 먼저 봐야 할 칸이다. */
           '<td class="r">' + (a.req ? '<span class="bd bd--o">' + nf(a.req, 2) + '</span>' : '<span class="sp">·</span>') + '</td>' +
           '<td class="r"><input class="in num mt__q" type="number" step="0.01" ' +
-            'data-mst="' + esc(a.id) + '" value="' + (a.stock == null ? '' : nf(a.stock, 2)) + '"></td>' +
+            'data-mst="' + esc(a.id) + '" data-mstl="' + esc(A.locKey(a.loc)) +
+            '" value="' + (a.stock == null ? '' : nf(a.stock, 2)) + '"></td>' +
           '<td class="r em">' + nf(a.iss, 2) + '</td>' +
           '<td class="r">' + (gap == null ? '<span class="sp">—</span>'
             : '<span class="' + (gap > 0 ? 'bd bd--d' : 'sp') + '">' + (gap > 0 ? '+' : '') + nf(gap, 2) + '</span>') +
@@ -3544,6 +3757,29 @@
        그것은 가로 띠로 돌아간다는 뜻이고, 그러면 덮는 문제도 같이 돌아온다. */
   A.go = function (i) { cur = i; S.tab = i; A.save(); A.render(); window.scrollTo(0, 0); };
   A.sync = function (quiet) { syncNow(quiet !== false); };   // 화면 진입 시 1회 수신
+
+  /* ★자동 수신 (v2.23.0 · 요청 8) — 1분마다 서버를 확인한다.
+     사용자 확정 : 「1분마다 · 바뀜 게 있으면 자동으로 바로 받는다」
+     ★어느 탭에 있든 돈다. 종전에는 화면 열 때 한 번뿐이라, 검측·측량 탭을
+       보고 있으면 새 자료가 올라와도 몰랐다.
+     ★syncNow는 quiet=true로 부른다 — 자동 수신이 화면을 시끄럽게 흔들면 안 된다.
+       바뀐 게 없으면 meta(수십 바이트)만 오가고 끝난다.
+     ★syncing이면 건너뛴다(syncNow 안에서 막지만, 타이머가 헛불리는 것도 막는다).
+     ★한 번만 건다 — 여러 번 걸면 같은 수신이 겹친다. */
+  var autoSyncTimer = null;
+  A.AUTO_SYNC_MS = 60000;
+  A.startAutoSync = function () {
+    if (autoSyncTimer) return;
+    autoSyncTimer = setInterval(function () {
+      if (!window.BNCP_API || syncing) return;
+      if (typeof document !== 'undefined' && document.hidden) return;  /* 안 보는 탭이면 쉰다 */
+      syncNow(true);
+    }, A.AUTO_SYNC_MS);
+  };
+  A.stopAutoSync = function () {
+    if (autoSyncTimer) { clearInterval(autoSyncTimer); autoSyncTimer = null; }
+  };
+
   A.flt = function () { return flt; };
   A.setFlt = function (o) { for (var k in o) flt[k] = o[k]; A.render(); };
 
@@ -3726,14 +3962,19 @@
       A.save(); A.render();
     };
     $$('[data-mst]').forEach(function (el) {
-      el.onchange = function () { A.setStock(flt, el.dataset.mst, el.value); A.render(); };
+      /* ★v2.22.3 — 종전에는 필터(flt)에 저장했다. 표가 위치별로 갈린 지금
+         그러면 P3-1 줄에 넣은 재고가 필터 위치에 들어간다. 그 줄의 위치에 넣는다. */
+      el.onchange = function () {
+        A.setStock(A.keyLoc(el.dataset.mstl) || flt, el.dataset.mst, el.value);
+        A.render();
+      };
     });
     if ($('#mtCsv')) $('#mtCsv').onclick = function () {
       A.dl(T('t4') + '.csv', A.toCSV(
-        [T('c_grp'), T('c_sub'), T('c_mat'), T('c_spec'), T('c_unit'),
+        [T('u_sec'), T('c_grp'), T('c_sub'), T('c_mat'), T('c_spec'), T('c_unit'),
          T('sp_plan'), T('m_req'), T('m_stock'), T('m_iss')],
         A.matRows(flt).map(function (a) {
-          return [a.grp, a.sub, a.mat, a.spec, a.unit, a.design, a.req,
+          return [A.locShort(a.loc), a.grp, a.sub, a.mat, a.spec, a.unit, a.design, a.req,
                   a.stock == null ? '' : a.stock, a.iss];
         })));
     };
@@ -4009,6 +4250,10 @@
                     by: val('#iBy'), note: val('#iNote'), seq: 1, hist: [] });
       A.save(); A.render();
     };
+    /* ★처리완료 펼치기/접기 (v2.24.0 · 요청 10) */
+    $$('[data-idone]').forEach(function (b) {
+      b.onclick = function () { iDone = !iDone; A.render(); };
+    });
     $$('[data-iready]').forEach(function (b) {
       b.onclick = function () { txBack('insp', A.setInsp(b.dataset.iready, 'ready')); A.render(); };
     });

@@ -16,6 +16,10 @@ function Sheet(name) {
 Sheet.prototype.getName = function () { return this._n; };
 Sheet.prototype.setName = function (n) { this._n = n; return this; };
 Sheet.prototype.getLastRow = function () { return this._v.length; };
+/* ★실제 시트는 빈 줄도 셀을 차지한다. 흉내에서도 최소 1000줄 × 12열로 둔다 —
+   용량 계기판이 「쓴 줄 수」가 아니라 「시트 크기」를 본다는 점이 중요하다. */
+Sheet.prototype.getMaxRows = function () { return Math.max(1000, this._v.length); };
+Sheet.prototype.getMaxColumns = function () { return 12; };
 Sheet.prototype.setFrozenRows = function () { return this; };
 Sheet.prototype.appendRow = function (r) { this._v.push(r.slice()); };
 Sheet.prototype.getRange = function (r, c, nr, nc) {
@@ -148,6 +152,23 @@ ok(get({ action: 'rows', since: mark }).rows.length === 0, '★그 뒤로 바뀐
 post({ type: 'surv', id: 's2', date: '2026-08-22', key: 'T-01' });
 const inc = get({ action: 'rows', since: mark });
 ok(inc.rows.length === 1 && inc.rows[0].id === 's2', '★새로 들어온 것만 내려온다');
+
+/* ══ 4-B 용량 계기판 (v2.22.5 · 0-Z-4) ════════════════ */
+console.log('\n[G4-B] 용량 — 언제 파일을 나눠야 하는지 알려준다');
+{
+  const m = get({ action: 'meta' });
+  ok(m.cellCap === 10000000, '★한도는 셀 1,000만 개다 (줄 수가 아니다)');
+  ok(typeof m.cells === 'number' && m.cells > 0, '지금 쓰는 셀 수를 준다');
+  ok(m.cellPct >= 0 && m.cellPct <= 100, `백분율이 0~100 안이다 (${m.cellPct})`);
+  ok(m.count > 0 && m.cells >= m.count, '★셀 수가 줄 수보다 적을 수 없다');
+  /* ★meta는 화면 들어올 때마다 도는 길이다. 자료를 읽으면 안 된다 */
+  const gs4b = fs.readFileSync(path.join(ROOT, 'Code.gs'), 'utf8');
+  const metaBlk = gs4b.slice(gs4b.indexOf("if (p.action === 'meta')"),
+                             gs4b.indexOf("if (p.action === 'rows')"));
+  ok(/getMaxRows\(\) \* [\s\S]{0,30}getMaxColumns\(\)/.test(metaBlk),
+     '★시트 크기만 본다 — 자료를 안 읽으므로 거의 공짜다');
+  ok(!/COL_JSON/.test(metaBlk), '★meta가 원본JSON을 읽지 않는다');
+}
 
 /* ══ 5 옛 'data' 시트를 같이 읽는다 (이관 전) ═════════ */
 console.log('\n[G5] 이관 전 — 옛 data 시트를 같이 읽는다 (자료가 안 보이는 틈을 안 만든다)');

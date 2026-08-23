@@ -22,6 +22,7 @@ const sb = {
   confirm: () => false, prompt: () => 'test', Blob: function () {},
   URL: { createObjectURL: () => '', revokeObjectURL() {} },
   setTimeout: () => 0, XLSX: null, scrollTo() {}, TextDecoder,
+  setInterval: (fn) => { sb.__ivFn = fn; return 7; }, clearInterval: (id) => { if (id === 7) sb.__ivFn = null; },
   document: { documentElement: {}, addEventListener() {}, createElement: () => El('t'),
     body: { appendChild() {} },
     querySelector(s) { const m = /^#([A-Za-z0-9_-]+)$/.exec(s); return m && bag[m[1]] ? bag[m[1]] : null; },
@@ -2737,6 +2738,7 @@ console.log('\n[59] 증분 수신 — 바뀐 것만');
             prompt: () => 'test', Blob: function () {},
             URL: { createObjectURL: () => '', revokeObjectURL() {} },
             setTimeout: () => 0, XLSX: null, scrollTo() {}, TextDecoder,
+  setInterval: (fn) => { sb.__ivFn = fn; return 7; }, clearInterval: (id) => { if (id === 7) sb.__ivFn = null; },
             document: { documentElement: {}, addEventListener() {}, createElement: () => El2('t'),
               body: { appendChild() {} },
               querySelector(s) { const m = /^#([A-Za-z0-9_-]+)$/.exec(s); return m && bag2[m[1]] ? bag2[m[1]] : null; },
@@ -3612,6 +3614,405 @@ console.log('\n[59] 증분 수신 — 바뀐 것만');
             ok(/@media \(max-width:1180px\)[\s\S]{0,160}position:static/.test(c9),
                '★★그 화면에서는 고정하지 않는다 — 고정하면 또 덮는다');
           }
+        }
+
+        /* ── 85 우리 스탭 명부 · 공종그룹 담당 (v2.23.0) ── */
+        console.log('\n[85] 우리 스탭 — 공종그룹별 담당 · 내 차례');
+        {
+          const tsrc85 = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+          S.staff = []; S.me = '';
+
+          /* 85-1 명부 */
+          ok(A.staffAdd({ name: '' }) === null, '★이름 없이는 안 만들어진다');
+          const k1 = A.staffAdd({ name: '김대리', tel: '821000000001', grps: ['토공', '우수공'] });
+          const k2 = A.staffAdd({ name: '박과장', tel: '821000000002', grps: ['우수공'] });
+          ok(S.staff.length === 2, '두 명이 들어갔다');
+          ok(k1.grps.length === 2, '★한 사람이 여러 공종을 맡는다 (사용자 확정)');
+          ok(A.staffOf('우수공').length === 2,
+             '★★한 공종에 여러 사람도 된다 — 중복지정 (사용자 확정)');
+          ok(A.staffOf('토공').length === 1 && A.staffOf('포장공').length === 0,
+             '맡지 않은 공종에는 안 걸린다');
+          ok(A.staffUpd(k2.id, { name: '' }) === null, '★이름을 빈 것으로 못 고친다');
+          A.staffUpd(k2.id, { grps: ['우수공', '포장공'] });
+          ok(A.staffOf('포장공').length === 1, '담당 공종을 고칠 수 있다');
+
+          /* 85-2 나는 누구 — 기기에만 남는다 */
+          A.setMe(k1.id);
+          ok(A.me().name === '김대리', '이 기기의 나를 기억한다');
+          ok(A.myGrps().join() === '토공,우수공', '내 담당 공종을 안다');
+          ok(!/'me'|S\.me/.test(fs.readFileSync(path.join(ROOT, 'assets/js/api.js'), 'utf8')),
+             '★「나는 누구」를 서버로 안 보낸다 — 기기마다 다르다');
+
+          /* 85-3 ★내 차례가 담당으로 걸러진다 */
+          const L85 = { s: 'civil', p: 3, c: 1 };
+          const rowW = { id: 'r85w', loc: L85, grp: '우수공', mat: '레미콘', date: A.today() };
+          const rowP = { id: 'r85p', loc: L85, grp: '포장공', mat: '아스콘', date: A.today() };
+          const rowX = { id: 'r85x', loc: L85, grp: '기타공', mat: '모래', date: A.today() };
+          ok(A.flowMineGrp('mat', rowW) === true, '내가 맡은 공종은 내 차례에 온다');
+          ok(A.flowMineGrp('mat', rowP) === false,
+             '★★남이 맡은 공종은 안 온다 — 이게 이 기능의 핵심이다');
+          ok(A.flowMineGrp('mat', rowX) === true,
+             '★★담당이 아무도 없는 공종은 모두에게 보인다 — 주인 없는 일을 숨기면 아무도 안 한다');
+
+          /* 85-3-B ★★flowMineList가 **실제로** 그 필터를 부르는가.
+             ★함수만 시험하면 「있는데 안 불린다」를 못 잡는다 — 0-J가 그랬다. */
+          {
+            const F85 = { s: 'civil', p: 0, c: 0, t: '', b: 0 };
+            const keep = S.mreq;
+            A.setRole('staff'); A.setMe(k1.id);
+            S.mreq = [
+              { id: 'f85a', loc: L85, grp: '우수공', mat: '레미콘', unit: 'M3',
+                qty: 1, st: 'req', date: A.today(), fst: '', okS: 0, okV: 0 },
+              { id: 'f85b', loc: L85, grp: '포장공', mat: '아스콘', unit: 'ton',
+                qty: 1, st: 'req', date: A.today(), fst: '', okS: 0, okV: 0 }
+            ];
+            const ids = A.flowMineList(F85, 'staff').map(x => x.row.id);
+            ok(ids.indexOf('f85a') >= 0,
+               '★★내 차례 목록에 내 담당(우수공)이 온다');
+            ok(ids.indexOf('f85b') < 0,
+               '★★★내 차례 목록에서 남의 담당(포장공)이 빠진다 — 필터가 실제로 걸려 있다');
+            S.mreq = keep;
+          }
+
+          /* 85-4 ★안 골랐거나 배정이 없으면 종전대로 전부 보인다 */
+          A.setMe('');
+          ok(A.flowMineGrp('mat', rowP) === true,
+             '★「나는 누구」를 안 골랐으면 안 거른다 — 빈 화면이 되면 안 된다');
+          const k3 = A.staffAdd({ name: '신입', tel: '', grps: [] });
+          A.setMe(k3.id);
+          ok(A.flowMineGrp('mat', rowP) === true,
+             '★배정을 아직 안 받은 사람에게도 전부 보인다');
+
+          /* 85-5 지운 사람이 「나」로 남지 않는다 */
+          A.staffDel(k3.id);
+          ok(S.me === '' && A.me() === null, '★지운 사람이 「나」로 남지 않는다');
+
+          /* 85-6 공종그룹 찾기 */
+          ok(A.grpOfRow('mat', rowW) === '우수공', '자재는 줄에 실린 grp를 쓴다');
+          ok(A.grpOfRow('surv', { key: '' }) === '', '공종코드가 없으면 빈 문자 — 주인 없는 줄이 된다');
+          ok(A.staffGrps().indexOf('토공') >= 0 && A.staffGrps().indexOf('기타공(부대토목)') >= 0,
+             '★부지·부대 공종그룹을 함께 고를 수 있다');
+
+          /* 85-7 옛 기기 대비 — staff가 빈 객체로 저장돼 있던 것 */
+          ok(/if \(!Array\.isArray\(s\.staff\)\) s\.staff = \[\];/.test(
+               fs.readFileSync(path.join(ROOT, 'assets/js/core.js'), 'utf8')),
+             '★옛 기기의 staff:{} 를 배열로 바꾼다 — 안 하면 명부 화면이 죽는다');
+
+          /* 85-8 화면 */
+          ok(/id: 'stff'/.test(tsrc85) && /setupTab === 'stff'\) body = staffPanel\(\)/.test(tsrc85),
+             '★준비 탭에 칸이 있고 실제로 그린다');
+          ok(/data-stg=/.test(tsrc85), '공종을 여러 개 고르는 칸이 있다');
+          ok(/A\.setMe\(this\.value\)/.test(tsrc85), '「나는 누구」를 고르면 저장된다');
+          ['ko', 'en', 'bn'].forEach(function (L) {
+            const d = sb.I18N && sb.I18N[L];
+            ok(!!(d && d.st_t && d.st_me && d.st_grps && d.st_need && d.st_orphan),
+               `${L} — 스탭 명부 문구가 다 있다`);
+          });
+
+          S.staff = []; S.me = '';
+        }
+
+        /* ── 87 자동 수신 1분 폴링 (v2.22.7 · 요청 8) ── */
+        console.log('\n[87] 자동 수신 — 1분마다 서버를 확인한다');
+        {
+          const tsrc87 = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+          const hsrc87 = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+
+          ok(A.AUTO_SYNC_MS === 60000, '★1분마다다 (사용자 확정)');
+          ok(typeof A.startAutoSync === 'function' && typeof A.stopAutoSync === 'function',
+             '시작·정지 두 손잡이가 있다');
+
+          /* 화면 열 때 켜진다 */
+          ok(/A\.startAutoSync\(\)/.test(hsrc87), '★화면 열 때 자동 수신을 켠다');
+
+          /* 실제로 타이머가 걸린다 — setInterval 스텁이 함수를 잡아 둔다 */
+          sb.__ivFn = null;
+          A.startAutoSync();
+          ok(typeof sb.__ivFn === 'function', '★타이머가 실제로 걸린다');
+          /* 두 번 걸어도 하나만 — 겹치면 같은 수신이 중복된다 */
+          const first = sb.__ivFn;
+          A.startAutoSync();
+          ok(sb.__ivFn === first, '★두 번 켜도 타이머는 하나뿐이다');
+
+          /* 안 보는 탭이면 쉰다 */
+          ok(/document\.hidden/.test(tsrc87),
+             '★안 보이는 탭이면 건너뛴다 — 백그라운드에서 헛돌지 않는다');
+
+          /* ★자동 수신은 조용히 — 화면을 흔들지 않는다 */
+          const autoBlk = tsrc87.slice(tsrc87.indexOf('A.startAutoSync ='),
+                                       tsrc87.indexOf('A.stopAutoSync ='));
+          ok(/syncNow\(true\)/.test(autoBlk),
+             '★syncNow(true) — 조용히 받는다 (바뀐 게 없으면 meta만 오간다)');
+
+          /* 받은 게 있으면 화면이 자동 갱신된다 (syncNow 안에) */
+          ok(/if \(add\) \{ A\.save\(\); A\.render\(\); \}/.test(tsrc87),
+             '★새 자료가 들어오면 화면이 저절로 다시 그려진다');
+
+          A.stopAutoSync();
+          ok(sb.__ivFn === null, '정지하면 타이머가 풀린다');
+        }
+
+        /* ── 86 「내 차례」가 탭별로 갈린다 (v2.22.6 · 요청 9) ── */
+        console.log('\n[86] 내 차례 — 측량 탭에 자재가 안 섞인다');
+        {
+          const L85 = { s: 'civil', p: 3, c: 1 };
+          const F85 = { s: 'civil', p: 0, c: 0, t: '', b: 0 };
+          /* 스탭이 눌러야 하는 단계로 둔다 (fst=req → 스탭 확인 차례) */
+          S.mreq = [{ id: 'mm85', date: A.today(), loc: L85, grp: '관수공', sub: '환기구',
+                      mat: '모래', unit: 'M3', plant: false, qty: 3, st: 'req' }];
+          S.surv = [{ id: 'sv85', date: A.today(), loc: L85, key: 'T-01', st: 'req' }];
+          A.setRole('staff');
+
+          const both = A.flowMineList(F85).map(x => x.kind);
+          ok(both.indexOf('mat') >= 0 && both.indexOf('surv') >= 0,
+             '종류를 안 주면 전부 모은다 (작업현황 탭용)');
+
+          const onlyS = A.flowMineList(F85, null, null, ['surv']).map(x => x.kind);
+          ok(onlyS.length > 0 && onlyS.every(k => k === 'surv'),
+             '★★측량만 달라면 측량만 온다 — 자재가 안 섞인다');
+          const onlyM = A.flowMineList(F85, null, null, ['mat']).map(x => x.kind);
+          ok(onlyM.length > 0 && onlyM.every(k => k === 'mat'),
+             '★자재만 달라면 자재만 온다');
+
+          /* 경고(수령미확인)도 같은 종류만 세야 한다 */
+          ok(typeof A.flowWarn(F85, null, ['surv']).wait === 'number',
+             'flowWarn도 종류를 받는다');
+
+          /* 화면 — 측량 탭이 mineCard(['surv'])를 부른다 */
+          const tsrc85 = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+          const v3blk = tsrc85.slice(tsrc85.indexOf('function v3()'),
+                                     tsrc85.indexOf('function survTable'));
+          ok(!/mineCard\(\)/.test(v3blk) && /mineCard\(\['surv'\]\)/.test(v3blk),
+             "★측량 탭은 mineCard(['surv'])만 부른다 — 인자 없는 호출이 없다");
+          const v4blk = tsrc85.slice(tsrc85.indexOf('function v4()'),
+                                     tsrc85.indexOf('function v4Full'));
+          ok(/mineCard\(\['mat'\]\)/.test(v4blk), "★자재 탭은 mineCard(['mat'])");
+
+          /* ★v2.24.0 — 사용자 신고 재현 : 「이제는 **관리자** 화면 측량 탭에
+             자재가 섞여 나온다」. 위 검사는 (가) flowMineList를 직접 부르고
+             (나) tabs.js **원문**을 읽을 뿐이라, 역할별로 실제 화면을 그려
+             보지는 않았다. 원문 검사는 「그 갈래가 실제로 도는가」를 못 본다 —
+             0-J·0-N에서 두 번 당한 함정이다.
+             ★그래서 **역할 둘 다** 측량 탭을 그려서 자재명이 없는지 본다. */
+          ['admin', 'staff'].forEach(function (rl) {
+            A.setRole(rl); A.go(3);
+            const hv = bag.view.innerHTML;
+            ok(hv.indexOf('모래') < 0, '★★' + rl + ' 측량 탭을 그려도 자재가 안 섞인다');
+            ok(hv.length > 200, rl + ' 측량 탭이 정상적으로 그려진다');
+          });
+
+          S.mreq = []; S.surv = []; A.setRole('admin');
+        }
+
+        /* ── 88 검측 화면 — 미처리/처리완료를 가른다 (v2.24.0 · 요청 10) ── */
+        console.log('\n[88] 검측 — 처리완료는 접혀 있고 미처리만 뜬다');
+        {
+          const L88 = { s: 'civil', p: 3, c: 1 };
+          const mk = (id, key, st) => ({ id: id, date: A.today(), loc: L88, key: key,
+            qty: 10, st: st, stAt: A.today(), reason: '', seq: 1, hist: [] });
+          const save88 = S.insp;
+          S.insp = [mk('i88a', 'C-01', 'apply'), mk('i88b', 'C-02', 'pass'),
+                    mk('i88c', 'C-03', 'fail')];
+          A.setRole('admin'); A.go(2);
+          const h88 = bag.view.innerHTML;
+
+          /* ★핵심 — 합격(처리완료)은 기본으로 **안 보인다.**
+             종전(v2.23.0)에는 한 표에 섞여 맨 아래로 밀려 있을 뿐이었다.
+             그래서 이 줄은 옛 파일로 되돌리면 반드시 실패한다. */
+          ok(h88.indexOf('C-02') < 0, '★★처리완료(합격)는 접혀 있어 안 나온다');
+          ok(h88.indexOf('C-01') >= 0 && h88.indexOf('C-03') >= 0,
+             '★미처리(신청·불합격)는 그대로 보인다');
+          ok(h88.indexOf('data-idone') >= 0, '펼치기 단추가 있다');
+          ok(h88.indexOf('data-rg="insp"') >= 0,
+             '★기간 단추는 처리완료 카드 머리에 있다 — 접혀 있어도 누를 수 있다');
+          ok(h88.indexOf(A.T('i_done_t')) >= 0 && h88.indexOf(A.T('s_open')) >= 0,
+             '카드가 둘로 갈렸다 (미처리 / 처리완료)');
+
+          /* 죽은 키를 남기지 않았는가 (3-E) */
+          const isrc88 = fs.readFileSync(path.join(ROOT, 'assets/js/i18n.js'), 'utf8');
+          ok(isrc88.indexOf('h_inspq') < 0, '★안 쓰게 된 h_inspq를 네 사전에서 지웠다');
+          /* ★3-C — 아랍어는 협력업체 화면 전용 부분 사전이다. 관리자 화면 키를
+             넣으면 아랍어 자리에 다른 말이 들어간다. 사전을 직접 본다. */
+          const I88 = sb.I18N;
+          ok(!!(I88.ko.i_dshow && I88.en.i_dshow && I88.bn.i_dshow),
+             '새 키가 ko·en·bn 셋 다 있다');
+          ok(I88.ar.i_dshow === undefined && I88.ar.i_done_t === undefined,
+             '★ar은 건드리지 않았다 (3-C)');
+
+          S.insp = save88; A.go(1);
+        }
+
+        /* ── 89 측량 탭 — 어디로 들어와 어디서 멈춰 있는지 (v2.24.1 · 요청 11) ── */
+        console.log('\n[89] 측량 — 들어오는 곳과 걸려 있는 곳이 화면에 뜬다');
+        {
+          const L89 = { s: 'civil', p: 3, c: 1 };
+          const save89 = S.surv;
+          /* 협력업체가 vendor 화면에서 올린 그대로 — fst가 없다(→ 'req') */
+          S.surv = [{ id: 'sv89', date: A.today(), loc: L89, key: 'C-01', spot: null,
+                      why: '경계 확인', by: '업체A', done: false, up: 0 }];
+          ok(A.fst('surv', S.surv[0]) === 'req' && A.flowOwn('surv', S.surv[0]) === 'staff',
+             '업체가 올린 요청은 **스탭 확인**이 먼저다 — 관리자 차례가 아니다');
+
+          A.setRole('admin'); A.go(3);
+          const h89 = bag.view.innerHTML, t89 = h89.replace(/<[^>]+>/g, ' ');
+          ok(h89.indexOf(A.T('h_survin')) >= 0,
+             '★★측량 요청이 어디로 들어오는지가 화면에 있다');
+          ok(h89.indexOf(A.T('h_survflow')) >= 0,
+             '★★흐름 한 줄(업체→스탭→관리자→측량팀→스탭)이 화면에 있다');
+          /* ★핵심 — 「내 차례 0건」으로 끝나지 않는다. 어디서 멈춰 있는지를 적는다. */
+          ok(/지금 걸려 있는 곳/.test(t89) && /스탭 1건/.test(t89),
+             '★★내 차례가 없으면 **누구 앞에 몇 건**인지가 뜬다');
+
+          /* 자재 탭도 같은 카드를 쓴다 — 종류를 넘어 안 샌다 */
+          S.mreq = [{ id: 'mm89', date: A.today(), loc: L89, grp: '관수공', sub: '환기구',
+                      mat: '모래', unit: 'M3', plant: false, qty: 3, st: 'req' }];
+          A.go(3);
+          ok(bag.view.innerHTML.indexOf('모래') < 0,
+             '★빈칸 문구도 종류를 지킨다 — 측량 탭에 자재가 안 샌다');
+
+          const I89 = sb.I18N;
+          ok(!!(I89.ko.h_survin && I89.en.h_survin && I89.bn.h_survin && I89.ko.fl_wait_who),
+             '새 키가 ko·en·bn 셋 다 있다');
+          ok(I89.ar.h_survin === undefined && I89.ar.fl_wait_who === undefined,
+             '★ar은 건드리지 않았다 (3-C)');
+
+          S.surv = save89; S.mreq = []; A.go(1);
+        }
+
+        /* ── 84 서버 용량 계기판 (v2.22.5 · 0-Z-4) ── */
+        console.log('\n[84] 서버 용량 — 파일을 언제 나눠야 하는지 보여준다');
+        {
+          const asrc = fs.readFileSync(path.join(ROOT, 'assets/js/api.js'), 'utf8');
+          const tsrc84 = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+
+          ok(/API\.cap = \{/.test(asrc) && /d\.cellPct/.test(asrc),
+             '★meta 응답에서 서버 용량을 기억한다 — 따로 물으러 안 간다');
+
+          /* ★통신한 적이 없으면 아무것도 안 그린다 — 모르는 것을 0%로
+             보여주면 「아직 안 찼다」고 오해한다 */
+          ok(/if \(!c \|\| c\.pct == null\) return '';/.test(tsrc84),
+             '★서버와 통신한 적이 없으면 계기판을 안 그린다');
+          /* ★함수가 있다는 것만으로는 모자란다 — capPanel이 **부르는지**를 본다.
+             0-J가 「갈래는 있는데 안 돈다」였다. 같은 함정을 안 밟는다. */
+          const capBlk = tsrc84.slice(tsrc84.indexOf('function capPanel'),
+                                      tsrc84.indexOf('function srvCapHTML'));
+          ok(/srvCapHTML\(\)/.test(capBlk), '★저장 용량 칸이 실제로 부른다');
+
+          ok(/T\('scap_w'\)/.test(tsrc84) && /c\.pct >= 80/.test(tsrc84),
+             '★80%를 넘으면 경고한다 (사용자 물음: 「80% 찰 경우 경고」)');
+          ok(/window\.BNCP_API && window\.BNCP_API\.cap/.test(tsrc84),
+             '기기 용량이 아니라 서버 용량을 본다');
+
+          ['ko', 'en', 'bn'].forEach(function (L) {
+            const d = sb.I18N && sb.I18N[L];
+            ok(!!(d && d.scap_t && d.scap_n && d.scap_h && d.scap_w),
+               `${L} — 서버 용량 문구가 다 있다`);
+          });
+          ok(!(sb.I18N && sb.I18N.ar && sb.I18N.ar.scap_t),
+             '★ar은 협력업체 전용 부분 사전이라 안 건드렸다');
+
+        }
+
+        /* ── 83 자재 결재 단계가 수신에서 살아남는다 (v2.22.4 · 0-J) ── */
+        console.log('\n[83] 자재 수신 — 결재 단계가 안 없어진다');
+        {
+          const tsrc83 = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+
+          /* 83-1 ★갈래가 하나뿐이어야 한다. 둘이면 앞엣것이 끊어 뒤엣것이 죽는다 */
+          ok((tsrc83.match(/if \(r\.type === 'mat'\)/g) || []).length === 1,
+             "★★unpack의 mat 갈래가 하나뿐이다 — 둘이면 뒤엣것이 영영 안 돈다");
+
+          /* 83-2 ★실제로 돌려 본다. 글자 대조로는 「도는가」를 못 본다 */
+          ok(typeof A._unpack === 'function', 'unpack을 검사에서 부를 수 있다');
+          const rx83 = {
+            id: 'mq83', type: 'mat', date: A.today(), s: 'civil', p: 3, c: 1,
+            grp: '관수공', sub: '환기구', mat: 'STS plate', spec: 't=5mm',
+            unit: 'kg', qty: 3, st: 'req', by: 'ALSKHAA',
+            fst: 'fin', fat: '2026-08-20T05:00:00Z', fby: '이과장', fwhy: '수량 확인',
+            okS: 1, okV: 1
+          };
+          const u83 = A._unpack(rx83);
+          ok(u83 && u83.box === 'mreq', '자재 신청으로 받아들여진다');
+          ok(u83.row.fst === 'fin',
+             '★★결재 단계(fst)가 살아남는다 — 종전에는 통째로 버려졌다');
+          ok(u83.row.fby === '이과장' && u83.row.fwhy === '수량 확인',
+             '★누가 왜 눌렀는지도 남는다');
+          ok(u83.row.okS === 1 && u83.row.okV === 1,
+             '★★스탭·측량 확인 표시가 살아남는다 — 이게 없어서 안 눌린 채로 보였다');
+
+          /* 83-3 ★위쪽 갈래에만 있던 칸도 빠지면 안 된다.
+             addMreq가 만드는 줄과 모양이 달라지면 화면이 없는 칸을 읽는다. */
+          ['reqAt', 'apvBy', 'apvAt', 'denyWhy', 'plantReqAt',
+           'issAt', 'noissWhy', 'useAt'].forEach(function (k) {
+            ok(k in u83.row, `${k} 칸이 있다 — addMreq가 만드는 줄과 모양이 같다`);
+          });
+          ok(u83.row.iss === null && u83.row.use === null,
+             '지급·실사용은 비어 있으면 null이다 (0이 아니다)');
+
+          /* 83-4 지급까지 끝난 줄이 그대로 온다 */
+          const u84 = A._unpack(Object.assign({}, rx83, {
+            id: 'mq84', st: 'iss', iss: 3, issAt: '2026-08-21T06:00:00Z', use: 2
+          }));
+          ok(u84.row.st === 'iss' && u84.row.iss === 3 && u84.row.use === 2,
+             '★지급·실사용 수량이 그대로 온다');
+
+          /* 83-5 자재명이 없으면 종전대로 안 받는다 (0-L) */
+          ok(A._unpack(Object.assign({}, rx83, { id: 'mq85', mat: '', name: '' })) === null,
+             '★자재명이 없으면 안 받는다 — 이름 없는 줄은 손댈 수가 없다');
+
+          /* 83-6 자재는 공종코드가 없다. key 검사보다 위에 있어야 한다 */
+          const bare83 = tsrc83.replace(/\/\*[\s\S]*?\*\//g, '');   /* 주석 안 언급은 빼고 본다 */
+          ok(bare83.indexOf("if (r.type === 'mat')") < bare83.indexOf("if (!r.key) return null"),
+             '★mat 갈래가 key 검사보다 위에 있다 — 밑에 두면 전부 걸러진다');
+        }
+
+        /* ── 82 자재 표가 위치별로 갈린다 (v2.22.3 · 0-M) ── */
+        console.log('\n[82] 자재 — 줄마다 제 위치를 단다');
+        {
+          const tsrc82 = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+          const LA = { s: 'civil', p: 1, c: 1 }, LB = { s: 'civil', p: 3, c: 1 };
+          const F82 = { s: 'civil', p: 0, c: 0, t: '', b: 0 };
+          S.mreq = [
+            { id: 'x1', date: A.today(), loc: LA, grp: '가로등', sub: '핸드홀',
+              mat: '레미콘', spec: 'fck=21MPa', unit: 'M3', plant: true, qty: 22, st: 'req' },
+            { id: 'x2', date: A.today(), loc: LB, grp: '가로등', sub: '핸드홀',
+              mat: '레미콘', spec: 'fck=21MPa', unit: 'M3', plant: true, qty: 23, st: 'req' }
+          ];
+          /* ★설계수량에서 온 줄이 섞여 있으므로 레미콘만 본다 */
+          const rs = A.matRows(F82).filter(a => a.mat === '레미콘');
+          ok(rs.length === 2,
+             `★★같은 자재라도 위치가 다르면 갈라진다 (${rs.length}) — 종전에는 한 줄로 뭉갰다`);
+          ok(rs.every(a => !!a.loc), '★줄마다 제 위치가 실려 온다');
+          const ka = rs.filter(a => A.locKey(a.loc) === A.locKey(LA))[0];
+          const kb = rs.filter(a => A.locKey(a.loc) === A.locKey(LB))[0];
+          ok(ka && ka.req === 22, 'P1-1 줄은 22');
+          ok(kb && kb.req === 23, '★P3-1 줄은 23 — 두 곳 수량이 안 섞인다');
+
+          /* ★표가 선택기 위치를 찍으면 안 된다 — 그 버그가 이번 신고였다 */
+          ok(!/A\.locShort\(pkLoc\('w'\)\)/.test(tsrc82),
+             "★★표가 선택기 위치(pkLoc('w'))를 찍지 않는다");
+          ok(/A\.locShort\(a\.loc\)/.test(tsrc82), '★그 줄의 위치를 찍는다');
+
+          /* 재고도 그 줄의 위치에 붙는다 */
+          A.setStock(LB, kb.id, 7);
+          const rs2 = A.matRows(F82).filter(a => a.mat === '레미콘');
+          ok(rs2.filter(a => A.locKey(a.loc) === A.locKey(LB))[0].stock === 7,
+             '★재고가 그 줄의 위치에 붙는다');
+          ok(rs2.filter(a => A.locKey(a.loc) === A.locKey(LA))[0].stock == null,
+             '★★다른 위치 줄에는 안 붙는다 — 필터로 보면 여기가 어긋난다');
+          ok(/data-mstl=/.test(tsrc82) && /A\.keyLoc\(el\.dataset\.mstl\)/.test(tsrc82),
+             '★재고 입력도 그 줄의 위치에 저장한다');
+
+          /* locKey ↔ keyLoc 왕복 */
+          ok(A.locKey(A.keyLoc(A.locKey(LB))) === A.locKey(LB), 'keyLoc이 locKey의 역함수다');
+          ok(A.keyLoc('A|B|7').s === 'anc' && A.keyLoc('A|B|7').b === 7, '부대토목 위치도 되돌아온다');
+          ok(A.keyLoc('') === null, '빈 열쇠는 null');
+
+          /* CSV에도 위치가 있어야 한다 — 표에 있는데 CSV에 없으면 어디 것인지 모른다 */
+          ok(/\[T\('u_sec'\), T\('c_grp'\)/.test(tsrc82), '★CSV 머리에 공구가 있다');
+          ok(/\[A\.locShort\(a\.loc\), a\.grp/.test(tsrc82), '★CSV 줄에도 위치가 실린다');
+
+          S.mreq = []; S.stock = {};
         }
 
         /* ── 81 플랜트 자재가 화면에 나온다 · 측량 기간 단추 (v2.22.2 · 0-M) ── */

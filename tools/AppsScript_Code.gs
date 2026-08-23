@@ -32,6 +32,10 @@
  *    ★돌리기 전에 스프레드시트를 통째로 복제해 둘 것.
  */
 
+/* ★스프레드시트 하나가 담을 수 있는 셀 수. 구글이 정한 한도다.
+   ★줄 수가 아니라 **셀** 수다 — 열이 늘면 담을 줄 수가 준다. */
+var CELL_CAP = 10000000;
+
 var LEGACY_SHEET = 'data';        /* 옛 통합 시트 — 이관 전까지만 읽는다 */
 var ETC_SHEET = 'etc';            /* 아래 표에 없는 종류가 오면 여기로 */
 
@@ -250,7 +254,19 @@ function doGet(e) {
           if (t0 > mx) mx = t0;
         }
       }
-      return json_({ ok: true, last: mx, count: cnt });
+      /* ★용량 계기판 (v2.22.5 · 0-Z-4) — 셀 수를 함께 준다.
+         ★스프레드시트 한도는 **셀 1,000만 개**다. 12열이니 약 83만 줄이다.
+           하루 100줄이면 22년, 500줄이라도 4년이 걸린다 — 그래서 「파일 자동
+           추가」는 **아직 만들지 않았다.** 필요해지는 때를 이 숫자가 알려준다.
+         ★읽는 것은 시트 크기뿐이다. 자료를 안 읽으므로 거의 공짜다.
+         ★한도에 다가가면 무엇을 할지는 0-Z-4에 적어 뒀다. */
+      var cells = 0;
+      for (var b0 = 0; b0 < shs0.length; b0++) {
+        cells += shs0[b0].getMaxRows() * shs0[b0].getMaxColumns();
+      }
+      return json_({ ok: true, last: mx, count: cnt,
+                     cells: cells, cellCap: CELL_CAP,
+                     cellPct: Math.min(100, Math.round(cells / CELL_CAP * 100)) });
     } catch (err0) {
       return json_({ ok: false, err: String(err0) });
     }

@@ -87,7 +87,14 @@
     if (!live()) return Promise.resolve(null);
     return fetch(API.url + '?action=meta')
       .then(function (res) { return res.json(); })
-      .then(function (d) { return (d && d.ok) ? d : null; })
+      .then(function (d) {
+        /* ★서버 용량을 기억해 둔다 (v2.22.5). meta는 화면 들어올 때마다
+           도는 길이라, 따로 물으러 가지 않아도 늘 최신이다. */
+        if (d && d.ok && d.cellPct != null) {
+          API.cap = { cells: d.cells, cap: d.cellCap, pct: d.cellPct, rows: d.count };
+        }
+        return (d && d.ok) ? d : null;
+      })
       .catch(function () { return null; });
   };
 

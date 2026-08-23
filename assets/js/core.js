@@ -48,7 +48,16 @@
     work: [], crew: [], insp: [], surv: [], mat: [], issue: [], msg: [],
     direct: [],
     matmap: {},
-    mdesign: {}, mreq: [], staff: {}, msgq: [],
+    mdesign: {}, mreq: [], msgq: [],
+    /* ★우리(한화) 스탭 명부 — 공종그룹별 담당 (v2.23.0).
+       종전 `staff: {}`는 아무 데서도 안 쓰이던 빈 객체였다. 배열로 바꿔 쓴다.
+       [{ id, name, tel, grps:['토공','우수공'] }]
+       ★한 그룹에 여러 사람, 한 사람이 여러 그룹 — 양쪽 다 겹쳐도 된다(사용자 확정). */
+    staff: [],
+    /* ★이 기기를 쓰는 사람이 누구인가. **서버로 안 보낸다** — 기기마다 다르다.
+       로그인은 사람이 아니라 역할(관리자·스탭·측량팀)로만 되어 있어서,
+       「내 차례」를 사람별로 가르려면 기기가 따로 기억해야 한다. */
+    me: '',
     vend: [], roadX: [], mt: {},  /* 협력업체·담당자 명부 / 현장에서 추가한 도로폭 */
     alias: {},                    /* 내역서 항목 → 공종코드. 한 번 지정하면 계속 쓴다(v2.14.0) */
     alias2: {},                   /* ★대분류를 뺀 별칭 — 다른 페이즈에도 붙는다(v2.19.5). '*'면 갈린 것 */
@@ -60,7 +69,13 @@
   function load() {
     try {
       var s = JSON.parse(localStorage.getItem(KEY));
-      if (s && s.v === 2) { for (var k in BLANK) if (!(k in s)) s[k] = BLANK[k]; return s; }
+      if (s && s.v === 2) {
+        for (var k in BLANK) if (!(k in s)) s[k] = BLANK[k];
+        /* ★옛 기기에는 `staff`가 빈 **객체**로 저장돼 있다. 배열로 바꾼다.
+           안 바꾸면 forEach가 없어 명부 화면이 통째로 죽는다. */
+        if (!Array.isArray(s.staff)) s.staff = [];
+        return s;
+      }
     } catch (e) { }
     return JSON.parse(JSON.stringify(BLANK));
   }
@@ -607,6 +622,15 @@
   A.locKey = function (l) {
     if (!l || !l.s) return '';
     return l.s === 'civil' ? 'C|' + l.p + '|' + l.c : 'A|' + l.t + '|' + l.b;
+  };
+  /* 위치열쇠 → 위치. locKey의 역함수다 (v2.22.3).
+     ★자재 표가 위치별로 갈리면서, 줄에 달아 둔 열쇠로 다시 위치를 찾아야
+       재고를 그 줄의 위치에 저장할 수 있다. */
+  A.keyLoc = function (k) {
+    var p = String(k || '').split('|');
+    if (p[0] === 'C') return { s: 'civil', p: +p[1], c: +p[2] };
+    if (p[0] === 'A') return { s: 'anc', t: p[1], b: +p[2] };
+    return null;
   };
   A.locLabel = function (l) {
     if (!l || !l.s) return '—';
@@ -1430,6 +1454,76 @@
   /** 「내 차례」 — 그 역할이 지금 눌러야 하는 것인가.
       ★관리자를 스탭 자리에 끼워 넣지 않는다. 끼워 넣으면 관리자 목록이
         스탭 것으로 가득 차 정작 관리자가 볼 것이 묻힌다. 전체는 아래 표에서 본다. */
+  /* ══ 우리 스탭 명부 — 공종그룹별 담당 (v2.23.0) ═══════════
+     사용자 확정 : 「공종별이 아니고 토공·우수공·오수공 등등」 = **공종그룹**
+                   「이름 + 전화 + 내 차례에 걸리게」 · 「중복지정도 되어야 한다」
+     ★한 그룹에 여러 사람, 한 사람이 여러 그룹 — 양쪽 다 겹칠 수 있다. */
+  A.staffAll = function () { return S.staff.slice(); };
+  A.staffById = function (id) {
+    return S.staff.filter(function (x) { return x.id === id; })[0] || null;
+  };
+  /** 이름은 있어야 한다. 전화는 없어도 된다 — 독촉만 못 할 뿐이다. */
+  A.staffAdd = function (o) {
+    o = o || {};
+    var nm = String(o.name || '').trim();
+    if (!nm) return null;
+    var m = { id: A.uid(), name: nm, tel: String(o.tel || '').trim(),
+              grps: (o.grps || []).slice() };
+    S.staff.push(m); A.save(); return m;
+  };
+  A.staffUpd = function (id, o) {
+    var m = A.staffById(id); if (!m || !o) return null;
+    if (o.name != null) {
+      var nm = String(o.name).trim();
+      if (!nm) return null;              /* ★이름을 지우게 두면 누군지 모를 줄이 남는다 */
+      m.name = nm;
+    }
+    if (o.tel != null) m.tel = String(o.tel).trim();
+    if (o.grps) m.grps = o.grps.slice();
+    A.save(); return m;
+  };
+  A.staffDel = function (id) {
+    S.staff = S.staff.filter(function (x) { return x.id !== id; });
+    if (S.me === id) S.me = '';          /* ★지운 사람으로 남아 있으면 안 된다 */
+    A.save();
+  };
+  /** 그 공종그룹을 맡은 사람들 — ★여럿일 수 있다 */
+  A.staffOf = function (grp) {
+    if (!grp) return [];
+    return S.staff.filter(function (x) { return (x.grps || []).indexOf(grp) >= 0; });
+  };
+
+  /* ── 이 기기를 쓰는 사람 ─────────────────────────────
+     ★서버로 안 보낸다. 기기마다 다르고, 남의 기기에 내가 찍히면 안 된다. */
+  A.me = function () {
+    var m = A.staffById(S.me);
+    return m || null;                    /* ★지워진 사람이면 없는 것으로 본다 */
+  };
+  A.setMe = function (id) { S.me = String(id || ''); A.save(); };
+  A.myGrps = function () { var m = A.me(); return m ? (m.grps || []).slice() : []; };
+
+  /* 고를 수 있는 공종그룹 — 부지·부대 양쪽을 합쳐서 준다 */
+  A.staffGrps = function () {
+    var o = [], seen = {};
+    ['civil', 'anc'].forEach(function (site) {
+      A.groupsOf(site).forEach(function (g) {
+        if (!seen[g.grp]) { seen[g.grp] = 1; o.push(g.grp); }
+      });
+    });
+    return o;
+  };
+
+  /** 그 줄이 어느 공종그룹인가.
+      ★자재는 줄에 `grp`가 직접 실려 있고(자재 마스터의 분류), 나머지는
+        공종코드(`key`)를 통해 찾는다. 못 찾으면 빈 문자다 — **주인 없는 줄**이
+        되고, 그런 줄은 아래에서 **모두에게** 보인다. */
+  A.grpOfRow = function (kind, r) {
+    if (!r) return '';
+    if (kind === 'mat') return r.grp || '';
+    var e = r.key ? A.item(r.key) : null;
+    return (e && e.grp) || '';
+  };
+
   A.flowMine = function (kind, r, role) {
     role = role || A.role();
     if (!role || role === 'vendor') return false;
@@ -1503,13 +1597,38 @@
   };
 
   /** 지금 화면에 띄울 것 — 내 차례이면서 늦은 것 */
-  A.flowMineList = function (f, role, now) {
+  /** 이 줄이 **내** 몫인가 — 공종그룹 담당으로 한 번 더 거른다 (v2.23.0).
+      ★규칙은 셋이다. 어느 하나라도 어기면 일이 사라지거나 남의 일이 내게 온다.
+        ① 「나는 누구」를 안 골랐으면 **거르지 않는다.** 종전과 똑같이 보인다.
+           안 고른 사람에게 아무것도 안 보이면 화면이 빈 채로 죽는다.
+        ② 내가 맡은 그룹이 **하나도 없으면** 거르지 않는다. 명부에는 있으나
+           아직 배정을 안 받은 사람이다 — 전부 보이는 편이 안전하다.
+        ③ ★**담당이 아무도 없는 그룹의 줄은 모두에게 보인다.**
+           주인 없는 일을 숨기면 그 일은 영영 아무도 안 한다.
+      ★거르는 것은 화면에 보여 주는 범위뿐이다. **권한이 아니다** —
+        누구든 눌러서 처리할 수 있다. 현장에서 사람이 비는 일은 늘 있다. */
+  A.flowMineGrp = function (kind, r) {
+    var mine = A.myGrps();
+    if (!A.me() || !mine.length) return true;              /* ①② */
+    var g = A.grpOfRow(kind, r);
+    if (!g) return true;                                   /* 그룹을 못 찾은 줄 */
+    if (!A.staffOf(g).length) return true;                 /* ③ 주인 없는 그룹 */
+    return mine.indexOf(g) >= 0;
+  };
+
+  /* ★kinds — 어느 종류의 「내 차례」를 볼지. 안 주면 전부(작업현황 탭용).
+     ★v2.23.0 — 종전에는 종류를 못 갈랐다. mat과 surv를 한 통에 담아,
+       측량 탭 카드에 **자재까지 섞여 나왔다**(스탭 화면에서 특히 두드러졌다).
+       탭마다 그 탭 것만 보이게 한다(사용자 확정). 작업현황 탭만 전부 모은다. */
+  A.flowMineList = function (f, role, now, kinds) {
     role = role || A.role();
     var out = [];
     [['mat', S.mreq], ['surv', S.surv]].forEach(function (p) {
+      if (kinds && kinds.indexOf(p[0]) < 0) return;       /* ★그 탭 종류만 */
       (p[1] || []).forEach(function (r) {
         if (!A.locMatch(r, f)) return;
         if (!A.flowMine(p[0], r, role)) return;
+        if (!A.flowMineGrp(p[0], r)) return;               /* ★담당 공종그룹 */
         out.push({ kind: p[0], row: r, st: A.fst(p[0], r), late: A.flowLate(p[0], r, now) });
       });
     });
@@ -1528,6 +1647,24 @@
         var g = A.flowLate(p[0], r, now); if (!g) return;
         A.flowOwns(p[0], r).forEach(function (own) {
           var k = own, nm = '', tel = '', lg = 'en';
+          /* ★우리 몫이 늦은 것은 **담당 스탭 앞으로** 묶는다 (v2.23.0).
+             종전에는 역할('staff')로만 묶여, 「스탭 3건 늦음」이라고만 뜨고
+             누구에게 말해야 하는지가 없었다. 담당이 여럿이면 각자 앞으로 간다.
+             ★담당이 없으면 종전대로 역할로 묶는다 — 주인 없는 일을 없애지 않는다. */
+          if (own !== 'vendor') {
+            var og = A.grpOfRow(p[0], r);
+            var owners = og ? A.staffOf(og) : [];
+            if (owners.length) {
+              owners.forEach(function (m) {
+                var mk = 'staff|' + m.id;
+                var mo = by[mk] = by[mk] || { own: own, staffId: m.id, name: m.name,
+                                              tel: m.tel || '', lang: 'ko',
+                                              mat: 0, surv: 0, stage: 0 };
+                mo[p[0]]++; mo.stage = Math.max(mo.stage, g);
+              });
+              return;
+            }
+          }
           if (own === 'vendor') {
             nm = r.by || '';
             var v = A.vendByName ? A.vendByName(nm) : null;
@@ -1550,10 +1687,11 @@
       wait = 아직 안 눌린 것 전부 · late = 그중 60분을 넘긴 것
       ★끝난 것은 안 센다. 업체가 되올려야 하는 것(back)도 여기서 안 센다 —
         그것은 업체 화면 맨 위에 이미 떠 있다. */
-  A.flowWarn = function (f, now) {
+  A.flowWarn = function (f, now, kinds) {
     now = now || new Date();
     var out = { wait: 0, late: 0, recv: 0, byOwn: {} };
     [['mat', S.mreq], ['surv', S.surv]].forEach(function (p) {
+      if (kinds && kinds.indexOf(p[0]) < 0) return;      /* ★그 탭 종류만 (v2.23.0) */
       (p[1] || []).forEach(function (r) {
         if (!A.locMatch(r, f)) return;
         var d = A.flowDef(p[0], r);
@@ -1884,8 +2022,16 @@
   };
 
   /* 자재별 증감표 : 설계 vs 신청 vs 지급 vs 실사용 */
+  /* ★v2.22.3 — **위치별로 가른다** (사용자 확정).
+     종전에는 열쇠가 `자재`뿐이라 P1-1의 레미콘과 P3-1의 레미콘이 한 줄로
+     뭉개졌다. 뭉개진 줄에는 위치가 하나로 정해지지 않으니, 표는 어쩔 수 없이
+     **화면 선택기의 위치**(pkLoc)를 찍고 있었다 — 어느 줄이든 P1-1로 보였다.
+     ★이제 열쇠가 `위치#자재`다. 줄마다 제 위치(a.loc)를 달고 나온다.
+     ★줄 수는 는다. 그 대신 「어디에 얼마」가 맞는다. 재고도 위치별이므로
+       이 편이 재고·지급과도 앞뒤가 맞는다. */
   A.mVariance = function (f, plant) {
     var agg = {};
+    function keyOf(loc, id) { return A.locKey(loc) + '#' + id; }
     // 설계
     A.allLocs().forEach(function (l) {
       if (!A.locMatch({ loc: l }, f)) return;
@@ -1893,35 +2039,40 @@
       Object.keys(d).forEach(function (id) {
         var isPlant = A.matById(id) ? A.matById(id).plant : false;
         if (plant != null && isPlant !== !!plant) return;
-        agg[id] = agg[id] || blankAgg(id);
-        agg[id].design += d[id];
+        var k = keyOf(l, id);
+        agg[k] = agg[k] || blankAgg(id, l);
+        agg[k].design += d[id];
       });
     });
     // 신청/지급/실사용
     A.mreqList(f, plant).forEach(function (r) {
-      var id = matId(r);
-      agg[id] = agg[id] || blankAgg(id);
+      var id = matId(r), k = keyOf(r.loc, id);
+      agg[k] = agg[k] || blankAgg(id, r.loc);
       /* ★플랜트 여부는 마스터가 기준이다. 다만 마스터에 없는 자재
          (설계 외 추가)는 blankAgg가 false로 두므로, 협력업체가 올린
          값으로 메운다 — 안 그러면 화면에서 창고 자재로 보인다. */
-      if (r.plant) agg[id].plant = true;
-      agg[id].req += Number(r.qty) || 0;
-      if (r.st === 'iss') agg[id].iss += Number(r.iss) || 0;
-      if (r.use != null) agg[id].use += Number(r.use) || 0;
+      if (r.plant) agg[k].plant = true;
+      agg[k].req += Number(r.qty) || 0;
+      if (r.st === 'iss') agg[k].iss += Number(r.iss) || 0;
+      if (r.use != null) agg[k].use += Number(r.use) || 0;
     });
-    return Object.keys(agg).map(function (id) {
-      var a = agg[id];
+    return Object.keys(agg).map(function (k) {
+      var a = agg[k];
       a.gapIss = a.design ? a.iss - a.design : null;   // 지급 − 설계
       a.gapUse = a.design ? a.use - a.design : null;   // 실사용 − 설계
       return a;
     }).sort(function (a, b) {
+      /* ★위치가 먼저다 — 같은 공구 것끼리 붙어 있어야 읽힌다.
+         그 안에서 종전대로 초과분(gapIss)이 큰 것부터. */
+      var la = A.locKey(a.loc), lb = A.locKey(b.loc);
+      if (la !== lb) return la < lb ? -1 : 1;
       var av = a.gapIss == null ? 1e9 : a.gapIss, bv = b.gapIss == null ? 1e9 : b.gapIss;
       return av - bv;
     });
   };
-  function blankAgg(id) {
+  function blankAgg(id, loc) {
     var p = id.split('|');
-    return { id: id, grp: p[0], sub: p[1], mat: p[2], spec: p[3], unit: p[4],
+    return { id: id, loc: loc, grp: p[0], sub: p[1], mat: p[2], spec: p[3], unit: p[4],
              plant: A.matById(id) ? A.matById(id).plant : false,
              design: 0, req: 0, iss: 0, use: 0 };
   }
@@ -1982,7 +2133,9 @@
      ★null이면 둘 다 센다. 표에서는 플랜트 자재에 표를 달아 구분한다. */
   A.matRows = function (f) {
     return A.mVariance(f, null).map(function (a) {
-      a.stock = A.stockOf(f, a.id);
+      /* ★재고는 **그 줄의 위치**로 본다 (v2.22.3). 종전에는 필터(f)로 봤는데,
+         표가 위치별로 갈린 지금 그러면 P3-1 줄에 P1-1 재고가 붙는다. */
+      a.stock = A.stockOf(a.loc, a.id);
       return a;
     }).filter(function (a) {
       return a.design || a.iss || a.req || a.stock != null;
