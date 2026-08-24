@@ -585,7 +585,8 @@ console.log('\n[27] 정비 의뢰 — 스탭이 의뢰 여부만 체크, 장기�
 {
   const tsrc = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
   ok(/function mtRows/.test(tsrc), '고장 장비 추적 있음');
-  ok(/c\.by \|\| '—'\) \+ '\|' \+ x\.cat/.test(tsrc), '회사+종류+규격 단위로 추적(개별 번호 없음)');
+  /* v2.30.0 — 회사 기준이 `by`(담당자)에서 `co`(회사, by 폴백)로 바뀌었다 (요청 ①) */
+  ok(/c\.co \|\| c\.by \|\| '—'[\s\S]{0,80}\+ '\|' \+ x\.cat/.test(tsrc), '회사+종류+규격 단위로 추적(개별 번호 없음)');
   ok(/MT_LONG = 7/.test(tsrc), '7일 이상이면 장기');
   // v2.15.0 — 체크박스는 끝나는 지점이 없어 계속 떠 있었다(사용자 지적) → 단계로 바꿈
   ok(!/data-mtreq=/.test(tsrc), '체크박스 없음 (v2.15.0에서 단계로 대체)');

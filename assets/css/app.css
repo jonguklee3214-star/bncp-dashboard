@@ -23,6 +23,21 @@
   --r:2px;
   --pad:24px;
   --hd:64px;
+  --tabbar:45px;                /* 탭바 높이 (근사) */
+  --stick:calc(var(--hd) + var(--tabbar) + 8px);   /* 헤더+탭 아래로 붙일 기준 (요청 ③) */
+
+  /* ★글자 크기 토큰 (v2.30.0 · 요청 ⑦) ─────────────────────
+     종전에는 font-size가 90곳 넘게 낱개 px로 흩어져 있어, 모바일에서
+     한 화면씩 키워도 다음 화면에서 또 작았다. 크기를 여기 몇 개로 모으고
+     모바일 구간(맨 아래 @media)에서 **값만** 한 번에 올린다.
+     ★--fs-input은 모바일에서 16px 이상이어야 한다 — iOS 사파리는 16px
+       미만 입력창에 포커스하면 화면을 확대(줌)해 레이아웃이 튄다. */
+  --fs-micro:10px;   /* 배지·표 머리·눈금  */
+  --fs-cap:11px;     /* 라벨·캡션·보조설명 */
+  --fs-body:12px;    /* 표 본문·버튼·일반  */
+  --fs-base:13px;    /* 입력창·카드 본문   */
+  --fs-input:13px;   /* 입력창 글씨 (모바일에서 16px로) */
+  --fs-lead:15px;    /* 소제목·강조 문장   */
 
   --f:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,
       "Segoe UI","Noto Sans KR","Malgun Gothic",sans-serif;
@@ -96,12 +111,19 @@ table{border-collapse:collapse;width:100%}
    폭을 1240으로 묶어 두니 넓은 화면에서 오른쪽이 통째로 비었다.
    화면 끝까지 쓰고, 브랜드바·탭과 같은 여백(--pad)만 남긴다. */
 main{padding:0 var(--pad) 72px}
-.view{display:none;padding-top:26px}
+.view{display:none;padding-top:0}
 .view.on{display:block}
 
-.ph{display:flex;align-items:flex-end;gap:14px;margin:0 0 20px}
+/* ★제목을 스크롤해도 붙여 둔다 (v2.30.0 · 요청 ③).
+   종전에는 그냥 본문 맨 위에 한 번 찍혀 스크롤하면 사라졌다. 탭바 바로
+   아래에 고정해, 어느 탭을 길게 내려 봐도 「지금 무슨 탭인지」가 남는다.
+   ★배경·z-index를 줘 본문이 제목 뒤로 지나가게 한다. 현황판(z:30)보다
+     위(z:31)에 둬 가로로 겹치는 구간에서도 제목이 이긴다. */
+.ph{display:flex;align-items:flex-end;gap:14px;margin:0 0 20px;
+    position:sticky;top:var(--stick);z-index:31;background:var(--bg);
+    padding:22px 0 12px}
 .ph h1{margin:0;font-size:26px;font-weight:800;letter-spacing:-.035em;line-height:1.1}
-.ph p{margin:0 0 3px;font-size:12px;color:var(--mute)}
+.ph p{margin:0 0 3px;font-size:var(--fs-body);color:var(--mute)}
 
 .grid{display:grid;gap:16px}
 .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -147,10 +169,10 @@ main{padding:0 var(--pad) 72px}
 /* ── 폼 ───────────────────────────────────────────────────── */
 .f{display:grid;gap:12px}
 .f-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-label.fl{display:block;font-size:11px;font-weight:600;color:var(--mute);margin-bottom:5px}
+label.fl{display:block;font-size:var(--fs-cap);font-weight:600;color:var(--mute);margin-bottom:5px}
 label.fl em{font-style:normal;color:var(--orange)}
 .in,select.in,textarea.in{
-  width:100%;padding:8px 10px;font-size:13px;
+  width:100%;padding:8px 10px;font-size:var(--fs-input);
   border:1px solid var(--line);border-radius:var(--r);background:var(--bg);
   outline:none;transition:border-color .12s;
 }
@@ -164,7 +186,7 @@ textarea.in{resize:vertical;min-height:60px}
 
 .btn{
   display:inline-flex;align-items:center;gap:6px;
-  padding:8px 16px;font-size:12px;font-weight:600;
+  padding:8px 16px;font-size:var(--fs-body);font-weight:600;
   border:1px solid var(--ink);border-radius:var(--r);
   background:var(--ink);color:#fff;transition:opacity .12s;
 }
@@ -172,7 +194,7 @@ textarea.in{resize:vertical;min-height:60px}
 .btn--g{background:var(--bg);color:var(--ink)}
 .btn--g:hover{background:var(--wash);opacity:1}
 .btn--o{background:var(--orange);border-color:var(--orange)}
-.btn--sm{padding:5px 10px;font-size:11px}
+.btn--sm{padding:5px 10px;font-size:var(--fs-cap)}
 .btn--d{border-color:var(--danger);background:var(--bg);color:var(--danger)}
 .btn:disabled{opacity:.35;cursor:not-allowed}
 .btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -196,10 +218,10 @@ textarea.in{resize:vertical;min-height:60px}
    ★대신 표가 길면 페이지가 길어진다. 520px 상자는 없다. */
 .tw{overflow:visible}
 .card{scroll-margin-top:12px}
-.tw table{font-size:12px}
+.tw table{font-size:var(--fs-body)}
 .tw th{
   position:sticky;top:0;z-index:5;background:var(--wash);
-  padding:8px 10px;text-align:left;font-size:10px;font-weight:700;
+  padding:8px 10px;text-align:left;font-size:var(--fs-micro);font-weight:700;
   color:var(--mute);letter-spacing:.05em;white-space:nowrap;
   border-bottom:1px solid var(--line);
 }
@@ -219,7 +241,7 @@ textarea.in{resize:vertical;min-height:60px}
 /* ── 배지 / 경고 ──────────────────────────────────────────── */
 .bd{
   display:inline-block;padding:2px 7px;border-radius:var(--r);
-  font-size:10px;font-weight:700;letter-spacing:.02em;white-space:nowrap;
+  font-size:var(--fs-micro);font-weight:700;letter-spacing:.02em;white-space:nowrap;
   border:1px solid var(--line);color:var(--mute);background:var(--bg);
 }
 .bd--o{border-color:var(--orange);color:var(--orange)}
@@ -352,8 +374,8 @@ html[lang="ar"] body{line-height:1.75}
 .vmain #vBody{
   background:var(--bg);border:1px solid var(--line);border-radius:var(--r);padding:18px;
 }
-.vmain .fl{font-size:12px;margin-bottom:6px}
-.vmain .in{padding:11px 12px;font-size:15px}
+.vmain .fl{font-size:var(--fs-body);margin-bottom:6px}
+.vmain .in{padding:11px 12px;font-size:16px}   /* 16px — iOS 포커스 확대 방지 */
 .vmain .dial button{width:42px;flex:0 0 42px;font-size:19px}
 .vmain .dial .in{font-size:16px}
 
@@ -384,6 +406,48 @@ html[lang="ar"] body{line-height:1.75}
   .vloc__now{margin-left:0;width:100%;text-align:center}
   .vtabs{top:auto;position:static}
   .vmain{padding:16px 14px 90px}
+}
+
+/* ══ 모바일 최적화 (v2.30.0 · 요청 ⑥⑦) ═══════════════════════
+   ★글자 크기를 낱개로 고치지 않는다 — :root 토큰 값만 여기서 한 번에
+     올린다. 위에서 font-size를 var(--fs-*)로 바꿔 둔 모든 곳이 같이 커진다.
+   ★--fs-input은 16px — iOS 사파리가 그 미만 입력창에 포커스하면 화면을
+     확대(줌)해 레이아웃이 튄다. */
+@media(max-width:768px){
+  :root{
+    --fs-micro:12px;
+    --fs-cap:13px;
+    --fs-body:14px;
+    --fs-base:15px;
+    --fs-input:16px;
+    --fs-lead:17px;
+    --pad:14px;               /* 좌우 여백을 줄여 본문 폭을 넓힌다 */
+  }
+  body{font-size:15px}        /* 기본 본문도 14 → 15 */
+
+  /* ── 헤더 2단 (요청 ⑥) ──────────────────────────────────
+     ★종전에는 로고·제목·메타·필터·언어·버튼 8개+가 한 줄(nowrap, 고정
+       64px)에 강제로 들어가 한글 버튼이 세로로 한 글자씩 쌓였다.
+     ★높이 고정을 풀고 줄바꿈을 허용한다. 브랜드바는 스크롤하면 위로
+       사라지게 두고(sticky 해제), 늘 보여야 할 탭바를 맨 위에 고정한다. */
+  .brand{
+    height:auto;position:static;flex-wrap:wrap;
+    gap:8px 12px;padding:10px var(--pad);
+  }
+  .brand__t{font-size:var(--fs-lead);flex:1 1 auto}
+  .brand__meta{display:none}            /* 72개 항목 텍스트 — 모바일에선 숨김 */
+  .brand__sp{display:none}              /* 스페이서 제거 — wrap이 배치를 맡는다 */
+  .brand__div{display:none}
+  .fltbox{order:10;flex:1 1 100%}       /* 필터는 한 줄 통째로 내려 폭을 다 쓴다 */
+  .fltbox .in{flex:1 1 auto}
+
+  /* 탭바를 최상단에 고정 (브랜드바가 사라져도 탭은 남는다) */
+  .tabs{top:0}
+
+  /* 제목은 탭바 바로 아래에 붙는다 — 모바일엔 브랜드바가 스크롤로 사라지므로
+     기준이 탭 높이 하나다 (요청 ③) */
+  .ph{top:var(--tabbar);padding:14px 0 10px}
+  .ph h1{font-size:21px}
 }
 
 /* 파일 선택 커스텀 버튼 (네이티브 "파일 선택/선택된 파일 없음" 대체 — 언어 제어) */
@@ -434,8 +498,8 @@ tr.on{background:var(--orange-w)}
 .vcomp .in{width:auto;min-width:150px}
 /* 관리자 확인필요 */
 .chk{border:1px solid var(--line);border-left:3px solid var(--orange);margin-bottom:16px}
-.chk__h{padding:10px 14px;background:var(--wash);font-weight:700;font-size:13px;border-bottom:1px solid var(--line)}
-.chk__r{padding:10px 14px;font-size:13px}
+.chk__h{padding:10px 14px;background:var(--wash);font-weight:700;font-size:var(--fs-base);border-bottom:1px solid var(--line)}
+.chk__r{padding:10px 14px;font-size:var(--fs-base)}
 .chk__r+.chk__r{border-top:1px solid var(--line-2)}
 .chk__w{color:var(--orange);font-weight:700}
 
@@ -608,7 +672,7 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
      그 화면에서는 고정하지 않는다(고정하면 또 덮는다). */
 .pg{display:grid;grid-template-columns:5fr 2fr;gap:16px;align-items:start}
 .pg__main{min-width:0}
-.pg__side{min-width:0;position:sticky;top:16px;align-self:start}
+.pg__side{min-width:0;position:sticky;top:var(--stick);align-self:start;z-index:30}
 @media (max-width:1180px){
   .pg{grid-template-columns:1fr}
   .pg__side{position:static;order:-1}
@@ -625,6 +689,11 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
 /* ★기둥 안에 있으므로 .sb 자체는 고정하지 않는다 — 기둥(.pg__side)이 이미
    sticky다. 여기서 또 고정하면 고정이 겹쳐 스크롤이 엉킨다. */
 .sb{border:1px solid var(--line);border-radius:var(--r);background:var(--bg)}
+/* ★현황판 제목 (v2.30.0 · 요청 ②) — 종전엔 제목이 없어 숫자만 바로 시작했다.
+   카드 제목과 같은 톤(굵은 산세리프). 오렌지는 밑줄 포인트로만 절제 사용. */
+.sb__t{padding:12px 16px;font-size:var(--fs-base);font-weight:700;letter-spacing:-.01em;
+       border-bottom:1px solid var(--line);
+       box-shadow:inset 0 -2px 0 var(--orange)}
 /* ★가로 균형 (v2.19.18 사용자 지적 「빈공간도 많아」).
    종전에는 .sb__sp가 flex:1로 **가운데를 통째로 밀어** 왼쪽 칸들이 한 덩어리로
    뭉치고 그 오른쪽이 뻥 비었다. 스페이서를 없애고 space-between으로

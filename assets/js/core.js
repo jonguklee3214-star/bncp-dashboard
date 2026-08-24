@@ -967,7 +967,10 @@
   A.inCo = function (rec, isDir) {
     if (!A.coFlt) return true;
     if (A.coFlt === '@dir') return !!isDir;
-    return !isDir && String(rec && rec.by || '') === A.coFlt;
+    /* ★회사명으로 거른다 (v2.30.0 · 요청 ①). crew는 `by`가 담당자 이름이라
+       회사 필터가 안 걸렸다 — `co`가 있으면 그것을, 없으면 `by`로 물러선다. */
+    var name = rec && (rec.co || rec.by) || '';
+    return !isDir && String(name) === A.coFlt;
   };
   /* 위치 + 날짜 + 업체를 한 번에 — 집계는 전부 이걸 쓴다 */
   A.hit = function (rec, f, isDir) {
@@ -1111,7 +1114,7 @@
       var o = slot(c.loc);
       o.pax += A.crewTotal(c);
       if (isDir) o.co[A.T('res_dir')] = 1;
-      else if (c.by) o.co[c.by] = 1;
+      else { var cc = c.co || c.by; if (cc) o.co[cc] = 1; }   /* ★회사 기준 (v2.30.0 · 요청 ①) */
       (c.eq || []).forEach(function (x) {
         o.run += Number(x.run) || 0;
         o.down += (Number(x.brk) || 0) + (Number(x.rep) || 0);
@@ -1194,7 +1197,11 @@
       return s;
     }
     function feed(c, isDir, key) {
-      var co = isDir ? A.T('res_dir') : (c.by || '—');
+      /* ★업체 기준으로 묶는다 (v2.30.0 · 요청 ①).
+         담당자 배정(v2.19.2) 이후 `by`는 담당자 이름이라 이것으로 묶으면
+         보유(회사명)와 축이 어긋난다. 회사명 `co`로 묶되, 옛 자료엔 `co`가
+         없으니 그때만 `by`로 물러선다 — 옛 자료의 `by`는 아직 회사명이다. */
+      var co = isDir ? A.T('res_dir') : (c.co || c.by || '—');
       var s = slot(co, key);
       if (isDir) by[co].dir = true;
       s.teams += Number(c.teams) || 0;

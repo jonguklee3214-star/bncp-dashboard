@@ -51,6 +51,17 @@
     return V.s === 'civil' ? { s: 'civil', p: +V.p, c: +V.c } : { s: 'anc', t: V.t, b: +V.b };
   }
 
+  /* ★소속 회사명 (v2.30.0 · 요청 ①).
+     담당자 배정(v2.19.2) 이후 `by`는 **담당자 이름**이 됐다. 그런데 장비현황
+     「업체별」 집계(rollupCo)는 `by`를 회사로 보고 묶는다 — 그래서 보유는
+     회사명 줄, 가동은 담당자 이름 줄로 갈렸다.
+     → crew에 회사명을 담을 `co`를 따로 둔다. 링크로 업체가 고정돼 있으면
+       그 정식 업체명(V.comp.name), 명부 미등록 자유입력 현장이면 `by`가
+       종전대로 곧 회사명이므로 그것을 쓴다. */
+  function vco() {
+    return (V.comp && V.comp.name) ? V.comp.name : (V.by || '');
+  }
+
   /* ── 측량 요청 사유 (요청 1 · v2.27.0) ────────────────
      ★우리는 시공측량을 하지 않는다 (0-V). CP·TBM을 내려주고, **내려준
        점이 틀리거나 이상하다**고 협력업체가 알려올 때 나간다. 그래서
@@ -659,9 +670,12 @@
     /* ★측량 요청 — 사유는 고르는 것이다 (v2.27.0 · 요청 1).
        ★「기타」를 골랐을 때만 직접입력 칸이 나온다. 늘 띄워 두면 고른
          사람도 습관처럼 거기에 또 적어, 같은 사유가 두 군데로 갈린다.
-       ★측량에는 도로·측점을 안 받는다 (0-V) — placeHTML을 부르지 않는다. */
-    if (t === 'surv') return workHTML() +
-      '<div class="f-row" style="margin-top:12px">' +
+       ★측량에는 도로·측점을 안 받는다 (0-V) — placeHTML을 부르지 않는다.
+       ★★공종(Category/Work item)도 안 받는다 (v2.30.0 · 요청 ④). 우리는
+         시공측량을 하지 않는다 — CP·TBM 문제는 특정 공종에 걸리지 않는다.
+         종전엔 workHTML()이 남아 공종 드롭다운 두 칸이 그대로 떴다. */
+    if (t === 'surv') return '' +
+      '<div class="f-row">' +
       bfld('date', '<input class="in" id="vDate" type="date" value="' + A.today() + '">') +
       byFld() +
       '</div>' +
@@ -881,6 +895,7 @@
       base.ppl = row.ppl;
       base.eq = row.eq;
       base.pax = A.crewTotal(row);
+      base.co = row.co || '';               // ★소속 회사 (v2.30.0 · 요청 ①)
     }
 
     else if (type === 'insp') {
@@ -992,6 +1007,25 @@
       return;
     }
 
+    /* ★측량 요청은 공종을 받지 않는다 (v2.30.0 · 요청 ④ · 0-V).
+       우리는 시공측량을 하지 않는다 — CP·TBM이 틀리거나 이상할 때 나가는
+       것이라 특정 공종·도로에 걸리지 않는다. 위치와 사유만 받는다.
+       ★workGet() **위**에 둔다 — 아래로 내려가면 공종이 없어 늘 막힌다. */
+    if (t === 'surv') {
+      var wEl = $('#vWhy'); if (wEl) V.whyEtc = String(wEl.value || '').trim();
+      if (!V.why) return say('Select reason / اختر السبب');
+      var why = whyText();
+      if (!why) return say('Enter reason / أدخل السبب');
+      var srow = { id: A.uid(), date: d, loc: loc(), key: '', spot: null,
+                   why: why, by: V.by, done: false, at: A.nowISO(), up: 0 };
+      S.surv.push(srow);
+      A.save();
+      V.why = ''; V.whyEtc = '';        /* 같은 사유가 또 눌리는 것 방지 */
+      render();
+      toServer('surv', srow);
+      return;
+    }
+
     var g = workGet();
     if (!g) return say('Select work item / اختر البند');
 
@@ -1066,7 +1100,7 @@
                    tag: V.tag || '',
                    spots: sps.length ? sps : null, teams: tm,
                    ppl: JSON.parse(JSON.stringify(V.ppl)), eq: JSON.parse(JSON.stringify(V.eq)),
-                   by: V.by, st: 'sub', up: 0 };
+                   by: V.by, co: vco(), st: 'sub', up: 0 };
       S.crew.push(crow);
       V.ppl = { eng: 0, fmn: 0, wkr: 0 }; V.eq = [];
       A.save(); render();
@@ -1103,21 +1137,6 @@
       V.pick = [];
       A.save(); render();
       toServer('insp', irow);
-      return;
-    } else if (t === 'surv') {
-      /* 「기타」면 직접 친 글을 먼저 거둔다 — 화면 상태에만 있으면
-         고르고 바로 제출할 때 빈 글이 저장된다. */
-      var wEl = $('#vWhy'); if (wEl) V.whyEtc = String(wEl.value || '').trim();
-      if (!V.why) return say('Select reason / اختر السبب');
-      var why = whyText();
-      if (!why) return say('Enter reason / أدخل السبب');
-      var srow = { id: A.uid(), date: d, loc: g.loc, key: g.key, spot: g.spot,
-                   why: why, by: V.by, done: false, at: A.nowISO(), up: 0 };
-      S.surv.push(srow);
-      A.save();
-      V.why = ''; V.whyEtc = '';        /* 같은 사유가 또 눌리는 것 방지 */
-      render();
-      toServer('surv', srow);
       return;
     }
   }

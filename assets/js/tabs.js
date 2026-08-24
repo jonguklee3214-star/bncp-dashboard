@@ -385,7 +385,7 @@
     if (r.type === 'crew') return { box: 'crew', row: merge(base, {
       teams: +r.teams || 0,
       ppl: r.ppl || { eng: 0, fmn: 0, wkr: 0 },
-      eq: r.eq || [], st: r.st || 'sub' }) };
+      eq: r.eq || [], co: r.co || '', st: r.st || 'sub' }) };
 
     if (r.type === 'insp') return { box: 'insp', row: merge(base, {
       qty: +r.qty || 0, st: r.st || 'apply', stAt: r.stAt || r.date || '',
@@ -1263,7 +1263,7 @@
       if (from && String(c.date) < from) return;
       if (to && String(c.date) > to) return;
       days[c.date] = 1;
-      var name = isDir ? T('res_dir') : (c.by || '—');
+      var name = isDir ? T('res_dir') : (c.co || c.by || '—');   /* ★회사 기준 (v2.30.0 · 요청 ①) */
       var o = co[name] || (co[name] = { name: name, dir: !!isDir, pax: 0, teams: 0, run: 0, down: 0 });
       var p = A.crewTotal(c);
       o.pax += p; o.teams += (+c.teams || 0); pax += p;
@@ -1325,8 +1325,9 @@
       if (!A.hit(c, flt)) return;
       (c.eq || []).forEach(function (x) {
         var d = eqDown(x); if (!d) return;
-        var id = (c.by || '—') + '|' + x.cat + '|' + (x.size || '');
-        var o = by[id] || (by[id] = { id: id, co: c.by || '—', cat: x.cat, size: x.size || '', n: 0, first: c.date, last: c.date });
+        var cco = c.co || c.by || '—';   /* ★회사 기준 (v2.30.0 · 요청 ①) */
+        var id = cco + '|' + x.cat + '|' + (x.size || '');
+        var o = by[id] || (by[id] = { id: id, co: cco, cat: x.cat, size: x.size || '', n: 0, first: c.date, last: c.date });
         o.n = Math.max(o.n, d);
         if (String(c.date) < String(o.first)) o.first = c.date;
         if (String(c.date) > String(o.last)) o.last = c.date;
@@ -2093,7 +2094,7 @@
     var n = 0, sum = 0;
     (rows || []).forEach(function (r) { if (r.rate != null) { sum += Math.min(100, r.rate); n++; } });
 
-    return '<div class="sb"><div class="sb__in">' +
+    return '<div class="sb"><div class="sb__t">' + T('pn_t') + '</div><div class="sb__in">' +
       sbCell(nf(t.pax), T('u_pax'), T('pn_pax'), '', 'cdPpl') +
       sbCell(nf(have || run + down), T('u_unitq'), T('pn_eq'),
         '<span class="sb__d"><i class="ok"></i>' + nf(run) +
@@ -2152,7 +2153,7 @@
     }
     S.crew.forEach(function (c) {
       if (c.st !== 'ok' || c.date !== day || !A.locMatch(c, flt)) return;
-      var o = slot(String(c.by || '') || T('e_noco'));
+      var o = slot(String(c.co || c.by || '') || T('e_noco'));   /* ★회사 기준 (v2.30.0 · 요청 ①) */
       o.pax += A.pplSum(c.ppl || {}) + A.oprCount(c.eq || []);
       (c.eq || []).forEach(function (x) { o.run += Number(x.run) || 0; });
     });
@@ -3070,7 +3071,7 @@
     });
     return '<div class="tw"><table><thead><tr><th>' + T('u_sec') + '</th>' +
       '<th>' + T('fl_step') + '</th><th>' + T('fl_wait') + '</th><th>' + T('date') + '</th>' +
-      '<th>' + T('work') + '</th><th>' + T('reason') + '</th>' +
+      '<th>' + T('reason') + '</th>' +
       '<th class="r">' + T('th_open') + '</th><th class="noprint"></th></tr></thead><tbody>' +
       list.map(function (r) {
         var d = A.dayGap(r.date), end = A.flowEnd('surv', r);
@@ -3079,7 +3080,6 @@
           '<td>' + fBadge('surv', r) + fWhy(r) + '</td>' +
           '<td>' + fWho('surv', r) + '</td>' +
           '<td class="sp">' + esc(r.date) + '</td>' +
-          '<td>' + itemLine(r.key, r.spot) + '</td>' +
           '<td style="max-width:280px">' + esc(r.why || '') + (r.by ? '<br><span class="sp">' + esc(r.by) + '</span>' : '') + '</td>' +
           '<td class="r' + (!end && d >= A.LONG ? ' em' : ' sp') + '">' + (end ? '—' : d + 'd') + '</td>' +
           '<td class="c noprint">' + fBtns('surv', r) +
@@ -3360,7 +3360,7 @@
     S.crew.forEach(function (c) {
       if (c.st !== 'ok' || !A.locMatch(c, flt)) return;
       if (c.date < d.from || c.date > d.to) return;
-      var o = slot(c.by || T('res_dir'));
+      var o = slot(c.co || c.by || T('res_dir'));   /* ★회사 기준 (v2.30.0 · 요청 ①) */
       o.pax += A.crewTotal(c);
       (c.eq || []).forEach(function (q) { o.run += (+q.run || 0); o.brk += (+q.brk || 0) + (+q.rep || 0); });
     });
