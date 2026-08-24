@@ -380,7 +380,7 @@
          내 PC에선 보이는데 다른 PC에선 통째로 비어 있게 된다. 짝으로 고친다. */
     base.tag = r.tag || '';
 
-    if (r.type === 'work') return { box: 'work', row: merge(base, { qty: +r.qty || 0, st: r.st || 'sub' }) };
+    if (r.type === 'work') return { box: 'work', row: merge(base, { qty: +r.qty || 0, subAt: r.subAt || '', admOK: r.admOK ? 1 : 0, st: r.st || 'sub' }) };
 
     if (r.type === 'crew') return { box: 'crew', row: merge(base, {
       teams: +r.teams || 0,
@@ -389,7 +389,8 @@
 
     if (r.type === 'insp') return { box: 'insp', row: merge(base, {
       qty: +r.qty || 0, st: r.st || 'apply', stAt: r.stAt || r.date || '',
-      reason: r.reason || '', note: r.note || '', seq: +r.seq || 1, hist: [] }) };
+      reason: r.reason || '', note: r.note || '', seq: +r.seq || 1,
+      subAt: r.subAt || '', admOK: r.admOK ? 1 : 0, hist: [] }) };
 
     if (r.type === 'surv') return { box: 'surv', row: merge(base, {
       why: r.why || '', done: !!r.done,
@@ -484,6 +485,8 @@
     }
     if (type === 'work') {
       b.qty = row.qty; b.ckAt = row.ckAt || '';
+      if (row.subAt) b.subAt = row.subAt;                              /* 제출 시각 유지 (요청 ⑤) */
+      if (row.admOK) { b.admOK = 1; b.admOKAt = row.admOKAt || ''; }   /* 오전 예외 확인 (요청 ⑤) */
       if (row.st === 'rej') { b.rejWhy = row.rejWhy || ''; b.rejAt = row.rejAt || ''; }
     }
     if (type === 'crew') {
@@ -491,7 +494,9 @@
       b.teams = row.teams; b.ppl = row.ppl; b.eq = row.eq;
       b.pax = A.crewTotal(row); b.ckAt = row.ckAt || '';
     }
-    if (type === 'insp') { b.qty = row.qty; b.stAt = row.stAt || ''; b.reason = row.reason || ''; b.seq = row.seq || 1; }
+    if (type === 'insp') { b.qty = row.qty; b.stAt = row.stAt || ''; b.reason = row.reason || ''; b.seq = row.seq || 1;
+      if (row.subAt) b.subAt = row.subAt;                              /* 제출 시각 유지 (요청 ⑤) */
+      if (row.admOK) { b.admOK = 1; b.admOKAt = row.admOKAt || ''; } }  /* 오전 예외 확인 (요청 ⑤) */
     if (type === 'surv') { b.done = !!row.done; b.why = row.why || ''; }
     if (type === 'mat') { b.qty = row.qty; b.mat = row.mat || ''; b.spec = row.spec || ''; b.unit = row.unit || ''; if (row.iss != null) b.iss = row.iss; }
     /* ★결재 단계를 함께 보낸다 (v2.20.0). 안 보내면 다른 PC에서는
@@ -2812,6 +2817,29 @@
     var h = '<div class="alert alert--o"><b>' + T('i_rule') + '</b>' +
       '<span class="sp">' + T('h_inspflow') + '</span></div>';
 
+    /* ★오전 마무리 예외 — 관리자가 확인해야 검측이 다음 단계로 넘어간다
+       (v2.31.0 · 요청 ⑤). 협력업체가 오전(현지 13시 이전)에 올린 실적에서
+       나온 검측 신청만 여기 뜬다. 0건이면 카드를 그리지 않는다. */
+    var exc = A.excList(flt);
+    if (exc.length) {
+      h += '<div class="chk" style="margin-bottom:16px">' +
+        '<div class="chk__h">' + T('exc_t') + ' · ' + nf(exc.length) + T('u_case') + '</div>' +
+        '<div class="chk__r"><span class="sp">' + T('exc_n').replace('{n}', nf(exc.length)) + '</span></div>' +
+        '<div class="tw"><table><thead><tr><th>' + T('date') + '</th><th>' + T('exc_rx') + '</th>' +
+        '<th>' + T('loc') + '</th><th>' + T('work') + '</th><th class="r">' + T('th_body') + '</th>' +
+        '<th class="noprint"></th></tr></thead><tbody>' +
+        exc.map(function (r) {
+          var hh = A.subHour(r.subAt);
+          var rxt = hh == null ? '—' : (hh < 10 ? '0' + hh : hh) + ':00~';
+          return '<tr class="wmark"><td class="sp">' + esc(r.date) + '</td>' +
+            '<td class="sp em">' + esc(rxt) + '</td>' +
+            '<td class="code">' + esc(A.locLabel(r.loc)) + '</td>' +
+            '<td>' + itemLine(r.key, r.spot) + '</td>' +
+            '<td class="r">' + nf(r.qty, 2) + ' <span class="sp">' + esc(A.trU((A.item(r.key) || {}).unit || '')) + '</span></td>' +
+            '<td class="c noprint"><button class="btn btn--o btn--sm" data-excok="' + esc(r.id) + '">' + T('exc_ok') + '</button></td></tr>';
+        }).join('') + '</tbody></table></div></div>';
+    }
+
     h += '<div class="grid g4" style="margin-bottom:16px">' +
       ['apply', 'ready', 'pass', 'fail'].map(function (st) {
         var n = list.filter(function (r) { return r.st === st; }).length;
@@ -2872,8 +2900,12 @@
           '<td class="r">' + nf(r.qty, 2) + '</td>' +
           '<td class="sp" style="max-width:220px">' + esc(r.reason || '') + '</td>' +
           '<td class="c noprint">' +
-          (r.st === 'apply' ? '<button class="btn btn--o btn--sm" data-iready="' + esc(r.id) + '">' + T('i_ready_do') + '</button> ' : '') +
-          '<select class="in btn--sm" data-ist="' + esc(r.id) + '" style="width:auto;padding:3px 6px">' +
+          (r.st === 'apply'
+            ? (A.inspBlocked(r)
+                ? '<span class="bd bd--warn">' + T('exc_lock') + '</span> '
+                : '<button class="btn btn--o btn--sm" data-iready="' + esc(r.id) + '">' + T('i_ready_do') + '</button> ')
+            : '') +
+          '<select class="in btn--sm" data-ist="' + esc(r.id) + '"' + (A.inspBlocked(r) ? ' disabled' : '') + ' style="width:auto;padding:3px 6px">' +
           A.INSP_ST.map(function (s) {
             return '<option value="' + s + '"' + (s === r.st ? ' selected' : '') + '>' + T(IST[s][0]) + '</option>';
           }).join('') + '</select>' +
@@ -4271,6 +4303,16 @@
     });
     $$('[data-iready]').forEach(function (b) {
       b.onclick = function () { txBack('insp', A.setInsp(b.dataset.iready, 'ready')); A.render(); };
+    });
+    /* ★오전 마무리 예외 확인 (v2.31.0 · 요청 ⑤) — 검측 신청의 딱지를 풀어
+       다음 단계로 넘어갈 수 있게 한다. 확인 사실을 서버에도 남긴다. */
+    $$('[data-excok]').forEach(function (b) {
+      b.onclick = function () {
+        A.excOK(b.dataset.excok);
+        var r = S.insp.filter(function (x) { return x.id === b.dataset.excok; })[0];
+        if (r) txBack('insp', r);
+        A.render();
+      };
     });
     $$('[data-ist]').forEach(function (sel) {
       sel.onchange = function () {

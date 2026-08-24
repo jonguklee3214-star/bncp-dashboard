@@ -268,6 +268,12 @@
     var lk = A.locKey(loc()), out = {};
     S.work.forEach(function (w) {
       if (!w.need || w.insp) return;              // 검측 필요 표시 + 아직 신청 안 한 것만
+      /* ★오전 마무리 예외라도 협력업체 화면에서는 막지 않는다 (v2.31.0 · 요청 ⑤).
+         협력업체 기기는 서버에서 실적을 받아오지 않아, 관리자의 확인(admOK)
+         해제 신호가 이 화면에 내려오지 않는다. 여기서 막으면 관리자가
+         확인해 줘도 영영 신청을 못 한다. → 차단은 관리자 검측 탭에서 한다.
+         협력업체가 올린 검측 신청은 오전 예외면 관리자 확인 전까지 검측
+         흐름의 다음 단계(제출→합격)로 넘어가지 못한다. */
       if (A.locKey(w.loc) !== lk) return;
       var sp = w.spot, gk = (sp && sp.kind === 'road')
         ? window.BNCP_SPOT.groupKey(sp) : ('k|' + w.key);
@@ -880,6 +886,7 @@
     if (type === 'work') {
       base.qty = row.qty;
       base.need = !!row.need;
+      base.subAt = row.subAt || '';        /* 제출 시각 — 오전 예외 판정 (요청 ⑤) */
       var sp = row.spot;
       if (sp && sp.kind === 'road') {
         base.road = window.BNCP_SPOT.roadName(sp);
@@ -910,6 +917,8 @@
       base.from = row.from || '';
       base.to = row.to || '';
       base.src = row.src || [];
+      base.subAt = row.subAt || '';           /* 오전 예외 판정용 (요청 ⑤) */
+      if (row.admOK) base.admOK = 1;
       if (row.spot) base.spot = row.spot;
     }
 
@@ -1052,7 +1061,7 @@
             id: A.uid(), date: d, loc: g.loc, key: g.key, spot: {
               kind: 'road', w: V.rw, no: V.rno, memo: V.rmemo, side: sid, f: f, t: tt
             },
-            qty: L, by: V.by, st: 'sub', need: !!V.need, insp: '', up: 0
+            qty: L, by: V.by, subAt: A.nowISO(), st: 'sub', need: !!V.need, insp: '', up: 0
           });
         }
         mk.forEach(function (r) { S.work.push(r); });
@@ -1074,7 +1083,7 @@
       if (needTag && !V.tag) return say('Enter marking / أدخل الترميز');
       var wrow = { id: A.uid(), date: d, loc: g.loc, key: g.key, spot: g.spot,
                    tag: V.tag || '',
-                   qty: q2, by: V.by, st: 'sub', need: !!V.need, insp: '', up: 0 };
+                   qty: q2, by: V.by, subAt: A.nowISO(), st: 'sub', need: !!V.need, insp: '', up: 0 };
       S.work.push(wrow);
       A.save();
       var qEl = $('#vQty'); if (qEl) qEl.value = '';   // 같은 값이 남아 또 눌리는 것 방지
@@ -1119,6 +1128,13 @@
 
       var qsum = rows.reduce(function (a, w) { return a + (+w.qty || 0); }, 0);
       var dates = rows.map(function (w) { return w.date; }).sort();
+      /* ★오전 마무리 예외를 검측 신청에 물려준다 (v2.31.0 · 요청 ⑤).
+         원본 실적 중 하나라도 오전 제출이면 이 신청도 예외다. 가장 이른
+         제출 시각을 함께 실어, 관리자가 무엇 때문에 예외인지 볼 수 있게 한다.
+         관리자가 확인(admOK)하기 전엔 검측 흐름의 다음 단계로 못 넘어간다. */
+      var subs = rows.map(function (w) { return w.subAt || ''; }).filter(Boolean).sort();
+      var excSub = '';
+      rows.forEach(function (w) { if (A.isMorningExc(w) && !excSub) excSub = w.subAt || subs[0] || ''; });
       var irow = {
         id: A.uid(), date: A.today(), loc: rows[0].loc, key: rows[0].key,
         spot: rows[0].spot,
@@ -1126,6 +1142,7 @@
         tag: rows[0].tag || '',
         qty: qsum, st: 'apply', stAt: A.today(), at: A.nowISO(), reason: '',
         by: V.by, note: '', seq: 1, hist: [], up: 0,
+        subAt: excSub || subs[0] || '', admOK: 0,     /* 오전 예외 판정용 (요청 ⑤) */
         /* ★ 단계(stage)와 차수(seq)는 다르다. 섞으면 통계가 흐려진다 */
         stage: V.stage, layer: V.stage === 'bf' ? V.layer : 0,
         src: rows.map(function (w) { return w.id; }),

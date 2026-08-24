@@ -40,6 +40,33 @@
   A.dayGap = function (a, b) { return Math.round((new Date(b || A.today()) - new Date(a)) / 86400000); };
   A.uid = function () { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); };
 
+  /* ══ 오전 마무리 예외 (v2.31.0 · 요청 ⑤) ═══════════════════
+     ★규칙(사용자 확정) : 실적은 미리 올려도 된다. 다만 **제출 시각이 현지
+       13:00 이전**이면 「오전 마무리」로 본다. 오전에 올라온 것은 그날 작업이
+       아직 안 끝났을 수 있어, **관리자가 확인해 줘야** 다음 단계(검측 신청)로
+       넘어간다.
+     ★시각은 **협력업체 기기 시각**으로 통일한다(사용자 확정). 협력업체가
+       실적을 올릴 때 subAt에 박고, 그 값을 서버로도 보내 관리자도 같은 값을
+       본다 — 협력업체 화면·관리자 화면이 같은 기준을 쓰게 된다.
+     ★subAt은 UTC ISO(new Date().toISOString())다. 바그다드는 UTC+3이라
+       현지 13:00은 UTC 10:00 — 오프셋을 더해 현지 시(hour)를 구한다.
+     ★subAt이 없으면(옛 자료) 예외로 몰지 않는다 — 없는 것을 근거로 막으면
+       멀쩡한 실적이 갇힌다. */
+  A.TZ_OFF = 3;              /* 바그다드 UTC+3 (서머타임 없음) */
+  A.MORNING_END = 13;       /* 이 시각 이전 제출이면 오전 마무리 */
+  A.subHour = function (t) {
+    if (!t) return null;
+    var d = new Date(t);
+    if (isNaN(d.getTime())) return null;
+    return (d.getUTCHours() + A.TZ_OFF) % 24;
+  };
+  /** 오전 마무리 예외인가 — 아직 관리자가 확인 안 한 것만 참 */
+  A.isMorningExc = function (w) {
+    if (!w || w.admOK) return false;          /* 관리자가 확인하면 예외가 풀린다 */
+    var h = A.subHour(w.subAt);
+    return h != null && h < A.MORNING_END;
+  };
+
   /* ── 상태 ───────────────────────────────────────────── */
   var KEY = 'bncp.dash.v2';
   var BLANK = {
@@ -797,6 +824,25 @@
   A.pendCrew = function (f) {
     return S.crew.filter(function (w) { return w.st !== 'ok' && A.locMatch(w, f); });
   };
+
+  /* ★오전 마무리 예외 목록 (v2.31.0 · 요청 ⑤).
+     협력업체가 올린 **검측 신청**(insp) 중, 오전 제출이라 관리자 확인을
+     기다리는 것. 아직 신청(apply) 단계인 것만 — 이미 완료확인(ready) 이후로
+     넘어간 것은 대상이 아니다. */
+  A.excList = function (f) {
+    return S.insp.filter(function (r) {
+      return r.st === 'apply' && A.isMorningExc(r) && A.locMatch(r, f);
+    });
+  };
+  /** 관리자가 예외를 확인한다 — 딱지를 풀어 검측 흐름의 다음 단계가 열린다 */
+  A.excOK = function (id) {
+    S.insp.forEach(function (r) {
+      if (r.id === id) { r.admOK = 1; r.admOKAt = A.nowISO(); }
+    });
+    A.save();
+  };
+  /** 이 검측 신청이 관리자 확인을 기다리는 오전 예외인가 (다음 단계 차단용) */
+  A.inspBlocked = function (r) { return A.isMorningExc(r); };
 
   A.rate = function (key, f) {
     var p = A.planQty(key, f); if (!p) return null;

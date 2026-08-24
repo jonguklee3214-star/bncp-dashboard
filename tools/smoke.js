@@ -1995,7 +1995,7 @@ console.log('\n[53] 확인 처리가 서버에 남는다');
      이제 결재 흐름 처리기 하나가 두 종류를 다 보낸다. */
   ok(/txBack\(kind, fRow\(kind, id\)\)/.test(tsrc), '측량·자재 결재 결과를 보낸다');
   ok(!/txBack\('surv', x\)/.test(tsrc), '★옛 완료 토글이 남아 있지 않다');
-  ok((tsrc.match(/txBack\('insp'/g) || []).length === 3, '검측 상태 변경 3곳 다 보낸다');
+  ok((tsrc.match(/txBack\('insp'/g) || []).length === 4, '검측 상태 변경 4곳 다 보낸다 (v2.31.0 예외확인 포함)');
 
   /* ★확인 처리가 시트의 공종명·단위를 비우지 않는다 (v2.18.7 사용자 지적).
      협력업체 화면(payload)은 처음부터 채워 보내고 있었다 — 되돌려 보내는
