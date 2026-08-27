@@ -848,6 +848,33 @@ console.log('\n[92] 군더더기 제거 — 설명 문구 · 「N개 공종」 �
   A._grpBy('work'); A.setRole(keepRole); if (keepFlt) A.setFlt(keepFlt); A.go(1);
 }
 
+/* ── 93 스탭 화면에는 '준비'가 없다 (요청 : 스탭화면 작업현황) ──
+   ★준비의 여섯 갈래는 전부 셋업(설계수량·지급장비·명부·우리스탭·동기화·용량)
+     이라 관리자만 넣어야 한다. 종전에는 스탭 화면에도 그대로 떠 설계수량·
+     지급장비까지 스탭이 손댈 수 있었다.
+   ★[29] 앞에 둔다 — 뒤는 표본 파일 누락으로 안 돌아 거짓 안심이 된다. */
+console.log('\n[93] 준비는 관리자 전용 — 스탭 작업현황에는 없다');
+{
+  const keepRole = A.role();
+  const spT = A.T('sp_t');
+
+  A.setRole('staff'); A.go(1);
+  const hs = bag.view.innerHTML;
+  ok(hs.length > 0, '스탭 작업현황이 그려진다(기준)');
+  ok(hs.indexOf(spT) < 0, "★준비 카드가 스탭 화면에 없다");
+  ok(!/data-stp=/.test(hs), '★준비 하위 버튼(data-stp)이 없다 — 입력 기능도 제거');
+  ok(!/id="stMe"/.test(hs), '★「나는 누구」 셀렉트도 스탭 화면엔 없다');
+  ok(hs.indexOf(A.T('ro_ppl')) > 0 || hs.indexOf(A.T('rollup')) > 0,
+     '작업현황 본체(인력 표)는 스탭에게도 그대로');
+
+  A.setRole('admin'); A.go(1);
+  const ha = bag.view.innerHTML;
+  ok(ha.indexOf(spT) > 0, '★관리자 화면에는 준비가 그대로 있다');
+  ok(/data-stp=/.test(ha), '관리자에게는 준비 하위 버튼이 있다');
+
+  A.setRole(keepRole); A.go(1);
+}
+
 /* ── 29 내역서 원본 인식 (v2.14.0) ────────────────────── */
 console.log('\n[29] 내역서 원본 인식 — 실제 P3-1 파일로 검사');
 {
