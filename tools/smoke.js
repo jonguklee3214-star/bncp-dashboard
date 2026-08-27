@@ -769,6 +769,85 @@ console.log('\n[91] 업체 Master — 담당자 이름이 업체로 서지 않�
   A.coFlt = keepFlt;
 }
 
+/* ── 92 화면에서 군더더기를 뺀다 (요청 ⑭·⑯) ─────────────
+   ★사용자 지시 : 「화면에는 실제 관리에 필요한 정보만 간결하게 표시하고,
+     상세한 사용방법과 시스템 설명은 별도 사용자 매뉴얼로 뺀다.」
+   ★이 검사를 [29] **앞**에 둔 이유 — [29]부터는 저장소에 없는 표본 파일을
+     읽어 거기서 멈춘다. 뒤에 두면 검사가 아예 안 돌아 거짓 안심이 된다. */
+console.log('\n[92] 군더더기 제거 — 설명 문구 · 「N개 공종」 오표기 · 플랜트 재고칸');
+{
+  const keepVend = S.vend.slice(), keepCrew = S.crew.slice(),
+        keepIssue = S.issue.slice(), keepMreq = S.mreq.slice();
+  const keepRole = A.role ? A.role() : 'admin', keepFlt = A.flt ? A.flt() : null;
+  S.vend.length = 0; S.crew.length = 0; S.issue.length = 0; S.mreq.length = 0;
+  A.coFlt = ''; A.setRole('admin');
+
+  const LZ = { s: 'civil', p: 1, c: 1 }, tz = A.today();
+  A.setFlt(LZ);
+  A.vendAdd('LUU', 'LUU Company', '토공|Kim|964770000001');
+  S.crew.push({ id: 'z1', date: tz, loc: LZ, key: 'T-01', st: 'ok', teams: 1,
+    ppl: { eng: 0, fmn: 1, wkr: 2 }, co: 'LUU Company', by: 'Kim',
+    eq: [{ cat: 'Dump Truck', size: '25ton', run: 6, brk: 1, rep: 0 },
+         { cat: 'Excavator (crawler)', size: '0.8m3', run: 2, brk: 0, rep: 0 },
+         { cat: 'Motor Grader', size: '12ft', run: 1, brk: 0, rep: 0 }] });
+  A.setEqQty(LZ, 'Dump Truck', '25ton', 'give', 8, 'LUU Company');
+
+  A._grpBy('co'); A.go(1);
+  const hz = bag.view.innerHTML;
+  ok(hz.indexOf(A.T('eq_st')) > 0, '장비 표가 그려진다(기준 확보)');
+
+  /* ⑭-1 설명 문구 — 만든 사람의 사정이지 보는 사람이 확인할 것이 아니다 */
+  ok(hz.indexOf('위치 필터를 따르지 않는다') < 0,
+     '★설명 문구(보유는 업체 축이라…)가 화면에 없다');
+  ok(hz.indexOf('eq_co_n') < 0, '지운 키가 날글자로 새지 않는다');
+  ok(!/eq_co_n/.test(fs.readFileSync(path.join(ROOT, 'assets/js/i18n.js'), 'utf8')),
+     '사전에서도 지웠다 — 죽은 키를 남기지 않는다(3-E)');
+
+  /* ⑭-2 「3개 공종」 오표기 — 장비현황에서 세는 것은 장비 종류다.
+     ★탭1 전체로 재면 진행률 표의 「개 공종」이 걸린다(3-B 기준어 함정) —
+       업체 줄 안으로 좁혀서 본다. */
+  const rs = hz.indexOf('data-eqo="co|LUU Company"');
+  const eqRow = rs < 0 ? '' : hz.slice(rs, hz.indexOf('</tr>', rs));
+  ok(eqRow.length > 0, '장비 업체 줄을 집어냈다');
+  ok(eqRow.indexOf('개 공종') < 0, '★장비 업체 줄에 「N개 공종」이 안 나온다');
+  ok(eqRow.indexOf(A.T('u_neq').replace('{n}', '3')) > 0,
+     '★장비 종류 수로 표시된다 (장비 3종)');
+
+  /* ★엉뚱한 데까지 지우지 않았다 — 진행률·자재의 「개 공종」은 진짜 공종이다 */
+  {
+    const ts2 = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
+    ok((ts2.match(/T\('u_nwork'\)/g) || []).length === 3,
+       '진짜 공종 자리 3곳은 u_nwork 그대로');
+    ok((ts2.match(/T\('u_neq'\)/g) || []).length === 1, '장비 자리 1곳만 u_neq');
+  }
+
+  /* ⑯ 플랜트 자재는 재고 칸을 만들지 않는다 — 플랜트 인원이 아니면 셀 수 없다 */
+  A.addMreq({ date: tz, loc: LZ, grp: '토공', sub: '되메우기', mat: '레미콘',
+              spec: '25-24-15', unit: 'm3', plant: true, qty: 12, by: 'Kim' });
+  A.addMreq({ date: tz, loc: LZ, grp: '토공', sub: '되메우기', mat: '부직포',
+              spec: '150g', unit: 'm2', plant: false, qty: 30, by: 'Kim' });
+  const mrows = A.matRows(A.flt());
+  let pRow = null, wRow = null;
+  mrows.forEach(function (r) { if (r.plant && !pRow) pRow = r; if (!r.plant && !wRow) wRow = r; });
+  ok(!!pRow && !!wRow, '플랜트·창고 자재가 한 줄씩 선다');
+  if (pRow && wRow) {
+    A.go(4);
+    const h4 = bag.view.innerHTML;
+    const q = function (s) { return String(s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+    ok(h4.indexOf('data-mst="' + q(pRow.id) + '"') < 0,
+       '★플랜트 자재에는 재고 입력칸이 없다');
+    ok(h4.indexOf('data-mst="' + q(wRow.id) + '"') > 0,
+       '★창고 자재에는 재고 입력칸이 그대로 있다');
+  }
+
+  S.vend.length = 0; keepVend.forEach(function (v) { S.vend.push(v); });
+  S.crew.length = 0; keepCrew.forEach(function (c) { S.crew.push(c); });
+  S.issue.length = 0; keepIssue.forEach(function (g) { S.issue.push(g); });
+  S.mreq.length = 0; keepMreq.forEach(function (m) { S.mreq.push(m); });
+  A._grpBy('work'); A.setRole(keepRole); if (keepFlt) A.setFlt(keepFlt); A.go(1);
+}
+
 /* ── 29 내역서 원본 인식 (v2.14.0) ────────────────────── */
 console.log('\n[29] 내역서 원본 인식 — 실제 P3-1 파일로 검사');
 {
@@ -1686,9 +1765,17 @@ console.log('\n[43] 작업현황 업체별 묶기');
     const h = bag.view.innerHTML;
     ok(h.indexOf(A.T('eq_st')) > 0, '장비 표가 있다');
     ok(/data-eqo="co\|LUU"/.test(h), '★장비도 업체로 묶인다');
-    ok(h.indexOf(A.T('eq_co_n')) > 0,
-       '★업체별로는 가동·고장만이라고 알린다 (지급·회수는 위치에 걸린 값)');
+    /* ★종전에는 「보유는 업체 축이라…」 설명 문구가 뜨는지 봤다. 요청 ⑭로
+       그 문구를 뺐다 — 만든 사람의 사정이지 보는 사람이 확인할 것이 아니다.
+       ★통과시키려고 지운 것이 아니라 **결정이 바뀌어** 검사도 바뀐 것이다.
+         이제는 그 문구가 **없는지**를 지킨다(다시 들어오면 걸린다). */
+    ok(h.indexOf('위치 필터를 따르지 않는다') < 0 && h.indexOf('eq_co_n') < 0,
+       '★설명 문구(보유는 업체 축이라…)가 화면에 없다');
     ok(!/data-eqq=/.test(h), '★업체별에서는 지급·회수 칸을 만들지 않는다');
+    /* ★「3개 공종」 오표기 (요청 ⑭) — 장비현황에서 세는 것은 장비 종류다 */
+    ok(h.indexOf('개 공종') < 0, '★장비현황에 「N개 공종」이 안 나온다');
+    ok(h.indexOf(A.T('u_neq').replace('{n}', '1')) > 0,
+       '★장비 종류 수로 표시한다 (장비 N종)');
   }
   A._grpBy('work'); A.go(1);
   ok(/data-eqq=/.test(bag.view.innerHTML) || /class="gr"/.test(bag.view.innerHTML),

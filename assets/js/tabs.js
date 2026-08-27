@@ -1522,7 +1522,10 @@
       body += '<tr class="gr' + (op ? ' gr--on' : '') + '" data-eqo="co|' + esc(co) + '">' +
         '<td><span class="gr__c">' + (op ? '▾' : '▸') + '</span> ' +
         '<span class="nm">' + (co ? esc(co) : T('e_noco')) + '</span> ' +
-        '<span class="sp">' + T('u_nwork').replace('{n}', nf(list.length)) + '</span></td>' +
+        /* ★「3개 공종」이라고 나오던 자리다 (요청 ⑭ 사용자 지적).
+           여기서 세는 것은 공종이 아니라 **장비 종류**다(list는 cat별로 묶은 것).
+           장비현황에서 「3개 공종」을 보면 세 공종이 도는 줄로 읽힌다. */
+        '<span class="sp">' + T('u_neq').replace('{n}', nf(list.length)) + '</span></td>' +
         '<td class="r"><b>' + nf(hv) + '</b></td>' +
         '<td class="r em">' + nf(s.run) + '</td>' +
         '<td class="r' + (s.down ? ' em' : '') + '">' + (s.down ? nf(s.down) : '·') + '</td></tr>';
@@ -1577,8 +1580,11 @@
       body + '</tbody><tfoot><tr class="tot"><td>' + T('tot_t') + '</td>' +
       '<td class="r"><b>' + nf(tot.have) + '</b></td>' +
       '<td class="r">' + nf(tot.run) + '</td>' +
-      '<td class="r">' + (tot.down ? nf(tot.down) : '·') + '</td></tr></tfoot></table></div>' +
-      '<div class="hint" style="margin-top:8px">' + T('eq_co_n') + '</div>';
+      '<td class="r">' + (tot.down ? nf(tot.down) : '·') + '</td></tr></tfoot></table></div>';
+    /* ★설명 문구(eq_co_n)를 뺐다 (요청 ⑭ 사용자 지시).
+       「보유는 업체 축이라 위치 필터를 따르지 않는다…」는 **만든 사람의 사정**이지
+       보는 사람이 입력하거나 확인할 것이 아니다. 화면에는 관리에 필요한 숫자만
+       남기고, 이런 설명은 사용자 매뉴얼로 뺀다. */
   }
 
   /* 손으로 한 종류씩 넣기 — 지급대장 CSV를 만들 것도 없는 현장이 있다 */
@@ -3166,9 +3172,16 @@
           /* ★신청 — 협력업체가 올린 것. 지급 전이라 다른 칸이 다 비어 있어도
              여기만 차 있다. 스탭이 가장 먼저 봐야 할 칸이다. */
           '<td class="r">' + (a.req ? '<span class="bd bd--o">' + nf(a.req, 2) + '</span>' : '<span class="sp">·</span>') + '</td>' +
-          '<td class="r"><input class="in num mt__q" type="number" step="0.01" ' +
-            'data-mst="' + esc(a.id) + '" data-mstl="' + esc(A.locKey(a.loc)) +
-            '" value="' + (a.stock == null ? '' : nf(a.stock, 2)) + '"></td>' +
+          /* ★플랜트 자재는 재고 칸을 만들지 않는다 (요청 ⑯ 사용자 지시).
+             「플랜트 인원이 아닌 사용자가 정확한 재고수량을 확인하기 어렵다.
+               신청·지급하고 지급수량만 집계하면 된다.」
+             ★창고 자재는 종전대로 넣는다 — 그쪽은 우리가 세는 것이다.
+             ★이미 들어가 있는 값은 지우지 않는다. 칸만 안 만든다. */
+          (a.plant
+            ? '<td class="r"><span class="sp">—</span></td>'
+            : '<td class="r"><input class="in num mt__q" type="number" step="0.01" ' +
+                'data-mst="' + esc(a.id) + '" data-mstl="' + esc(A.locKey(a.loc)) +
+                '" value="' + (a.stock == null ? '' : nf(a.stock, 2)) + '"></td>') +
           '<td class="r em">' + nf(a.iss, 2) + '</td>' +
           '<td class="r">' + (gap == null ? '<span class="sp">—</span>'
             : '<span class="' + (gap > 0 ? 'bd bd--d' : 'sp') + '">' + (gap > 0 ? '+' : '') + nf(gap, 2) + '</span>') +
