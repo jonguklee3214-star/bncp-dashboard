@@ -1268,7 +1268,7 @@
       if (from && String(c.date) < from) return;
       if (to && String(c.date) > to) return;
       days[c.date] = 1;
-      var name = isDir ? T('res_dir') : (c.co || c.by || '—');   /* ★회사 기준 (v2.30.0 · 요청 ①) */
+      var name = A.coOf(c, isDir) || '—';   /* ★업체 Master 기준 — core.js A.coOf */
       var o = co[name] || (co[name] = { name: name, dir: !!isDir, pax: 0, teams: 0, run: 0, down: 0 });
       var p = A.crewTotal(c);
       o.pax += p; o.teams += (+c.teams || 0); pax += p;
@@ -1330,7 +1330,7 @@
       if (!A.hit(c, flt)) return;
       (c.eq || []).forEach(function (x) {
         var d = eqDown(x); if (!d) return;
-        var cco = c.co || c.by || '—';   /* ★회사 기준 (v2.30.0 · 요청 ①) */
+        var cco = A.coOf(c, false) || '—';   /* ★업체 Master 기준 — core.js A.coOf */
         var id = cco + '|' + x.cat + '|' + (x.size || '');
         var o = by[id] || (by[id] = { id: id, co: cco, cat: x.cat, size: x.size || '', n: 0, first: c.date, last: c.date });
         o.n = Math.max(o.n, d);
@@ -2158,7 +2158,7 @@
     }
     S.crew.forEach(function (c) {
       if (c.st !== 'ok' || c.date !== day || !A.locMatch(c, flt)) return;
-      var o = slot(String(c.co || c.by || '') || T('e_noco'));   /* ★회사 기준 (v2.30.0 · 요청 ①) */
+      var o = slot(A.coOf(c, false) || T('e_noco'));   /* ★업체 Master 기준 — core.js A.coOf */
       o.pax += A.pplSum(c.ppl || {}) + A.oprCount(c.eq || []);
       (c.eq || []).forEach(function (x) { o.run += Number(x.run) || 0; });
     });
@@ -3392,7 +3392,7 @@
     S.crew.forEach(function (c) {
       if (c.st !== 'ok' || !A.locMatch(c, flt)) return;
       if (c.date < d.from || c.date > d.to) return;
-      var o = slot(c.co || c.by || T('res_dir'));   /* ★회사 기준 (v2.30.0 · 요청 ①) */
+      var o = slot(A.coOf(c, false) || T('res_dir'));   /* ★업체 Master 기준 — core.js A.coOf */
       o.pax += A.crewTotal(c);
       (c.eq || []).forEach(function (q) { o.run += (+q.run || 0); o.brk += (+q.brk || 0) + (+q.rep || 0); });
     });

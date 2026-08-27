@@ -585,8 +585,14 @@ console.log('\n[27] 정비 의뢰 — 스탭이 의뢰 여부만 체크, 장기�
 {
   const tsrc = fs.readFileSync(path.join(ROOT, 'assets/js/tabs.js'), 'utf8');
   ok(/function mtRows/.test(tsrc), '고장 장비 추적 있음');
-  /* v2.30.0 — 회사 기준이 `by`(담당자)에서 `co`(회사, by 폴백)로 바뀌었다 (요청 ①) */
-  ok(/c\.co \|\| c\.by \|\| '—'[\s\S]{0,80}\+ '\|' \+ x\.cat/.test(tsrc), '회사+종류+규격 단위로 추적(개별 번호 없음)');
+  /* v2.30.0 — 회사 기준이 `by`(담당자)에서 `co`(회사, by 폴백)로 바뀌었다 (요청 ①)
+     ★이후 `co || by` 폴백이 담당자 이름을 업체로 세우는 사고를 냈다([91]).
+       이제 업체는 명부(Master)를 거쳐 A.coOf가 정한다 — 검사도 그리로 옮긴다.
+       ★통과시키려고 고친 것이 아니라 **업체를 읽는 길이 바뀌어** 고친 것이다.
+         이 검사의 뜻은 종전 그대로다 : 묶는 단위가 회사+종류+규격이고
+         장비 **개별 번호로는 추적하지 않는다.** */
+  ok(/A\.coOf\(c[\s\S]{0,80}\+ '\|' \+ x\.cat/.test(tsrc), '회사+종류+규격 단위로 추적(개별 번호 없음)');
+  ok(/cco \+ '\|' \+ x\.cat \+ '\|' \+ \(x\.size/.test(tsrc), '묶는 열쇠에 규격까지 들어간다');
   ok(/MT_LONG = 7/.test(tsrc), '7일 이상이면 장기');
   // v2.15.0 — 체크박스는 끝나는 지점이 없어 계속 떠 있었다(사용자 지적) → 단계로 바꿈
   ok(!/data-mtreq=/.test(tsrc), '체크박스 없음 (v2.15.0에서 단계로 대체)');
@@ -649,6 +655,118 @@ console.log('\n[28] 권한 — 스탭/관리자, 로그인 없으면 아무것�
   const h4 = bag.view.innerHTML;
   ok(!/data-mdeny/.test(h4), '스탭 자재화면에 반려 버튼 없음');
   A.setRole('admin'); A.go(1);
+}
+
+/* ── 91 업체 Master — 명부 2곳인데 집계가 3곳이던 것 ──────
+   ★사고 : 명부에 업체가 2곳뿐인데 인원·장비 집계에는 3곳이 섰다(사용자 지적).
+     집계가 업체를 `co || by`로 읽는데, 담당자 배정(v2.19.2) 이후 `by`는
+     **담당자 이름**이다. `co`가 없는 옛 crew 기록 하나가 담당자 이름으로
+     업체 한 줄을 만들었고, 그 줄은 지급(보유) 축에는 없어 두 축이 어긋났다.
+   ★고침 : A.vendFind / A.coOf — 명부(S.vend)를 업체 Master로 삼아
+     업체명·코드·**담당자 이름**을 그 업체 한 줄로 되묶는다.
+   ★이 검사는 옛 코드(`c.co || c.by`)로 되돌리면 실패한다 — 확인함. */
+console.log('\n[91] 업체 Master — 담당자 이름이 업체로 서지 않는다');
+{
+  const keepVend = S.vend.slice(), keepCrew = S.crew.slice(),
+        keepIssue = S.issue.slice(), keepFlt = A.coFlt;
+  S.vend.length = 0; S.crew.length = 0; S.issue.length = 0; A.coFlt = '';
+
+  const LC = { s: 'civil', p: 1, c: 1 }, td = A.today();
+  A.vendAdd('KEW', 'KEW Company', '토공|Ahmed|964770000001');
+  A.vendAdd('DIG', 'Diglah Trading', '우수공|Ali|964770000002');
+
+  /* ★존재 확인을 맨 앞에 둔다 (0-W의 교훈) — 옛 파일로 되돌렸을 때 예외로
+     검사가 통째로 죽으면 어느 줄이 왜 실패했는지 안 보인다. 한 줄로 깨끗이
+     실패시키고 나머지는 건너뛴다. */
+  const hasAPI = (typeof A.vendFind === 'function' && typeof A.coOf === 'function');
+  ok(hasAPI, 'A.vendFind · A.coOf 존재');
+  if (!hasAPI) {
+    ok(false, '★업체 Master 해석 계층이 없다 — 아래 검사를 건너뛴다');
+  } else {
+
+  // 되묶기 — 이름 변형·코드·담당자
+  ok(A.vendFind('K.E.W  company') && A.vendFind('K.E.W  company').code === 'KEW',
+     '이름 변형(K.E.W)이 한 업체로');
+  ok(A.vendFind('KEW') && A.vendFind('KEW').code === 'KEW', '업체코드로도 찾는다');
+  ok(A.vendFind('Ahmed') && A.vendFind('Ahmed').code === 'KEW',
+     '★담당자 이름 → 그 사람의 업체');
+  ok(A.vendFind('KEW Trading') === null, '비슷하지만 다른 이름은 안 붙는다');
+
+  // 실제 집계 — 명부 2곳이면 줄도 2곳
+  S.crew.push({ id: 'q1', date: td, loc: LC, key: 'T-01', st: 'ok', teams: 1,
+    ppl: { eng: 0, fmn: 1, wkr: 5 }, eq: [{ cat: 'Dump Truck', size: '15ton', run: 2, brk: 0, rep: 0 }],
+    by: 'Ahmed', co: 'KEW Company' });
+  S.crew.push({ id: 'q2', date: td, loc: LC, key: 'T-01', st: 'ok', teams: 1,
+    ppl: { eng: 0, fmn: 1, wkr: 4 }, eq: [], by: 'Ahmed' });          /* 옛 자료 — co 없음 */
+  S.crew.push({ id: 'q3', date: td, loc: LC, key: 'SS-01', st: 'ok', teams: 1,
+    ppl: { eng: 0, fmn: 1, wkr: 3 }, eq: [], by: 'Ali', co: 'Diglah Trading' });
+
+  const gs = A.rollupCo(null);
+  ok(gs.length === 2, `★업체 줄이 2개다 (실제 ${gs.length}) — 담당자 이름 줄이 안 선다`);
+  ok(!gs.some(g => g.co === 'Ahmed'), '담당자 이름(Ahmed)이 업체 줄로 서지 않는다');
+  const kew = gs.filter(g => g.co === 'KEW Company')[0];
+  /* q1 = 포맨1+워커5 + 운전원2 = 8 · q2(co 없는 옛 줄) = 포맨1+워커4 = 5 */
+  ok(kew && kew.rows.reduce((t, r) => t + r.pplT, 0) === 13,
+     '★co 없는 옛 줄의 인원이 그 업체에 합쳐진다 (8+5=13)');
+
+  // 두 축(실적·지급)이 같은 이름에서 만난다
+  A.setEqQty(LC, 'Dump Truck', '15ton', 'give', 5, 'KEW Company');
+  const gby = {};
+  A.eqRecon(null).forEach(r => Object.keys(r.gby || {}).forEach(c => gby[c] = 1));
+  ok(gby['KEW Company'], '지급 축도 같은 정식 업체명으로 선다');
+
+  // 현장 현황 칸
+  const sr = A.siteRows(null, td);
+  const cos = {}; sr.forEach(r => Object.keys(r.co).forEach(c => cos[c] = 1));
+  ok(!cos['Ahmed'] && cos['KEW Company'], '현장 현황 업체 칸에도 담당자 이름이 없다');
+
+  // 명부에 없는 업체는 사라지면 안 된다
+  ok(A.coOf({ co: 'Unknown Sub Co' }) === 'Unknown Sub Co',
+     '★명부에 없는 업체는 원문 그대로 남는다(조용히 지우지 않는다)');
+
+  // 직영은 업체로 섞이지 않는다
+  ok(A.coOf({ by: '이과장' }, true) === A.T('res_dir'), '직영은 직영 줄로 간다');
+
+  // 업체 필터가 옛 담당자이름 줄까지 잡는다
+  A.coFlt = 'KEW Company';
+  ok(S.crew.filter(c => A.inCo(c)).length === 2,
+     '★업체 필터에 co 없는 옛 줄도 함께 걸린다');
+  A.coFlt = 'Diglah Trading';
+  ok(S.crew.filter(c => A.inCo(c)).length === 1, '다른 업체로 거르면 그 업체 것만');
+  A.coFlt = '';
+
+  /* ★조회 색인을 캐시한다(집계마다 줄 수만큼 불리는 자리라 재 보고 넣었다).
+     캐시는 「고쳤는데 화면이 옛것」을 만드는 전형적인 자리다 — 명부를 고치는
+     길마다 색인이 따라오는지 검사로 붙들어 둔다. */
+  S.vend.length = 0; S.crew.length = 0;
+  A.vendAdd('KEW', 'KEW Company', '토공|Ahmed|964770000001');
+  ok(A.vendFind('Ahmed') && A.vendFind('Ahmed').code === 'KEW', '캐시① 담당자로 찾힌다');
+  A.vendAdd('KEW', 'KEW Company', '우수공|Hassan|964770000009');
+  ok(A.vendFind('Hassan') && A.vendFind('Hassan').code === 'KEW',
+     '★캐시② 담당자를 더하면 바로 찾힌다(줄 수는 그대로)');
+  A.vendAdd('KEW', 'KEW Contracting');
+  ok(A.coOf({ co: 'Ahmed' }) === 'KEW Contracting',
+     '★캐시③ 상호를 바꾸면 집계 이름도 따라온다');
+  A.vendAdd('DIG', 'Diglah Trading', '우수공|Ali|964770000002');
+  ok(A.vendFind('Ali') && A.vendFind('Ali').code === 'DIG', '캐시④ 업체를 더하면 찾힌다');
+  if (typeof A.vendDel === 'function') {
+    A.vendDel('DIG');
+    ok(A.vendFind('Ali') === null, '★캐시⑤ 업체를 지우면 담당자도 안 찾힌다');
+  }
+  S.vend.push({ code: 'RAW', name: 'Raw Pushed Co', staff: [], key: 'x' });
+  ok(A.vendFind('Raw Pushed Co') && A.vendFind('Raw Pushed Co').code === 'RAW',
+     '★캐시⑥ save를 안 거쳐도 줄 수가 달라지면 다시 만든다');
+
+  // 명부가 비어도 죽지 않는다
+  S.vend.length = 0;
+  ok(A.coOf({ co: 'AnyCo' }) === 'AnyCo', '명부가 비어도 원문을 유지한다');
+
+  }   /* hasAPI */
+
+  S.vend.length = 0; keepVend.forEach(v => S.vend.push(v));
+  S.crew.length = 0; keepCrew.forEach(c => S.crew.push(c));
+  S.issue.length = 0; keepIssue.forEach(g => S.issue.push(g));
+  A.coFlt = keepFlt;
 }
 
 /* ── 29 내역서 원본 인식 (v2.14.0) ────────────────────── */

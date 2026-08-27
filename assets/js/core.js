@@ -151,6 +151,9 @@
   };
 
   A.save = function () {
+    /* ★업체 색인을 무른다 — 명부를 고치는 길은 전부 여기를 거친다.
+       (A.coDirty는 아래 「업체 Master」 절에서 만든다) */
+    if (A.coDirty) A.coDirty();
     try {
       localStorage.setItem(KEY, JSON.stringify(S));
       S.trimMsg = S.trimMsg || '';
@@ -347,6 +350,69 @@
   A.vendStaffList = function (v) {
     return (v && v.staff || []).map(_sp);
   };
+  /* ══ 업체 Master — 흩어진 이름을 한곳에서 되묶는다 ═══════
+     ★증상 : 명부에 업체가 2곳인데 인원·장비 집계에는 3곳이 섰다(사용자 지적).
+     ★원인 : 집계가 업체를 `co || by`로 읽는데, 담당자 배정(v2.19.2) 이후
+       `by`는 **담당자 이름**이다. `co`가 없는 옛 crew 기록이 하나만 있어도
+       담당자 이름이 업체 한 줄로 서 버린다. v2.30.0의 `co` 신설은 그 뒤에
+       들어온 자료만 고쳤고, 옛 자료와 명부 미등록 입력은 그대로 남았다.
+     ★고침 : 「명부(S.vend)가 업체 Master다」로 못 박고, 집계·필터가 업체를
+       읽는 길을 이 두 함수 **하나로** 모은다. 이름이 아니라 명부의 줄(=code)로
+       찾으므로 KEW / K.E.W / kew가 갈리지 않고, 담당자 이름도 그 사람의
+       업체로 돌아간다.
+     ★못 찾은 이름은 **원문 그대로 남긴다.** 명부에 없는 업체를 조용히
+       지우면 그 업체의 인원·장비가 화면에서 통째로 사라진다. */
+  function coNorm(x) {
+    /* 구분기호와 대소문자만 지운다 — 서로 다른 업체가 합쳐지면 안 되므로
+       글자 자체는 손대지 않는다. */
+    return String(x || '').toLowerCase().replace(/[\s.\-_,()]/g, '');
+  }
+  A.coNorm = coNorm;
+
+  /* ★색인을 한 번 만들어 두고 쓴다. 이 함수는 집계마다 **줄 수만큼** 불린다
+     (crew 3천 줄이면 3천 번) — 그때마다 명부를 훑고 담당자 문자열을 쪼개면
+     화면이 눈에 띄게 굼떠진다. 실제로 재 보고 넣은 것이다.
+     ★명부가 바뀌면 저절로 다시 만든다 — 이름·코드·담당자 수를 지문으로 삼는다.
+       명부는 몇 줄뿐이라 지문 만드는 값은 무시할 만하다. */
+  var _coIx = null, _coGen = 0, _coIxGen = -1, _coIxLen = -1;
+  /** 명부가 바뀌었을 수 있다고 알린다 — A.save()가 부른다(명부를 고치는 길은
+      전부 save를 거친다). ★지문을 매번 만드는 것보다 훨씬 싸다. */
+  A.coDirty = function () { _coGen++; };
+  function coIndex() {
+    /* 세대(save 횟수)와 줄 수 둘 다 본다 — save를 거치지 않고 배열을 직접
+       건드린 경우에도 줄 수가 달라지면 다시 만든다. */
+    if (_coIx && _coIxGen === _coGen && _coIxLen === S.vend.length) return _coIx;
+    var ix = {};
+    /* ★넣는 차례가 곧 우선순위다 — 업체명 → 코드 → 담당자.
+       이미 있는 열쇠는 덮지 않는다. 담당자 이름이 다른 업체의 상호와
+       같아도 상호 쪽이 이긴다. */
+    S.vend.forEach(function (v) { var k = coNorm(v.name); if (k && !(k in ix)) ix[k] = v; });
+    S.vend.forEach(function (v) { var k = coNorm(v.code); if (k && !(k in ix)) ix[k] = v; });
+    S.vend.forEach(function (v) {
+      A.vendStaffList(v).forEach(function (s2) {
+        var k = coNorm(s2.name); if (k && !(k in ix)) ix[k] = v;
+      });
+    });
+    _coIx = ix; _coIxGen = _coGen; _coIxLen = S.vend.length;
+    return ix;
+  }
+  /** 아무 문자열이나 받아 명부의 업체 줄을 찾는다 — 업체명 → 코드 → 담당자.
+      ★담당자로 찾는 갈래가 이 고침의 핵심이다(`by`가 사람 이름이라서). */
+  A.vendFind = function (x) {
+    var k = coNorm(x);
+    if (!k) return null;
+    return coIndex()[k] || null;
+  };
+
+  /** ★집계·필터가 쓰는 **단 하나의** 업체 이름. 여기만 고치면 전 화면이 따라온다.
+      직영은 종전대로 한 줄로 묶는다(업체가 아니다). */
+  A.coOf = function (rec, isDir) {
+    if (isDir) return A.T('res_dir');
+    var raw = (rec && (rec.co || rec.by)) || '';
+    var v = A.vendFind(raw);
+    return v ? v.name : String(raw || '');
+  };
+
   /** 그 업체에서 이 공종을 맡은 사람 — 없으면 공종 없는 담당자를 준다 */
   A.staffFor = function (vname, grp) {
     var v = null;
@@ -1014,9 +1080,14 @@
     if (!A.coFlt) return true;
     if (A.coFlt === '@dir') return !!isDir;
     /* ★회사명으로 거른다 (v2.30.0 · 요청 ①). crew는 `by`가 담당자 이름이라
-       회사 필터가 안 걸렸다 — `co`가 있으면 그것을, 없으면 `by`로 물러선다. */
-    var name = rec && (rec.co || rec.by) || '';
-    return !isDir && String(name) === A.coFlt;
+       회사 필터가 안 걸렸다.
+       ★★이제 명부(Master)를 거쳐 읽는다 — 담당자 이름으로 저장된 옛 줄도
+         그 사람의 업체로 걸린다. 종전에는 필터를 걸면 그 줄들이 통째로
+         빠져 「업체를 고르면 인원이 줄어드는」 현상이 있었다. */
+    if (isDir) return false;
+    var me = A.coOf(rec, false);
+    var want = A.vendFind(A.coFlt);
+    return coNorm(me) === coNorm(want ? want.name : A.coFlt);
   };
   /* 위치 + 날짜 + 업체를 한 번에 — 집계는 전부 이걸 쓴다 */
   A.hit = function (rec, f, isDir) {
@@ -1160,7 +1231,7 @@
       var o = slot(c.loc);
       o.pax += A.crewTotal(c);
       if (isDir) o.co[A.T('res_dir')] = 1;
-      else { var cc = c.co || c.by; if (cc) o.co[cc] = 1; }   /* ★회사 기준 (v2.30.0 · 요청 ①) */
+      else { var cc = A.coOf(c, false); if (cc) o.co[cc] = 1; }   /* ★업체 Master 기준 */
       (c.eq || []).forEach(function (x) {
         o.run += Number(x.run) || 0;
         o.down += (Number(x.brk) || 0) + (Number(x.rep) || 0);
@@ -1245,9 +1316,11 @@
     function feed(c, isDir, key) {
       /* ★업체 기준으로 묶는다 (v2.30.0 · 요청 ①).
          담당자 배정(v2.19.2) 이후 `by`는 담당자 이름이라 이것으로 묶으면
-         보유(회사명)와 축이 어긋난다. 회사명 `co`로 묶되, 옛 자료엔 `co`가
-         없으니 그때만 `by`로 물러선다 — 옛 자료의 `by`는 아직 회사명이다. */
-      var co = isDir ? A.T('res_dir') : (c.co || c.by || '—');
+         보유(회사명)와 축이 어긋난다.
+         ★★「옛 자료의 `by`는 아직 회사명이다」는 **사실이 아니었다** — 담당자
+           이름인 옛 줄이 남아 있어 업체가 한 줄 더 섰다(사용자 지적). 이제
+           명부(Master)를 거쳐 읽으므로 담당자 이름은 그 사람의 업체로 합쳐진다. */
+      var co = A.coOf(c, isDir) || '—';
       var s = slot(co, key);
       if (isDir) by[co].dir = true;
       s.teams += Number(c.teams) || 0;
@@ -1338,7 +1411,10 @@
       var q = Number(g.cnt) || 0;
       var t = give[id] || (give[id] = { give: 0, take: 0, by: {} });
       if (g.kind === 'take') t.take += q; else t.give += q;
-      var co = g.by || '';
+      /* ★지급 축도 명부를 거친다 — 실적 축(rollupCo)과 **같은 이름**이어야
+         두 축이 한 줄에서 만난다(eqCoHTML이 `gby[g.co]`로 잇는다).
+         한쪽만 되묶으면 보유는 회사명 줄, 가동은 담당자 줄로 또 갈린다. */
+      var co = A.coOf(g, false);
       if (co) {
         var c = t.by[co] || (t.by[co] = { give: 0, take: 0 });
         if (g.kind === 'take') c.take += q; else c.give += q;
