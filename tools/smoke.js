@@ -899,6 +899,67 @@ console.log('\n[93] 준비는 관리자 전용 — 스탭 작업현황에는 없
   A.setRole(keepRole); A.go(1);
 }
 
+/* ── 94 진행 중 작업 추적 (요청 : 작업량 입력 연동 1단계) ──
+   ★인력을 올렸는데 수량이 안 들어온 작업을 「진행 중」으로 잡는다. 작업 =
+     공종+위치+구간(도로 측점범위·관로 표기·구조물 개소). 오래 방치되면 경고.
+   ★[29] 앞에 둔다 — 뒤는 표본 파일 누락으로 안 돈다. */
+console.log('\n[94] 진행 중 작업 — 인력만 올린 것을 잡고, 수량 들어오면 뺀다');
+{
+  const keepCrew = S.crew.slice(), keepWork = S.work.slice(), keepRole = A.role();
+  const keepFlt = A.flt ? A.flt() : null;
+  S.crew.length = 0; S.work.length = 0; A.setRole('admin');
+
+  const LT = { s: 'civil', p: 1, c: 1 }, tt = A.today();
+  const back = function (n) { const d = new Date(tt); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+
+  ok(typeof A.openTasks === 'function' && typeof A.segOf === 'function', 'A.openTasks · A.segOf 존재');
+
+  /* 관로(오수) 표기 라벨 하나에 3일 인력, 수량 없음 */
+  [2, 1, 0].forEach(function (n, i) {
+    S.crew.push({ id: 'ot' + i, date: back(n), loc: LT, key: 'SS-01', st: 'ok', teams: 2,
+      ppl: { eng: 0, fmn: 1, wkr: 6 }, eq: [], tag: 'C61 D700 L=319m' });
+  });
+  let list = A.openTasks(null, tt);
+  ok(list.length === 1, `진행 중 작업 1개 (같은 라벨=한 작업) 실제 ${list.length}`);
+  const t0 = list[0] || {};   /* ★없어도 예외로 검사가 죽지 않게(0-W) */
+  ok(t0.seg === 'tag|C61 D700 L=319m', '★구간 = 표기(도면 라벨)');
+  ok(t0.dayN === 3 && t0.age === 2, '투입 3일 · 방치 2일');
+  ok(t0.isNew === false, '어제부터라 NEW 아님');
+
+  /* 구조물 개소 — 오늘 처음 = NEW */
+  S.crew.push({ id: 'otf', date: tt, loc: LT, key: 'T-01', st: 'ok', teams: 1,
+    ppl: { eng: 0, fmn: 1, wkr: 5 }, eq: [], spot: 0 });
+  const fac = A.openTasks(null, tt).filter(function (t) { return t.seg === 'fac|0'; })[0];
+  ok(fac && fac.isNew === true, '★구조물 개소가 오늘 처음이면 NEW');
+
+  /* 도로 — 크루가 두 구간을 담으면 작업 2개로 갈린다 */
+  S.crew.push({ id: 'otr', date: tt, loc: LT, key: 'T-02', st: 'ok', teams: 2,
+    ppl: { eng: 0, fmn: 1, wkr: 8 }, eq: [], spots: [
+      { kind: 'road', w: '50', no: '1', side: '', f: 0, t: 120 },
+      { kind: 'road', w: '50', no: '1', side: '', f: 120, t: 240 }] });
+  ok(A.openTasks(null, tt).filter(function (t) { return t.key === 'T-02'; }).length === 2,
+     '★크루가 두 측점구간을 담으면 작업 2개');
+
+  /* 수량이 들어오면 그 작업은 진행 중에서 빠진다 (완료) */
+  S.work.push({ id: 'otw', date: tt, loc: LT, key: 'SS-01', st: 'sub', qty: 319, tag: 'C61 D700 L=319m' });
+  ok(!A.openTasks(null, tt).some(function (t) { return t.seg === 'tag|C61 D700 L=319m'; }),
+     '★수량 들어오면 진행 중에서 빠진다(완료)');
+  /* 수량 0짜리 줄은 완료로 치지 않는다 */
+  S.work.push({ id: 'otw0', date: tt, loc: LT, key: 'T-01', st: 'sub', qty: 0, spot: 0 });
+  ok(A.openTasks(null, tt).some(function (t) { return t.seg === 'fac|0'; }),
+     '수량 0인 줄은 완료로 안 친다(구조물 아직 진행 중)');
+
+  /* 관리자 화면에 카드가 뜬다 */
+  A.setFlt(LT); A.go(1);
+  const hv = bag.view.innerHTML;
+  ok(hv.indexOf(A.T('ot_t')) > 0, '★진행 중 작업 카드가 화면에 뜬다');
+  ok(hv.indexOf(A.T('u_sec') + ' 1') > 0, '구조물이 개소 라벨로 표시된다(아직 진행 중)');
+
+  S.crew.length = 0; keepCrew.forEach(function (c) { S.crew.push(c); });
+  S.work.length = 0; keepWork.forEach(function (w) { S.work.push(w); });
+  A.setRole(keepRole); if (keepFlt) A.setFlt(keepFlt); A.go(1);
+}
+
 /* ── 29 내역서 원본 인식 (v2.14.0) ────────────────────── */
 console.log('\n[29] 내역서 원본 인식 — 실제 P3-1 파일로 검사');
 {

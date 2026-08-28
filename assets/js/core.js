@@ -1062,6 +1062,70 @@
     return o;
   };
 
+  /* ══ 진행 중 작업(task) 추적 (요청 : 작업량 입력 연동) ═══════
+     작업 하나 = 공종(key) + 위치 + 구간. 구간은 공종마다 자연 단위다 —
+       도로 = 측점범위(side·f~t) · 관로 = 표기(도면라벨) · 구조물 = 개소.
+     ★식별자는 협력업체가 **이미 입력**한다(측점/표기/개소). 새로 받지 않는다.
+     ★인력·장비(crew)를 올리면 그 작업이 「진행 중」으로 잡히고, 수량이
+       들어오면 완료된다. 거푸집·철근·구조물·관로처럼 여러 날 걸리는 작업을
+       매일 수량으로 쪼개 넣지 않고, 인력만 올리다가 완료 때 수량을 한 번 넣는다.
+       (생산성은 v2.35.0에서 누계로 바꿔 완료일 몰림에도 안 부풀린다.) */
+  A.segOf = function (rec) {
+    var sp = rec && rec.spot;
+    if (sp && sp.kind === 'road')
+      return 'road|' + (sp.w || '') + '|' + (sp.no || '') + '|' + (sp.side || '') + '|' + sp.f + '~' + sp.t;
+    if (rec && rec.tag) return 'tag|' + rec.tag;
+    if (typeof sp === 'number' && sp >= 0) return 'fac|' + sp;
+    return '';
+  };
+  /* 한 기록이 걸친 구간들 — 크루는 여러 구간(spots)을 담을 수 있다(v2.19.19) */
+  A.segsOf = function (rec) {
+    if (rec && rec.spots && rec.spots.length)
+      return rec.spots.map(function (sp) { return A.segOf({ spot: sp }); });
+    return [A.segOf(rec)];
+  };
+  A.taskKey = function (loc, key, seg) {
+    return A.locKey(loc) + '|' + (key || '') + '|' + (seg || '');
+  };
+  /* 완료된(수량이 들어온) 작업 키 집합 — 중단(stopped)은 완료로 치지 않는다 */
+  function doneTaskSet(f) {
+    var done = {};
+    S.work.forEach(function (w) {
+      if (w.wst === 'stopped') return;
+      if ((Number(w.qty) || 0) <= 0) return;      /* 수량 없는 줄은 미완료 */
+      if (!A.locMatch(w, f)) return;
+      done[A.taskKey(w.loc, w.key, A.segOf(w))] = 1;
+    });
+    return done;
+  }
+  /** 진행 중 작업 — 인력을 올렸는데 아직 수량이 안 들어온 것.
+      ★크루 상태는 sub·ok 둘 다 본다 — 업체가 방금 올린 것(sub)도 바로
+        진행 중으로 떠야 한다. 반려(rej)만 뺀다.
+      each task: { tk, loc, key, seg, since, last, dayN, isNew, age, lastCrew } */
+  A.openTasks = function (f, today) {
+    today = today || A.today();
+    var done = doneTaskSet(f), tasks = {};
+    S.crew.forEach(function (c) {
+      if (c.st === 'rej' || !A.locMatch(c, f)) return;
+      A.segsOf(c).forEach(function (seg) {
+        var tk = A.taskKey(c.loc, c.key, seg);
+        if (done[tk]) return;                        /* 이미 수량 들어옴 = 완료 */
+        var t = tasks[tk] || (tasks[tk] = { tk: tk, loc: c.loc, key: c.key, seg: seg,
+          since: c.date, last: c.date, days: {}, lastCrew: c });
+        if (c.date < t.since) t.since = c.date;
+        if (c.date >= t.last) { t.last = c.date; t.lastCrew = c; }
+        t.days[c.date] = 1;
+      });
+    });
+    return Object.keys(tasks).map(function (k) {
+      var t = tasks[k];
+      t.dayN = Object.keys(t.days).length;
+      t.isNew = (t.since === today);               /* 오늘 처음 잡힌 것 */
+      t.age = Math.max(0, Math.round((new Date(today) - new Date(t.since)) / 86400000));
+      return t;
+    }).sort(function (a, b) { return a.since < b.since ? -1 : (a.since > b.since ? 1 : 0); });
+  };
+
   /** 공종별 집계 — 작업량 / 인원 / 장비 각각 */
   /* ══ 조회 날짜 (v2.15.0) ══════════════════════════════
      탭1 전체가 이 범위를 따른다. 비어 있으면 전 기간이다. */

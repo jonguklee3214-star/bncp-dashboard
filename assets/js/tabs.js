@@ -34,6 +34,37 @@
       (foot && foot !== 'flush' ? '<div class="card__f">' + foot + '</div>' : '') + '</div>';
   }
   function empty(t, m) { return '<div class="empty"><b>' + t + '</b>' + (m || '') + '</div>'; }
+
+  /* 진행 중 작업의 구간 라벨 — 도로=측점범위 · 관로=표기 · 구조물=개소 */
+  function segLabel(t) {
+    var SP = window.BNCP_SPOT, seg = t.seg || '';
+    if (seg.indexOf('road|') === 0) {
+      var p = seg.split('|'), fr = (p[4] || '').split('~');
+      var sp = { kind: 'road', w: p[1], no: p[2], side: p[3], f: +fr[0], t: +fr[1] };
+      return SP.roadName(sp) + (p[3] ? ' · ' + SP.sideName(p[3]) : '') +
+        ' · ' + SP.staText(sp.f) + '~' + SP.staText(sp.t);
+    }
+    if (seg.indexOf('tag|') === 0) return seg.slice(4);
+    if (seg.indexOf('fac|') === 0) return A.T('u_sec') + ' ' + (Number(seg.slice(4)) + 1);
+    return A.locShort(t.loc);
+  }
+  var OT_AGE_WARN = 3;   /* 진행 중인데 이 일수 넘게 방치되면 경고 */
+  /* ★진행 중 작업 카드 — A.openTasks(core)가 뽑는다. 0건이면 안 그린다. */
+  function openTaskHTML() {
+    var list = A.openTasks(flt);
+    if (!list.length) return '';
+    var aged = 0;
+    var body = '<div class="tw"><table><tbody>' + list.map(function (t) {
+      var old = t.age >= OT_AGE_WARN; if (old) aged++;
+      return '<tr' + (old ? ' class="gr"' : '') + '><td>' + itemLine(t.key) +
+        ' <span class="sp">' + esc(segLabel(t)) + '</span></td>' +
+        '<td class="c">' + (t.isNew ? '<span class="bd bd--o">NEW</span>' : '') + '</td>' +
+        '<td class="r sp">' + T('ot_since').replace('{n}', nf(t.age)) + '</td>' +
+        '<td class="r">' + (old ? '<span class="bd bd--d">' + T('ot_aged') + '</span>' : '') + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+    var sub = T('ot_n').replace('{n}', nf(list.length)) + (aged ? ' · ' + nf(aged) + ' ' + T('ot_aged') : '');
+    return '<div style="margin-bottom:16px">' + card(T('ot_t'), sub, body, 'flush') + '</div>';
+  }
   function opts(list, sel, v, l) {
     return list.map(function (x) {
       var vv = v ? v(x) : x, ll = l ? l(x) : x;
@@ -1920,6 +1951,10 @@
 
     /* 내역서에서 코드를 못 붙인 줄 — 손봐야 하는 것이라 표 앞에 둔다 */
     h += boqNeedHTML();
+
+    /* ★진행 중 작업 — 인력은 올렸는데 아직 수량이 안 들어온 것 (요청).
+       오래 방치된 것은 붉게 경고한다. 관리자·스탭 둘 다 여기서 본다. */
+    h += openTaskHTML();
 
     /* ★순서 : 인력 → 장비 → 직영 → 작업량 → 진행률 → 생산성 → 준비
        (v2.17.3 사용자 지시). 오늘 누가 몇 명 나왔는지가 먼저고, 진행률처럼
