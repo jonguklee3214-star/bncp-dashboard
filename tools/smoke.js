@@ -960,6 +960,68 @@ console.log('\n[94] 진행 중 작업 — 인력만 올린 것을 잡고, 수량
   A.setRole(keepRole); if (keepFlt) A.setFlt(keepFlt); A.go(1);
 }
 
+/* ★[29] 앞에 둔다 — 뒤는 표본 파일 누락으로 안 돌아 거짓 안심이 된다. */
+console.log('\n[95] 작업 중단 — 세우고(사유·중단일) 다시 잇는다, 중단일수만 제외');
+{
+  const keepCrew = S.crew.slice(), keepWork = S.work.slice(), keepStop = S.stop.slice();
+  const keepRole = A.role(), keepFlt = A.flt ? A.flt() : null;
+  S.crew.length = 0; S.work.length = 0; S.stop.length = 0; A.setRole('admin');
+
+  const LT = { s: 'civil', p: 1, c: 1 }, tt = A.today();
+  const back = function (n) { const d = new Date(tt); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+
+  ok(typeof A.addStop === 'function' && typeof A.stopDaysOf === 'function' &&
+     typeof A.activeStop === 'function' && typeof A.resumeStop === 'function',
+     'A.addStop · stopDaysOf · activeStop · resumeStop 존재');
+
+  /* 6일 전 인력만 올린 오수 작업(수량 없음) — 방치로 잡히기 직전 */
+  S.crew.push({ id: 'st0', date: back(6), loc: LT, key: 'SS-01', st: 'ok', teams: 2,
+    ppl: { eng: 0, fmn: 1, wkr: 6 }, eq: [], tag: 'C61 D700 L=319m' });
+  let t = A.openTasks(null, tt)[0];
+  ok(t && t.age === 6 && !t.stopped, '중단 전 — 방치 6일 · 중단 아님');
+  const TK = t.tk;
+
+  /* 2일 전 자재대기로 중단 */
+  const r = A.addStop({ tk: TK, loc: LT, key: 'SS-01', seg: t.seg, why: 'mat', date: back(2), by: '홍' });
+  ok(r && r.type === 'stop' && r.why === 'mat', '중단 기록이 생긴다');
+  ok(!A.addStop({ tk: TK, loc: LT, key: 'SS-01', seg: t.seg, why: 'etc', date: tt }),
+     '★이미 중단 중이면 새 중단을 안 만든다');
+  ok(!!A.activeStop(TK), '지금 중단 중이다(재개일 없음)');
+  ok(A.stopDaysOf(TK, tt) === 2, '중단일수 = 2 (2일 전부터 오늘까지)');
+
+  t = A.openTasks(null, tt)[0];
+  ok(t.stopped === true && t.stopWhy === 'mat' && t.stopFrom === back(2),
+     '진행 중 목록에서 중단으로 표시된다(사유·중단일)');
+  ok(t.age === 4, '★방치일 = 달력 6일 − 중단 2일 = 4 (중단일수만 뺀다)');
+
+  /* 관리자 화면 — 중단 묶음이 뜬다 */
+  A.setFlt(LT); A.go(1);
+  ok(bag.view.innerHTML.indexOf(A.T('ot_stopped')) > 0, '★중단 묶음이 관리자 화면에 뜬다');
+
+  /* 재개 — 오늘 다시 잇는다. 과거 중단일수는 그대로 방치에서 빠진 채다 */
+  const rs = A.resumeStop(TK, tt);
+  ok(rs && rs.to === tt, '재개일이 찍힌다');
+  ok(!A.activeStop(TK), '재개하면 더는 중단 중이 아니다');
+  t = A.openTasks(null, tt)[0];
+  ok(t.stopped === false && t.age === 4, '재개 후 — 중단 아님 · 지난 중단 2일은 여전히 방치에서 제외');
+
+  /* 완료 — 수량이 들어오면 진행 중/중단 목록에서 빠진다 */
+  S.work.push({ id: 'stw', date: tt, loc: LT, key: 'SS-01', st: 'sub', qty: 319, tag: 'C61 D700 L=319m' });
+  ok(A.openTasks(null, tt).length === 0, '★수량이 들어오면 완료 — 목록에서 빠진다(중단 기록은 남는다)');
+  ok(A.stopsOf(TK).length === 1, '중단 이력은 보존된다(생산성 소요일 근거)');
+
+  /* 서버 왕복 — 'stop'은 모르는 종류라도 unpack이 stop 상자로 되돌린다(Code.gs 무수정) */
+  const u = A._unpack({ type: 'stop', id: 'srv1', date: back(2), s: 'civil', p: 1, c: 1,
+    tk: TK, key: 'SS-01', seg: t ? t.seg : 'tag|C61 D700 L=319m', to: tt, why: 'eqbrk' });
+  ok(u && u.box === 'stop' && u.row && u.row.tk === TK && u.row.to === tt && u.row.why === 'eqbrk',
+     '★서버에서 받은 중단 줄이 stop 상자로 풀린다(tk·to·why 보존)');
+
+  S.crew.length = 0; keepCrew.forEach(function (c) { S.crew.push(c); });
+  S.work.length = 0; keepWork.forEach(function (w) { S.work.push(w); });
+  S.stop.length = 0; keepStop.forEach(function (s) { S.stop.push(s); });
+  A.setRole(keepRole); if (keepFlt) A.setFlt(keepFlt); A.go(1);
+}
+
 /* ── 29 내역서 원본 인식 (v2.14.0) ────────────────────── */
 console.log('\n[29] 내역서 원본 인식 — 실제 P3-1 파일로 검사');
 {

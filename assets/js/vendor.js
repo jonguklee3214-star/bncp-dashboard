@@ -426,14 +426,30 @@
       '<div class="votp__hint">' + esc(hint) + '</div>';
     if (!list.length) return h + '<div class="votp__none">' + bl('ot_none') + '</div></div>';
     h += list.map(function (t, i) {
-      var L = otLabel(t), aged = !t.isNew && t.age >= OT_AGE;
-      var badge = t.isNew ? '<span class="votp__new">NEW</span>'
-        : (aged ? '<span class="votp__aged">' + bl('ot_aged') + '</span>' : '');
-      return '<button type="button" class="votp__row' + (aged ? ' is-aged' : '') +
-        '" data-otk="' + i + '">' + badge +
+      var L = otLabel(t), aged = !t.isNew && !t.stopped && t.age >= OT_AGE;
+      /* 배지 우선순위 : 중단 > NEW > 방치 */
+      var badge = t.stopped ? '<span class="votp__stop">' + bl('ot_stopped') + '</span>'
+        : (t.isNew ? '<span class="votp__new">NEW</span>'
+        : (aged ? '<span class="votp__aged">' + bl('ot_aged') + '</span>' : ''));
+      /* 중단이면 사유·중단일수, 아니면 며칠째 */
+      var tail = t.stopped
+        ? esc(A.stopWhyText(t.stopWhy, 'en') + ' · ') + blN('ot_stopdays', t.stopDays)
+        : blN('ot_since', t.dayN);
+      /* 오른쪽 조작 : 진행중이면 중단 고르개, 중단중이면 재개 버튼 */
+      var act = t.stopped
+        ? '<button type="button" class="votp__resume" data-vresume="' + i + '">' +
+            esc(window.I18N.en.ot_resume + ' / ' + (window.I18N.ar.ot_resume || '')) + '</button>'
+        : '<select class="votp__stopsel" data-vstop="' + i + '"><option value="">' +
+            esc(window.I18N.en.ot_stop + ' / ' + (window.I18N.ar.ot_stop || '')) + '…</option>' +
+            A.STOP_WHY.map(function (x) {
+              return '<option value="' + esc(x.id) + '">' + esc(x.en + ' / ' + x.ar) + '</option>';
+            }).join('') + '</select>';
+      return '<div class="votp__wrap' + (aged ? ' is-aged' : '') + (t.stopped ? ' is-stop' : '') + '">' +
+        '<button type="button" class="votp__row" data-otk="' + i + '">' + badge +
         '<span class="votp__nm">' + esc(L.nm) + '</span>' +
         '<span class="votp__mt">' + esc(L.where + (L.detail ? ' · ' + L.detail : '')) +
-        ' · ' + blN('ot_since', t.dayN) + '</span></button>';
+        ' · ' + tail + '</span></button>' +
+        '<div class="votp__act">' + act + '</div></div>';
     }).join('') + '</div>';
     return h;
   }
@@ -869,6 +885,26 @@
         if (t) { applyTask(t); render(); window.scrollTo(0, 0); }
       };
     });
+    /* 작업 중단·재개 (v2.38.0) — 사유를 고르면 그 자리에서 세운다.
+       업체가 세운 것은 서버로 보내 스탭·관리자 화면에도 뜬다. */
+    $$('[data-vstop]').forEach(function (sel) {
+      sel.onchange = function () {
+        if (!sel.value) return;
+        var t = myOpenTasks()[+sel.dataset.vstop]; if (!t) return;
+        var r = A.addStop({ tk: t.tk, loc: t.loc, key: t.key, seg: t.seg, why: sel.value,
+                            by: V.by || '', co: vco() });
+        if (r) toServer('stop', r);
+        render();
+      };
+    });
+    $$('[data-vresume]').forEach(function (b) {
+      b.onclick = function () {
+        var t = myOpenTasks()[+b.dataset.vresume]; if (!t) return;
+        var s = A.resumeStop(t.tk, A.today());
+        if (s) toServer('stop', s);
+        render();
+      };
+    });
     $$('[data-v]').forEach(function (el) {
       el.onchange = function () {
         var f = el.dataset.v;
@@ -1057,6 +1093,14 @@
       base.spec = row.spec || ''; base.unit = row.unit || '';
       base.plant = !!row.plant;
       base.name = row.mat;
+    }
+
+    else if (type === 'stop') {          /* 작업 중단 (v2.38.0) — tk·seg가 식별자 */
+      base.tk = row.tk || '';
+      base.seg = row.seg || '';
+      base.to = row.to || '';
+      base.why = row.why || '';
+      base.co = row.co || '';
     }
 
     return base;

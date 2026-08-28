@@ -403,18 +403,34 @@ html[lang="ar"] body{line-height:1.75}
 }
 .votp__hint{padding:8px 12px 4px;font-size:11px;color:var(--faint);line-height:1.5}
 .votp__none{padding:14px 12px;font-size:12px;color:var(--faint);text-align:center}
+/* 한 줄 = 고르는 버튼(왼쪽) + 중단/재개 조작(오른쪽) · v2.38.0 */
+.votp__wrap{
+  display:flex;align-items:stretch;gap:8px;
+  border-top:1px solid var(--line-2);background:var(--bg);
+}
+.votp__wrap.is-aged{border-left:3px solid var(--danger)}
+.votp__wrap.is-stop{border-left:3px solid var(--danger);background:var(--danger-w)}
 .votp__row{
-  display:block;width:100%;text-align:left;cursor:pointer;
-  padding:11px 12px;border:0;border-top:1px solid var(--line-2);background:var(--bg);
+  flex:1;min-width:0;text-align:left;cursor:pointer;
+  padding:11px 12px;border:0;background:transparent;
 }
 .votp__row:hover{background:var(--orange-w)}
-.votp__row.is-aged{border-left:3px solid var(--danger)}
-.votp__new,.votp__aged{
+.votp__act{display:flex;align-items:center;padding:8px 10px 8px 0}
+.votp__stopsel{
+  font-size:12px;padding:6px 8px;border:1px solid var(--line);border-radius:var(--r);
+  background:var(--bg);color:var(--ink);max-width:150px;
+}
+.votp__resume{
+  font-size:12px;font-weight:700;padding:7px 12px;cursor:pointer;
+  border:1px solid var(--ink);border-radius:var(--r);background:var(--ink);color:#fff;
+}
+.votp__new,.votp__aged,.votp__stop{
   display:inline-block;font-size:10px;font-weight:800;letter-spacing:.02em;
   padding:1px 6px;border-radius:2px;margin-right:7px;vertical-align:1px;
 }
 .votp__new{background:var(--orange);color:#fff}
 .votp__aged{background:var(--danger-w);color:var(--danger);border:1px solid var(--danger)}
+.votp__stop{background:var(--danger);color:#fff}
 .votp__nm{font-size:14px;font-weight:700;color:var(--ink)}
 .votp__mt{display:block;margin-top:3px;font-size:11px;color:var(--mute)}
 .vbar{
@@ -581,6 +597,13 @@ tr.gr--on>td{border-bottom:1px solid var(--line)}
 .gr__c{display:inline-block;width:12px;color:var(--orange);font-weight:700}
 tr.sub>td{background:var(--bg)}
 td.ind{padding-left:26px}
+
+/* 작은 셀렉트 — 진행 중 작업 줄의 중단 사유 고르개 (v2.38.0) */
+.in--sm{padding:5px 8px;font-size:var(--fs-body);width:auto;min-width:104px}
+/* 중단된 작업 묶음 — 방치와 섞지 않고 붉은 머리로 따로 (v2.38.0) */
+.ot-stop{border-top:1px solid var(--line)}
+.ot-stop__h{padding:9px 16px 4px;font-size:var(--fs-cap);font-weight:700;color:var(--danger)}
+.ot-stop__h b{color:var(--danger)}
 
 /* 장비 약어 — 원문은 title로 남긴다(지급대장 대조는 원문 철자) */
 .ab{display:inline-block;padding:1px 6px;margin-right:4px;border:1px solid var(--line);

@@ -73,7 +73,7 @@
     v: 2, lang: 'ko',
     plan: {}, fac: {},
     work: [], crew: [], insp: [], surv: [], mat: [], issue: [], msg: [],
-    direct: [],
+    direct: [], stop: [],   /* 작업 중단 기록 (v2.38.0) — 사유·중단일·재개일 */
     matmap: {},
     mdesign: {}, mreq: [], msgq: [],
     /* ★우리(한화) 스탭 명부 — 공종그룹별 담당 (v2.23.0).
@@ -127,7 +127,7 @@
 
   /* 기록형 저장소만 자른다. 마스터·설계량·명부는 건드리지 않는다 —
      그건 쌓이는 자료가 아니라 기준 자료다. */
-  var TRIM_BOX = ['work', 'crew', 'insp', 'surv', 'mreq', 'direct'];
+  var TRIM_BOX = ['work', 'crew', 'insp', 'surv', 'mreq', 'direct', 'stop'];
 
   A.trim = function (days) {
     /* addDays는 tabs.js 안에 있어 여기서 못 쓴다 — core는 tabs를 모른다 */
@@ -1087,11 +1087,11 @@
   A.taskKey = function (loc, key, seg) {
     return A.locKey(loc) + '|' + (key || '') + '|' + (seg || '');
   };
-  /* 완료된(수량이 들어온) 작업 키 집합 — 중단(stopped)은 완료로 치지 않는다 */
+  /* 완료된(수량이 들어온) 작업 키 집합. 수량이 한 번이라도 들어오면 완료다 —
+     중단(S.stop)은 이 집합과 무관하다(중단은 미완료 작업의 일시정지일 뿐). */
   function doneTaskSet(f) {
     var done = {};
     S.work.forEach(function (w) {
-      if (w.wst === 'stopped') return;
       if ((Number(w.qty) || 0) <= 0) return;      /* 수량 없는 줄은 미완료 */
       if (!A.locMatch(w, f)) return;
       done[A.taskKey(w.loc, w.key, A.segOf(w))] = 1;
@@ -1121,9 +1121,92 @@
       var t = tasks[k];
       t.dayN = Object.keys(t.days).length;
       t.isNew = (t.since === today);               /* 오늘 처음 잡힌 것 */
-      t.age = Math.max(0, Math.round((new Date(today) - new Date(t.since)) / 86400000));
+      /* ★방치(age)는 달력일에서 **중단일수를 뺀다** (v2.38.0 · 사용자 지시
+         「중단일수만 제외」). 자재대기·장비고장으로 잠시 세운 것을 방치로
+         몰면 안 된다 — 세워 둔 날은 방치가 아니다. */
+      var span = Math.max(0, Math.round((new Date(today) - new Date(t.since)) / 86400000));
+      var st = A.activeStop(t.tk);
+      t.stopDays = A.stopDaysOf(t.tk, today);
+      t.age = Math.max(0, span - t.stopDays);
+      t.stopped = !!st;                            /* 지금 중단 중인가 */
+      t.stopWhy = st ? (st.why || '') : '';
+      t.stopFrom = st ? (st.date || '') : '';
       return t;
     }).sort(function (a, b) { return a.since < b.since ? -1 : (a.since > b.since ? 1 : 0); });
+  };
+
+  /* ══ 작업 중단(pause) 추적 (v2.38.0) ══════════════════════
+     ★사용자 지시(원문) : 「작업이 계속중이거나 완료하지 못하여 중단된
+       것들은 표시하고, 중단된 것들은 사유를 적고 중단된 날짜를 입력하면
+       생산성 과정에 반영하여 계산할 것. 실제 완료되면 투입일자 계산해서
+       생산성 계산. 중단일수만 제외.」
+     ★뜻 : 중단은 **일시정지**다. 투입(인원·장비)은 실제 값 그대로 생산성에
+       든다 — 빼지 않는다. **놀린 날(중단일수)만** 방치·소요일에서 뺀다.
+       재개해 수량이 들어오면 그 작업은 완료된다(openTasks에서 빠진다).
+     ★생산성 수식(A.prod = 수량 ÷ 팀-일)은 손대지 않는다. 크루는 실제
+       나온 날만 올라오므로 중단 기간은 팀-일에 애초에 안 들어간다 —
+       즉 「투입일자로 계산, 중단일수 제외」가 이미 성립한다. 중단이 바꾸는
+       것은 **방치 판정과 소요일 표시**다(중단 기간을 빼야 정확해진다).
+     ★서버는 안 바꾼다 — 'stop'은 모르는 종류라 etc 시트에 원문 그대로
+       쌓이고, 무(無)type 수신이 etc를 읽어 되돌아온다(Code.gs 재배포 불필요). */
+  A.STOP_WHY = [
+    { id: 'mat',   ko: '자재 대기',   en: 'Waiting for material',  ar: 'بانتظار المواد' },
+    { id: 'eqbrk', ko: '장비 고장',   en: 'Equipment breakdown',   ar: 'عطل في المعدات' },
+    { id: 'design',ko: '설계 변경·검토', en: 'Design change / review', ar: 'تغيير أو مراجعة التصميم' },
+    { id: 'prev',  ko: '선행공정 지연', en: 'Preceding work delayed', ar: 'تأخر العمل السابق' },
+    { id: 'weather',ko: '기상',       en: 'Weather',               ar: 'الطقس' },
+    { id: 'etc',   ko: '기타',        en: 'Other',                 ar: 'أخرى' }
+  ];
+  A.stopWhyText = function (id, lang) {
+    var t = '';
+    A.STOP_WHY.forEach(function (x) { if (x.id === id) t = x[lang || 'en'] || x.en; });
+    return t;
+  };
+  /* 한 작업(tk)에 걸린 중단 기록들 — 시작일 순 */
+  A.stopsOf = function (tk) {
+    return S.stop.filter(function (s) { return s.tk === tk; })
+      .sort(function (a, b) { return String(a.date).localeCompare(String(b.date)); });
+  };
+  /* 지금 중단 중인가 — 재개일(to)이 안 찍힌 마지막 기록 */
+  A.activeStop = function (tk) {
+    var open = null;
+    A.stopsOf(tk).forEach(function (s) { if (!s.to) open = s; });
+    return open;
+  };
+  /* 누적 중단일수 — 재개된 것은 to−from, 아직 중단 중이면 오늘까지. */
+  A.stopDaysOf = function (tk, today) {
+    today = today || A.today();
+    var d = 0;
+    A.stopsOf(tk).forEach(function (s) {
+      if (!s.date) return;
+      var to = s.to || today;
+      var n = Math.round((new Date(to) - new Date(s.date)) / 86400000);
+      if (n > 0) d += n;
+    });
+    return d;
+  };
+  /** 작업을 중단으로 세운다 — 같은 작업이 이미 중단 중이면 새로 안 만든다.
+      반환 : 새 기록(서버로 보낼 것) 또는 null(이미 중단 중). */
+  A.addStop = function (o) {
+    if (!o || !o.tk) return null;
+    if (A.activeStop(o.tk)) return null;             /* 이미 중단 중 */
+    var r = {
+      id: A.uid(), type: 'stop', tk: o.tk, loc: o.loc, key: o.key || '', seg: o.seg || '',
+      date: o.date || A.today(), to: '', why: o.why || '', by: o.by || '', co: o.co || '',
+      at: A.nowISO(), up: 0
+    };
+    S.stop.push(r); A.save();
+    return r;
+  };
+  /** 중단을 푼다(재개) — 열린 중단에 재개일을 찍는다. 반환 : 그 기록 또는 null. */
+  A.resumeStop = function (tk, to) {
+    var s = A.activeStop(tk);
+    if (!s) return null;
+    s.to = to || A.today();
+    if (s.to < s.date) s.to = s.date;                /* 재개일이 중단일보다 앞설 수 없다 */
+    s.up = 0; s.at = A.nowISO();
+    A.save();
+    return s;
   };
 
   /** 공종별 집계 — 작업량 / 인원 / 장비 각각 */

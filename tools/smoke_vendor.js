@@ -22,10 +22,15 @@ const sb = { console,
        내줘야 bind()가 onclick을 건다. 렌더된 vBody에서 긁어 stub을 만든다.
        (다른 셀렉터는 종전대로 빈 배열 — 이 시험만 실제 DOM을 흉내낸다.) */
     querySelectorAll(sel){
-      if (sel === '[data-otk]') {
-        const out = [], re = /data-otk="(\d+)"/g; let mm;
-        while ((mm = re.exec(bag.vBody.innerHTML))) { const e = El('otk'); e.dataset = { otk: mm[1] }; out.push(e); }
-        bag.__otk = out;   /* bind()가 onclick을 건 바로 그 배열을 시험이 다시 집는다 */
+      /* [data-otk]·[data-vstop]·[data-vresume]를 실제로 내줘 bind()가 핸들러를
+         건다(v2.37.0·v2.38.0). 시험은 bag.__<key>로 그 배열을 다시 집는다. */
+      const m = /^\[data-([a-z]+)\]$/.exec(sel);
+      if (m) {
+        const key = m[1], out = [], re = new RegExp('data-' + key + '="(\\d+)"', 'g'); let mm;
+        while ((mm = re.exec(bag.vBody.innerHTML))) {
+          const e = El(key); e.dataset = {}; e.dataset[key] = mm[1]; out.push(e);
+        }
+        bag['__' + key] = out;
         return out;
       }
       return [];
@@ -613,6 +618,55 @@ console.log('\n[V15] 진행 중 작업 고르기 — 올린 것만 뜨고, 고�
      '남는 것은 아직 수량 없는 방치 작업(18-3)뿐이다');
 
   S.crew = saveCrew; S.work = saveWork; S.vend = saveVend;
+  VS.tab = 'work'; VS.grp = ''; VS.key = ''; VS.rw = ''; VS.rno = ''; VS.side = []; VS.sta = {};
+}
+
+/* ════════════════════════════════════════════════════════════
+   [V16] 작업 중단·재개 (v2.38.0 · 3단계 · 협력업체도 가능)
+   ★진행 중 작업 줄에서 사유를 고르면 중단된다 → 서버로 보내 스탭·관리자
+     화면에도 뜬다. 중단된 줄은 STOPPED 배지 + 재개 버튼으로 바뀐다.
+   ★0-J : 소스가 아니라 실제 상태(S.stop·렌더)를 본다.
+   ════════════════════════════════════════════════════════════ */
+console.log('\n[V16] 작업 중단·재개 — 사유 고르면 세우고, 재개 버튼으로 잇는다');
+{
+  const VD = sb.window.VENDOR, VS = VD.state;
+  const saveCrew = S.crew.slice(), saveWork = S.work.slice(),
+        saveStop = S.stop.slice(), saveVend = S.vend.slice();
+  S.vend = []; S.crew = []; S.work = []; S.stop = [];
+  const today = A.today();
+  VS.by = 'ACME';
+  S.crew.push({ id: A.uid(), date: today, loc: { s: 'civil', p: 3, c: 1 }, key: 'T-01',
+    spot: null, tag: '', spots: [{ kind: 'road', w: '18', no: '2', memo: '', side: '', f: 0, t: 40 }],
+    teams: 1, ppl: { eng: 0, fmn: 1, wkr: 5 }, eq: [], by: 'ACME', co: 'ACME', st: 'sub', up: 0 });
+
+  VS.tab = 'work'; VS.s = 'civil'; VS.p = 3; VS.c = 1;
+  VS.grp = ''; VS.key = ''; VS.rw = ''; VS.rno = ''; VS.side = []; VS.sta = {};
+  VD.render();
+  ok(/data-vstop="0"/.test(bag.vBody.innerHTML), '진행 중 작업 줄에 중단 사유 고르개가 있다');
+  ok(/Waiting for material/.test(bag.vBody.innerHTML), '중단 사유 목록(자재 대기 등)이 뜬다');
+
+  /* 중단 — 고르개 값을 자재대기로 두고 onchange */
+  const sels = bag.__vstop;
+  ok(sels && sels.length === 1 && typeof sels[0].onchange === 'function', 'bind가 중단 고르개에 onchange를 걸었다');
+  sels[0].value = 'mat';
+  sels[0].onchange();
+  ok(S.stop.length === 1 && S.stop[0].why === 'mat' && !S.stop[0].to, '중단 기록이 생긴다(사유·재개일 없음)');
+  ok(A.coOf(S.stop[0], false) === 'ACME', '중단 기록에 업체가 실린다');
+  const hStop = bag.vBody.innerHTML;
+  ok(/votp__stop"/.test(hStop), '중단된 줄에 STOPPED 배지');   /* __stop" — __stopsel 아님 */
+  ok(/data-vresume="0"/.test(hStop), '중단된 줄은 재개 버튼으로 바뀐다');
+  ok(/Waiting for material/.test(hStop), '중단 사유가 줄에 보인다');
+
+  /* 재개 — 버튼 클릭 */
+  const btns = bag.__vresume;
+  ok(btns && btns.length === 1 && typeof btns[0].onclick === 'function', 'bind가 재개 버튼에 onclick을 걸었다');
+  btns[0].onclick();
+  ok(S.stop[0].to === today, '재개일이 찍힌다');
+  ok(!A.activeStop(S.stop[0].tk), '재개하면 더는 중단 중이 아니다');
+  ok(/data-vstop="0"/.test(bag.vBody.innerHTML) && !/votp__stop"/.test(bag.vBody.innerHTML),
+     '재개 후 다시 진행 중(중단 고르개로 복귀)');
+
+  S.crew = saveCrew; S.work = saveWork; S.stop = saveStop; S.vend = saveVend;
   VS.tab = 'work'; VS.grp = ''; VS.key = ''; VS.rw = ''; VS.rno = ''; VS.side = []; VS.sta = {};
 }
 

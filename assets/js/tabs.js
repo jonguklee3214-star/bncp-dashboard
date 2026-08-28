@@ -49,21 +49,45 @@
     return A.locShort(t.loc);
   }
   var OT_AGE_WARN = 3;   /* 진행 중인데 이 일수 넘게 방치되면 경고 */
-  /* ★진행 중 작업 카드 — A.openTasks(core)가 뽑는다. 0건이면 안 그린다. */
+  /* ★진행 중 작업 카드 — A.openTasks(core)가 뽑는다. 0건이면 안 그린다.
+     ★중단(v2.38.0)된 작업은 방치로 몰지 않고 따로 「중단」으로 묶는다.
+       스탭·관리자는 사유를 골라 세우고(중단), 버튼으로 다시 잇는다(재개). */
+  function stopCanEdit() { var r = A.role(); return r === 'admin' || r === 'staff'; }
+  function stopSelCell(idx) {
+    if (!stopCanEdit()) return '';
+    return '<td class="r"><select class="in in--sm" data-stop="' + idx + '">' +
+      '<option value="">' + T('ot_stop') + '…</option>' +
+      A.STOP_WHY.map(function (x) {
+        return '<option value="' + esc(x.id) + '">' + esc(x[S.lang] || x.en) + '</option>';
+      }).join('') + '</select></td>';
+  }
   function openTaskHTML() {
     var list = A.openTasks(flt);
     if (!list.length) return '';
-    var aged = 0;
-    var body = '<div class="tw"><table><tbody>' + list.map(function (t) {
+    var ong = [], stp = [], aged = 0;
+    list.forEach(function (t, i) { t._i = i; (t.stopped ? stp : ong).push(t); });
+    var oh = ong.length ? '<div class="tw"><table><tbody>' + ong.map(function (t) {
       var old = t.age >= OT_AGE_WARN; if (old) aged++;
       return '<tr' + (old ? ' class="gr"' : '') + '><td>' + itemLine(t.key) +
         ' <span class="sp">' + esc(segLabel(t)) + '</span></td>' +
         '<td class="c">' + (t.isNew ? '<span class="bd bd--o">NEW</span>' : '') + '</td>' +
         '<td class="r sp">' + T('ot_since').replace('{n}', nf(t.age)) + '</td>' +
-        '<td class="r">' + (old ? '<span class="bd bd--d">' + T('ot_aged') + '</span>' : '') + '</td></tr>';
-    }).join('') + '</tbody></table></div>';
-    var sub = T('ot_n').replace('{n}', nf(list.length)) + (aged ? ' · ' + nf(aged) + ' ' + T('ot_aged') : '');
-    return '<div style="margin-bottom:16px">' + card(T('ot_t'), sub, body, 'flush') + '</div>';
+        '<td class="r">' + (old ? '<span class="bd bd--d">' + T('ot_aged') + '</span>' : '') + '</td>' +
+        stopSelCell(t._i) + '</tr>';
+    }).join('') + '</tbody></table></div>' : '';
+    var sh = stp.length ? '<div class="ot-stop"><div class="ot-stop__h">' +
+      T('ot_stopped') + ' <b>' + nf(stp.length) + '</b></div><div class="tw"><table><tbody>' +
+      stp.map(function (t) {
+        return '<tr><td>' + itemLine(t.key) + ' <span class="sp">' + esc(segLabel(t)) + '</span></td>' +
+          '<td class="sp">' + esc(A.stopWhyText(t.stopWhy, S.lang) || '—') + '</td>' +
+          '<td class="r sp">' + esc(t.stopFrom) + ' · ' + T('ot_stopdays').replace('{n}', nf(t.stopDays)) + '</td>' +
+          (stopCanEdit() ? '<td class="r"><button class="btn btn--g btn--sm" data-resume="' + t._i + '">' +
+            T('ot_resume') + '</button></td>' : '') + '</tr>';
+      }).join('') + '</tbody></table></div></div>' : '';
+    var sub = T('ot_n').replace('{n}', nf(ong.length)) +
+      (aged ? ' · ' + nf(aged) + ' ' + T('ot_aged') : '') +
+      (stp.length ? ' · ' + nf(stp.length) + ' ' + T('ot_stopped') : '');
+    return '<div style="margin-bottom:16px">' + card(T('ot_t'), sub, oh + sh, 'flush') + '</div>';
   }
   function opts(list, sel, v, l) {
     return list.map(function (x) {
@@ -403,6 +427,17 @@
       ppl: r.ppl || { eng: 0, fmn: 0, wkr: 0 }, eq: r.eq || [],
       note: r.note || '', st: r.st || 'sub' }) };
 
+    /* ★작업 중단(v2.38.0) — 종류를 모르는 서버 시트(etc)에 원문으로 쌓였다가
+       무type 수신으로 되돌아온다. tk·seg가 곧 작업 식별자다(공종코드가 없어도
+       성립하므로 아래 `if (!r.key)`보다 **위**에 둔다). 재개는 같은 id에 to를
+       채워 다시 보내므로, 서버 upsert가 그 줄을 덮고 여기서 to가 갱신된다. */
+    if (r.type === 'stop') {
+      if (!r.tk) return null;
+      return { box: 'stop', row: merge(base, {
+        type: 'stop', tk: r.tk, key: r.key || '', seg: r.seg || '',
+        to: r.to || '', why: r.why || '', co: r.co || '' }) };
+    }
+
     if (!r.key) return null;
     base.key = r.key;
     base.spot = (r.spot === 0 || r.spot) ? r.spot : null;
@@ -539,6 +574,12 @@
          것이 안 눌린 채로 보여, 업체가 눌러도 종료되지 않는다. */
       b.okS = row.okS ? 1 : 0; b.okV = row.okV ? 1 : 0;
     }
+    /* ★작업 중단(v2.38.0) — tk·seg가 식별자, to(재개일)·why가 바뀌는 값이다.
+       공종코드가 없어도 성립하도록 tk/seg를 반드시 싣는다. */
+    if (type === 'stop') {
+      b.tk = row.tk || ''; b.seg = row.seg || ''; b.to = row.to || '';
+      b.why = row.why || ''; b.co = row.co || '';
+    }
     row.up = 0;
     try {
       api.send(type, b).then(function (r) { row.up = (r && r.ok) ? 1 : 0; A.save(); });
@@ -569,7 +610,7 @@
       if (!rows.length) { paintSync(); return; }            /* 바뀐 게 없다 */
 
       var box = { work: S.work, crew: S.crew, insp: S.insp, surv: S.surv,
-                  mreq: S.mreq, direct: S.direct };
+                  mreq: S.mreq, direct: S.direct, stop: S.stop };
       var have = {}, mine = {}, add = 0, k;
       for (k in box) box[k].forEach(function (x) { have[x.id] = 1; mine[x.id] = x; });
 
@@ -612,6 +653,15 @@
         if (r.type === 'plan') {
           var up = unpack(r);
           if (up && up.box === '_plan') add++;
+          return;
+        }
+        /* ★중단 기록은 상태(st)가 아니라 **재개일(to)**이 바뀐다 (v2.38.0).
+           한쪽에서 재개하면 to가 찍혀 되돌아온다 — 그것만 반영한다.
+           빈 to가 채워진 to를 덮지 않게, 채워진 쪽만 받는다. */
+        if (r.type === 'stop' && have[r.id]) {
+          var cs = mine[r.id];
+          if (r.to && cs.to !== r.to) { cs.to = r.to; add++; }
+          if (r.why && !cs.why) cs.why = r.why;
           return;
         }
         /* 이미 있는 줄 — 서버 쪽이 더 진행된 상태일 때만 반영한다 */
@@ -4250,6 +4300,26 @@
         w.st = 'rej'; w.ckOk = 1; w.rejWhy = why || ''; w.rejAt = A.today();
         txBack('work', w);
         A.save(); A.render();
+      };
+    });
+    /* ★진행 중 작업을 세우고(중단) 다시 잇는다(재개) — 스탭·관리자 (v2.38.0).
+       사유를 고르면 그 자리에서 중단된다. 목록은 openTasks가 결정적이라
+       렌더 때와 같은 색인으로 그 작업을 다시 집는다. */
+    $$('[data-stop]').forEach(function (sel) {
+      sel.onchange = function () {
+        if (!sel.value) return;
+        var t = A.openTasks(flt)[+sel.dataset.stop]; if (!t) return;
+        var r = A.addStop({ tk: t.tk, loc: t.loc, key: t.key, seg: t.seg, why: sel.value, by: S.me || '' });
+        if (r) txBack('stop', r);
+        A.render();
+      };
+    });
+    $$('[data-resume]').forEach(function (b) {
+      b.onclick = function () {
+        var t = A.openTasks(flt)[+b.dataset.resume]; if (!t) return;
+        var s = A.resumeStop(t.tk, A.today());
+        if (s) txBack('stop', s);
+        A.render();
       };
     });
     if ($('#vdFile')) $('#vdFile').onchange = function () {
