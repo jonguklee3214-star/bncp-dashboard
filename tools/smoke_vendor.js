@@ -256,6 +256,64 @@ console.log('\n[V12] 도로 세부위치 — 측점→연장 자동, 좌우는 �
   ok(SP.stageName('bf', 3).indexOf('#3') > 0, '되메우기는 층 번호가 붙는다');
 }
 
+console.log('\n[V12-B] 도로 입력 — 측점 기본표시·좌우 선택 · 번호 타이핑(10km)');
+{
+  const SP = sb.window.BNCP_SPOT, VS = V.state;
+  const saveVend = S.vend.slice();
+  /* 도로 공종(토공)으로 세팅 */
+  VS.tab = 'work'; VS.s = 'civil'; VS.p = 1; VS.c = 1; VS.grp = '토공'; VS.key = 'T-01';
+  VS.rw = '50'; VS.rno = '1'; VS.side = []; VS.sta = {};
+  V.render();
+  const hr = bag.vBody.innerHTML;
+
+  /* ③ 측점이 좌우센터 없이도 뜬다 */
+  ok(hr.indexOf('data-sta=') >= 0, '★측점 칸이 좌우센터 없이도 뜬다 (전폭)');
+  ok(hr.indexOf('Full width') >= 0, '★「전폭(Full width)」 줄이 있다');
+  ok(hr.indexOf('data-side=') >= 0, '좌우센터 체크박스는 선택용으로 남아 있다');
+
+  /* ② 스테이션 번호는 숫자 입력칸, 뒤 +칸은 드롭다운 */
+  ok(/data-sta="F\.fk"[^>]*type="number"|type="number"[^>]*data-sta="F\.fk"/.test(hr),
+     '★스테이션 번호(fk)가 숫자 입력칸이다');
+  ok(hr.indexOf('<select class="in" data-sta="F.fm"') >= 0 || /data-sta="F\.fm"/.test(hr),
+     '뒤 +칸(fm)은 그대로 드롭다운(0~19)');
+  ok(SP.sta(437, 5) === 437 * 20 + 5, '★번호 상한 없음 — No.437 계산됨');
+  ok(SP.sta(500, 0) === 10000, '★10km 도로 = No.500 (10,000m)');
+  ok(SP.sta(1, 20) === null, '뒤 +칸은 여전히 0~19 — 1+20 같은 없는 측점 차단');
+
+  /* ③ 전폭 제출 → side='' 작업 1건, 수량 = 측점 연장 */
+  const w0 = S.work.length;
+  VS.side = []; VS.sta = { F: { fk: 0, fm: 0, tk: 6, tm: 0 } };  /* 0+00~6+00 = 120m */
+  bag.vSave.disabled = false; bag.vSave.onclick();
+  ok(S.work.length === w0 + 1, '전폭 측점 제출 → 작업 1건');
+  const wf = S.work[S.work.length - 1];
+  ok(wf && wf.spot && wf.spot.side === '', "★전폭은 side='' 로 저장");
+  ok(wf && wf.qty === 120, '★수량 = 측점 연장 120m (자동)');
+
+  /* ③ 좌우 골라 제출 → 쪽마다 1건씩 */
+  const w1 = S.work.length;
+  VS.side = ['L', 'R']; VS.sta = { L: { fk: 0, fm: 0, tk: 2, tm: 0 }, R: { fk: 0, fm: 0, tk: 3, tm: 0 } };
+  bag.vSave.disabled = false; bag.vSave.onclick();
+  const made = S.work.slice(w1);
+  ok(made.length === 2, '★좌·우를 골라 제출하면 쪽마다 1건 (경계석·보도블럭)');
+  ok(made.some(x => x.spot.side === 'L' && x.qty === 40) &&
+     made.some(x => x.spot.side === 'R' && x.qty === 60), '★쪽마다 연장 각각 (L=40·R=60)');
+
+  /* ② No.400대 큰 번호 타이핑 저장 */
+  const w2 = S.work.length;
+  VS.side = []; VS.sta = { F: { fk: 400, fm: 0, tk: 410, tm: 0 } };  /* 400+00~410+00 = 200m */
+  bag.vSave.disabled = false; bag.vSave.onclick();
+  const wb = S.work[S.work.length - 1];
+  ok(S.work.length === w2 + 1 && wb.qty === 200, '★No.400~410 = 200m 저장 (10km 도로 대응)');
+
+  VS.side = []; VS.sta = {}; S.vend = saveVend;
+
+  /* 소스 확인 — 도로 저장 경로가 needTag·rowIds·전폭(side='')을 쓴다 */
+  const vs = fs.readFileSync(path.join(ROOT, 'assets/js/vendor.js'), 'utf8');
+  ok(/function rowIds/.test(vs), 'rowIds 헬퍼가 있다(전폭 F 또는 좌우)');
+  ok(/!SP\.needTag\(V\.s, V\.grp\)/.test(vs), '도로 저장은 표기 공종이 아닐 때 탄다');
+  ok(/side = \(rid === 'F'\) \? '' : rid/.test(vs), "전폭 F는 side=''로 저장");
+}
+
 console.log('\n[V13] 검측 신청 — 실적을 골라 묶는다 (다시 고르지 않는다)');
 {
   const vsrc = fs.readFileSync(path.join(ROOT, 'assets/js/vendor.js'), 'utf8');
@@ -415,8 +473,10 @@ console.log('\n[V-ANC] 부대토목 — 블록-번호 도로 · 측점은 고르
 
   /* ★새 API는 **존재 확인을 앞에 둔다** — 없는 채로 부르면 예외가 나서
      검사가 통째로 죽고, 어느 줄이 왜 실패했는지 안 보인다(0-W에서 배운 것). */
-  const hasAnc = typeof SP.blkCode === 'function' && typeof SP.staNos === 'function';
-  ok(hasAnc, '★SPOT.blkCode / staNos 가 있다 (부대토목 도로·측점)');
+  /* ★staNos(측점번호 드롭다운 목록)는 지웠다 — 번호는 이제 숫자로 친다
+     (10km 도로 대응, [V12-B]). 존재 확인은 아직 쓰는 staMs(0~19)로 한다. */
+  const hasAnc = typeof SP.blkCode === 'function' && typeof SP.staMs === 'function';
+  ok(hasAnc, '★SPOT.blkCode / staMs 가 있다 (부대토목 도로·측점)');
   if (!hasAnc) { console.log('  (부대토목 검사 건너뜀 — 위가 실패했다)'); }
   else {
 

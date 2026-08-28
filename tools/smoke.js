@@ -153,6 +153,30 @@ ok(A.pplSum({eng:1,fmn:3,wkr:20}) === 24, '인원 다이얼 3직군 합계 24');
 ok(A.oprCount(mkEq(6,0,2)) === 6, '장비기사 = 가동대수 자동 (6)');
 ok(A.crewTotal({ppl:{eng:1,fmn:3,wkr:20},eq:mkEq(6,0,0)}) === 30, '총인원 = 3직군24 + 기사6 = 30');
 
+/* ── 7-B 생산성 왜곡 — 완료일에 수량이 몰려도 부풀려지지 않는다 ──
+   ★사고 : 여러 날 걸린 작업의 수량이 완료일 하루에 올라오면, 종전 계산은
+     수량과 인원을 **같은 날끼리** 짝지어 그날 인원으로만 나눠 몇 배로
+     부풀렸다(사용자 지적, 사실상 모든 작업). 이제 분자·분모를 각각 기간
+     전체로 합쳐(누계) 그 왜곡을 없앤다. */
+console.log('\n[7-B] 생산성 — 수량이 완료일 하루에 몰려도 정확');
+{
+  const LB = { s: 'civil', p: 4, c: 1 };   /* 다른 공구 — [7]과 안 섞이게 */
+  /* 거푸집류를 흉내 — 아무 key 하나에 2조×3일 투입, 수량은 완료일(3일차)에 300 */
+  const pk = 'T-01';
+  S.crew.push({ id: 'pb1', date: '2026-08-25', loc: LB, key: pk, teams: 2, ppl: { eng: 0, fmn: 1, wkr: 8 }, eq: [], st: 'ok' });
+  S.crew.push({ id: 'pb2', date: '2026-08-26', loc: LB, key: pk, teams: 2, ppl: { eng: 0, fmn: 1, wkr: 8 }, eq: [], st: 'ok' });
+  S.crew.push({ id: 'pb3', date: '2026-08-27', loc: LB, key: pk, teams: 2, ppl: { eng: 0, fmn: 1, wkr: 8 }, eq: [], st: 'ok' });
+  S.work.push({ id: 'pbw', date: '2026-08-27', loc: LB, key: pk, qty: 300, st: 'ok' });
+  const pb = A.prod(pk, LB);
+  ok(pb.teamDays === 6, `★팀-일이 6이다 (2조×3일, 완료일 하루로 안 쪼그라듦) — 실제 ${pb.teamDays}`);
+  ok(pb.perTeam === 50, `★팀당 생산성 300÷6 = 50 (종전엔 300÷2=150로 부풀었다) — 실제 ${pb.perTeam}`);
+  /* 진행 중(수량 아직 없음)이면 분모만 쌓여 낮게 보이고, 절대 부풀지 않는다 */
+  S.work = S.work.filter(w => w.id !== 'pbw');
+  const wip = A.prod(pk, LB);
+  ok(wip.perTeam === 0, '진행 중(수량 없음)이면 0 — 부풀리지 않는다');
+  S.crew = S.crew.filter(c => ['pb1', 'pb2', 'pb3'].indexOf(c.id) < 0);
+}
+
 /* ── 8 공종별 집계 (작업량/인원/장비 분리) ────────────── */
 console.log('\n[8] 공종별 집계');
 const ru = A.rollup(L1).filter(x => x.e.key === 'T-01')[0];

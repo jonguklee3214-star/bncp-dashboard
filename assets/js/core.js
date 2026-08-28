@@ -1021,34 +1021,34 @@
   };
   A.eqLabel = function (cat, size) { return size ? cat + ' · ' + size : cat; };
 
-  function crewIndex(f) {
-    var ix = {};
-    S.crew.forEach(function (c) {
-      if (c.st !== 'ok' || !A.locMatch(c, f)) return;
-      var k = c.date + '|' + A.locKey(c.loc) + '|' + c.key;
-      (ix[k] = ix[k] || []).push(c);
-    });
-    return ix;
-  }
-
-  /** 실측 생산성 : 팀당 1일 생산량 = Σ수량 ÷ Σ팀수 (짝지어진 것만) */
+  /** 실측 생산성 — 완료 수량 합 ÷ 투입 팀-일 합 (누계, 날짜 짝을 보지 않는다).
+      ★종전에는 수량과 인원을 **같은 날끼리** 짝지어 나눴다. 그래서 여러 날
+        걸린 작업의 수량이 완료일 하루에 몰리면 **그날 인원으로만** 나뉘어
+        몇 배로 부풀려졌다 — 거푸집·철근처럼 며칠 걸리는 작업이 특히 심하고,
+        사실상 모든 작업이 그렇다(사용자 지적). 재현: 300㎡를 2조×3일에
+        완료해 완료일에 올리면 종전 300÷2=150, 실제는 300÷6=50.
+      ★고침 : 분자(수량)와 분모(팀-일)를 각각 **기간 전체로 합친다.** 날짜를
+        안 맞추므로 수량을 완료일 하루에 몰아 올려도 앞선 날 인원이 분모에
+        다 들어가 정확해진다. 생산성은 원래 누계 기준이다(4-C).
+      ★진행 중(수량 아직 없음)이면 분모만 쌓여 잠깐 낮게 보이고, 완료해서
+        수량이 들어오면 제값으로 정착한다 — 절대 부풀려지지 않는다.
+      ★크루의 date는 안 본다(누계). 투입 일수는 크루가 실제로 나온 날 수다. */
   A.prod = function (key, f) {
-    var ix = crewIndex(f), q = 0, td = 0, pp = 0, run = 0, n = 0, days = {};
+    var q = 0, wn = 0;
     S.work.forEach(function (w) {
       if (w.key !== key || w.st !== 'ok' || !A.locMatch(w, f)) return;
-      var cs = ix[w.date + '|' + A.locKey(w.loc) + '|' + w.key];
-      if (!cs || !cs.length) return;
-      var t = 0, p = 0, r = 0;
-      cs.forEach(function (c) {
-        t += Number(c.teams) || 0; p += A.crewTotal(c); r += A.eqSum(c.eq, 'run');
-      });
-      if (!t) return;
-      q += Number(w.qty) || 0; td += t; pp += p; run += r; days[w.date] = 1; n++;
+      q += Number(w.qty) || 0; wn++;
+    });
+    var td = 0, pp = 0, run = 0, cdays = {};
+    S.crew.forEach(function (c) {
+      if (c.key !== key || c.st !== 'ok' || !A.locMatch(c, f)) return;
+      td += Number(c.teams) || 0; pp += A.crewTotal(c); run += A.eqSum(c.eq, 'run');
+      cdays[c.date] = 1;
     });
     if (!td) return null;
     var e = REG[key], real = q / td;
     return {
-      n: n, days: Object.keys(days).length, qty: q, teamDays: td, people: pp, run: run,
+      n: wn, days: Object.keys(cdays).length, qty: q, teamDays: td, people: pp, run: run,
       perTeam: real, perMan: pp ? q / pp : null, perEq: run ? q / run : null,
       base: e && e.pteam != null ? e.pteam : null,
       gap: e && e.pteam ? (real - e.pteam) / e.pteam * 100 : null

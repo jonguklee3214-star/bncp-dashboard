@@ -210,20 +210,30 @@
        손으로 치면 1+20 같은 **없는 측점**이 들어온다. 그러면 같은 지점이 두
        가지로 적혀 겹침 검사도 연장 계산도 조용히 어긋난다.
        ★뒤 칸은 0~19까지만 만든다 — 20은 목록에 아예 없다(다음 스테이션이다). */
+    /* ★스테이션 번호(앞 칸)는 **숫자로 친다** — 10km 도로면 No.500까지 간다.
+         500개짜리 드롭다운은 못 쓴다(사용자 지적 「400번대 어떻게 입력해」).
+         SPOT.sta는 어떤 정수든 받으므로(k≥0) 번호 타이핑은 안전하다.
+       ★뒤 +칸(미터)만 0~19 드롭다운으로 남긴다 — 「1+20」 같은 없는 측점은
+         여전히 원천 차단된다(인수인계서가 지킨 안전장치는 여기다). */
     function staSel(id, f, val) {
-      var list = (f === 'fk' || f === 'tk') ? SP.staNos() : SP.staMs();
-      var pad = (f === 'fm' || f === 'tm');
-      return '<select class="in" data-sta="' + id + '.' + f + '">' +
-        '<option value="">–</option>' +
-        list.map(function (n) {
-          var t = pad ? ('0' + n).slice(-2) : String(n);
+      if (f === 'fk' || f === 'tk') {
+        return '<input class="in sta-no" type="number" min="0" step="1" inputmode="numeric" ' +
+          'data-sta="' + id + '.' + f + '" value="' + (val == null ? '' : esc(val)) +
+          '" placeholder="No.">';
+      }
+      return '<select class="in" data-sta="' + id + '.' + f + '"><option value="">–</option>' +
+        SP.staMs().map(function (n) {
+          var t = ('0' + n).slice(-2);
           return '<option value="' + n + '"' +
             (String(n) === String(val) ? ' selected' : '') + '>' + t + '</option>';
         }).join('') + '</select>';
     }
-    var rows = V.side.map(function (id) {
+    /* ★측점 줄 — 좌우센터를 골랐으면 그 쪽마다, 안 골랐으면 「전폭」 한 줄 */
+    var rows = rowIds().map(function (id) {
       var v = V.sta[id] || {};
-      return '<div class="starow"><span class="stalab">' + esc(SP.sideName(id)) + '</span>' +
+      var lab = (id === 'F') ? 'Full width' + '<span class="sl">/</span><span class="ar">كامل العرض</span>'
+                             : esc(SP.sideName(id));
+      return '<div class="starow"><span class="stalab">' + lab + '</span>' +
         staSel(id, 'fk', v.fk) + '<span class="staplus">+</span>' + staSel(id, 'fm', v.fm) +
         '<span class="statil">~</span>' +
         staSel(id, 'tk', v.tk) + '<span class="staplus">+</span>' + staSel(id, 'tm', v.tm) +
@@ -234,11 +244,20 @@
       fld('Road / الطريق', '<div class="two">' + wsel + nsel + '</div>') +
       fld('Note / ملاحظة', '<input class="in" id="vMemo" value="' + esc(V.rmemo) + '" placeholder="School Entrance">') +
       '</div>' +
-      '<div style="margin-top:10px">' + fld('Side / الجانب', '<div class="cks">' + sides + '</div>') + '</div>' +
+      /* ★좌우센터는 **선택**이다 — 경계석·보도블럭처럼 쪽마다 하는 일에만 고른다.
+         성토·보조기층 같은 전폭 작업은 안 골라도 위 측점이 그대로 뜬다. */
+      '<div style="margin-top:10px">' + fld('Side (curb/sidewalk) / الجانب', '<div class="cks">' + sides + '</div>') + '</div>' +
       (rows ? '<div class="stas">' + rows + '</div>' : '') +
-      (V.side.length ? '<div class="statot">Total ' + nf(totalLen(), 2) + ' m<span class="sl">/</span>' +
-        '<span class="ar">الإجمالي</span></div>' : '');
+      '<div class="statot">Total ' + nf(totalLen(), 2) + ' m<span class="sl">/</span>' +
+        '<span class="ar">الإجمالي</span></div>';
   }
+
+  /* ★측점 줄의 열쇠 — 좌우센터를 골랐으면 그 쪽들, 안 골랐으면 「전폭」 한 줄.
+     'F'는 전폭(Full width)이고 저장할 때 side=''로 나간다.
+     ★종전에는 좌우센터를 골라야만 측점 칸이 떴다(사용자 지적 「반대다」).
+       성토·보조기층은 전폭 작업이라 side가 없다 — 이제 측점이 기본으로 뜨고
+       경계석·보도블럭 할 때만 좌우센터를 고른다. */
+  function rowIds() { return V.side.length ? V.side.slice() : ['F']; }
 
   function sideLen(id) {
     var SP = window.BNCP_SPOT, v = V.sta[id] || {};
@@ -251,7 +270,7 @@
   }
   function totalLen() {
     var s = 0;
-    V.side.forEach(function (id) { var L = sideLen(id); if (L !== null) s += L; });
+    rowIds().forEach(function (id) { var L = sideLen(id); if (L !== null) s += L; });
     return s;
   }
 
@@ -641,8 +660,11 @@
     if (t === 'work') return workHTML() + placeHTML() +
       '<div class="f-row" style="margin-top:12px">' +
       bfld('date', '<input class="in" id="vDate" type="date" value="' + A.today() + '">') +
+      /* ★도로 작업은 수량 = 측점 연장(자동·읽기전용). 표기 공종만 손입력이다.
+         종전엔 「좌우센터를 골랐을 때만」 자동이라, 전폭 작업은 손입력이었다. */
       bfld('qty', '<input class="in num" id="vQty" type="number" step="any" placeholder="0"' +
-           (V.side.length ? ' value="' + esc(totalLen() ? nf(totalLen(), 2).replace(/,/g, '') : '') + '" readonly' : '') + '>') +
+           (!window.BNCP_SPOT.needTag(V.s, V.grp)
+             ? ' value="' + esc(totalLen() ? nf(totalLen(), 2).replace(/,/g, '') : '') + '" readonly' : '') + '>') +
       byFld() +
       '</div>' +
       '<div style="margin-top:10px">' + inspCk() + '</div>';
@@ -1040,26 +1062,30 @@
 
     if (t === 'work') {
       var SP = window.BNCP_SPOT;
-      /* 도로를 골랐으면 쪽마다 한 건씩 나눠 저장한다.
-         ★ 검측이 한쪽만 불합격할 수 있으므로 묶어두면 처리가 곤란해진다. */
-      if (V.side.length) {
+      /* ★도로/측점 작업(표기 공종이 아닌 것 — 토공·포장)은 측점에서 연장을
+         계산해 저장한다. 좌우센터를 골랐으면 쪽마다 한 건씩(검측이 한쪽만
+         불합격할 수 있어 묶으면 곤란), 안 골랐으면 「전폭」 한 건.
+         ★종전에는 좌우센터를 골라야만 이 길로 왔고, 안 고르면 아래 손입력
+           수량으로 빠져 성토·보조기층이 연장 없이 저장됐다(사용자 지적). */
+      if (!SP.needTag(V.s, V.grp)) {
         if (!V.rw || !V.rno) return say('Select road / اختر الطريق');
-        var mk = [];
-        for (var si = 0; si < V.side.length; si++) {
-          var sid = V.side[si], sv = V.sta[sid] || {};
+        var ids = rowIds(), mk = [];
+        for (var si = 0; si < ids.length; si++) {
+          var rid = ids[si], side = (rid === 'F') ? '' : rid, sv = V.sta[rid] || {};
           var f = SP.sta(sv.fk, sv.fm), tt = SP.sta(sv.tk, sv.tm);
           var L = SP.len(f, tt);
-          if (L === null || !L) return say('Enter station for ' + SP.sideName(sid) + ' / أدخل المحطة');
+          if (L === null || !L) return say('Enter station' +
+            (rid === 'F' ? '' : ' for ' + SP.sideName(rid)) + ' / أدخل المحطة');
           /* ★ 이미 올린 구간과 겹치면 막는다 — 중복 청구가 실무에서 가장 흔하다.
              총연장을 몰라도 판정된다(구간끼리만 비교하므로). */
-          var hit = overlap(g.key, V.rw, V.rno, sid, f, tt);
+          var hit = overlap(g.key, V.rw, V.rno, side, f, tt);
           if (hit) {
             return say('Overlaps ' + SP.staText(hit.spot.f) + '~' + SP.staText(hit.spot.t) +
                        ' (' + hit.date + ') / يتداخل مع مقطع مُقدَّم');
           }
           mk.push({
             id: A.uid(), date: d, loc: g.loc, key: g.key, spot: {
-              kind: 'road', w: V.rw, no: V.rno, memo: V.rmemo, side: sid, f: f, t: tt
+              kind: 'road', w: V.rw, no: V.rno, memo: V.rmemo, side: side, f: f, t: tt
             },
             qty: L, by: V.by, subAt: A.nowISO(), st: 'sub', need: !!V.need, insp: '', up: 0
           });
@@ -1099,11 +1125,13 @@
          똑같이 쪼개면 **같은 사람이 쪽 수만큼 중복 계상된다.**
          그래서 행은 하나로 두고 측점만 여러 개 담는다. */
       var SP = window.BNCP_SPOT;
-      var sps = V.side.map(function (id) {
+      /* ★측점은 「전폭」(좌우센터 안 고름)도 담는다 — F는 side=''로 나간다.
+         측점을 골랐어야 담는다(f·t가 있어야) — 안 골랐으면 이 줄은 빠진다. */
+      var sps = rowIds().map(function (id) {
         var sv = V.sta[id] || {};
-        return { kind: 'road', w: V.rw, no: V.rno, memo: V.rmemo, side: id,
+        return { kind: 'road', w: V.rw, no: V.rno, memo: V.rmemo, side: (id === 'F') ? '' : id,
                  f: SP.sta(sv.fk, sv.fm), t: SP.sta(sv.tk, sv.tm) };
-      }).filter(function (x) { return x.w && x.no; });
+      }).filter(function (x) { return x.w && x.no && x.f !== null && x.t !== null; });
       if (needTag && !V.tag) return say('Enter marking / أدخل الترميز');
       var crow = { id: A.uid(), date: d, loc: g.loc, key: g.key, spot: g.spot,
                    tag: V.tag || '',
