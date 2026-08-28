@@ -345,6 +345,99 @@
     return h;
   }
 
+  /* ── 진행 중 작업 고르기 (v2.37.0 · 2단계) ────────────
+     ★인력·장비를 올렸는데 수량이 아직 안 들어온 작업(A.openTasks)을
+       이 업체 것만 추려 보여준다. 고르면 공종·위치·도로·측점이 폼에
+       그대로 채워져, 작업량 입력(work)이나 이어하기(crew)를 바로 잇는다.
+     ★업체 거르기는 명부(Master)를 거친다 — 담당자 이름으로 올린 옛 줄도
+       그 사람의 업체로 걸린다(A.coOf, v2.32.0과 같은 길). */
+  var OT_AGE = 3;                       /* 며칠 방치되면 경고 — 관리자 카드와 같은 기준 */
+  function myOpenTasks() {
+    var me = A.coOf({ co: vco() }, false);
+    return A.openTasks(null).filter(function (t) {
+      return A.coOf(t.lastCrew, false) === me;
+    });
+  }
+  /* 작업이 걸친 구간(spot) — task.seg에 맞는 조각을 lastCrew에서 되찾는다 */
+  function taskSpot(t) {
+    var c = t.lastCrew;
+    if (!c) return null;
+    var arr = (c.spots && c.spots.length) ? c.spots : [c.spot];
+    for (var i = 0; i < arr.length; i++) {
+      if (A.segOf({ spot: arr[i], tag: c.tag }) === t.seg) return arr[i];
+    }
+    return c.spot;
+  }
+  /* 고른 작업을 폼 상태(V)에 되살린다 — 인원·장비(ppl·eq)는 건드리지 않는다.
+     이어하기는 「변경된 인원·장비만」 새로 넣는 것이라, 지난 값을 끌어오면
+     안 된다(사용자 지시). */
+  function applyTask(t) {
+    var c = t.lastCrew, sp = taskSpot(t), e = A.item(t.key), STEP = window.BNCP_SPOT.STA_STEP;
+    V.s = t.loc.s;
+    if (t.loc.s === 'civil') { V.p = +t.loc.p; V.c = +t.loc.c; }
+    else { V.t = t.loc.t; V.b = +t.loc.b; }
+    V.grp = e ? e.grp : '';
+    V.key = t.key;
+    V.spot = -1; V.tag = ''; V.rw = ''; V.rno = ''; V.rmemo = ''; V.side = []; V.sta = {};
+    if (sp && sp.kind === 'road') {
+      V.rw = sp.w || ''; V.rno = sp.no || ''; V.rmemo = sp.memo || '';
+      if (sp.side) V.side = [sp.side];
+      var id = sp.side || 'F';
+      if (sp.f !== null && sp.f !== undefined && sp.t !== null && sp.t !== undefined) {
+        V.sta[id] = { fk: Math.floor(sp.f / STEP), fm: sp.f % STEP,
+                      tk: Math.floor(sp.t / STEP), tm: sp.t % STEP };
+      }
+    } else if (typeof sp === 'number' && sp >= 0) {
+      V.spot = sp;
+    } else if (c && c.tag) {
+      V.tag = c.tag;
+    }
+  }
+  /* {n} 치환 병기 — 메타 한 줄 안에 들어가는 인라인 글자 (bi 블록이 아니다) */
+  function blN(key, n) {
+    var en = String(window.I18N.en[key] || key).replace('{n}', n);
+    var ar = String(window.I18N.ar[key] || '').replace('{n}', n);
+    return esc(en + (ar ? ' / ' + ar : ''));
+  }
+  function otLabel(t) {
+    var e = A.item(t.key), sp = taskSpot(t), SP = window.BNCP_SPOT;
+    var nm = e ? tw(e.name) : t.key, detail = '';
+    if (sp && sp.kind === 'road') {
+      detail = SP.roadName(sp);
+      if (sp.side) detail += ' · ' + SP.sideName(sp.side);
+      if (sp.f !== null && sp.f !== undefined)
+        detail += ' · STA ' + SP.staText(sp.f) + '~' + SP.staText(sp.t);
+    } else if (typeof sp === 'number' && sp >= 0) {
+      var cols = e && e.fac ? A.facCols(e.fac) : [];
+      detail = cols[sp] || ('#' + (sp + 1));
+    } else if (t.lastCrew && t.lastCrew.tag) {
+      detail = t.lastCrew.tag;
+    }
+    return { nm: nm, where: A.locShort(t.loc), detail: detail };
+  }
+  function openPickHTML(mode) {
+    var list = myOpenTasks();
+    var hint = mode === 'crew'
+      ? 'Tap unfinished work to continue — enter only today’s manpower & equipment' +
+        ' / اضغط لمتابعة العمل — أدخل عمالة ومعدات اليوم فقط'
+      : 'Tap uploaded work to enter its quantity / اضغط على عمل مرفوع لإدخال كميته';
+    var h = '<div class="votp"><div class="votp__h">' + bl('ot_t') +
+      '<span class="votp__c">' + list.length + '</span></div>' +
+      '<div class="votp__hint">' + esc(hint) + '</div>';
+    if (!list.length) return h + '<div class="votp__none">' + bl('ot_none') + '</div></div>';
+    h += list.map(function (t, i) {
+      var L = otLabel(t), aged = !t.isNew && t.age >= OT_AGE;
+      var badge = t.isNew ? '<span class="votp__new">NEW</span>'
+        : (aged ? '<span class="votp__aged">' + bl('ot_aged') + '</span>' : '');
+      return '<button type="button" class="votp__row' + (aged ? ' is-aged' : '') +
+        '" data-otk="' + i + '">' + badge +
+        '<span class="votp__nm">' + esc(L.nm) + '</span>' +
+        '<span class="votp__mt">' + esc(L.where + (L.detail ? ' · ' + L.detail : '')) +
+        ' · ' + blN('ot_since', t.dayN) + '</span></button>';
+    }).join('') + '</div>';
+    return h;
+  }
+
   /* ── 공종 선택 ─────────────────────────────────────── */
   function workHTML() {
     var groups = A.groupsOf(V.s);
@@ -657,7 +750,7 @@
     /* ★실적도 오늘이다 (v2.19.13 사용자 지시). 종전 기본값은 어제였다.
        작업량 표를 오늘로 통일했으므로 폼도 같이 바꾼다 — 한쪽만 바꾸면
        올린 실적이 표에 안 나온다(0-H와 같은 사고). 날짜는 손으로 고칠 수 있다. */
-    if (t === 'work') return workHTML() + placeHTML() +
+    if (t === 'work') return openPickHTML('work') + workHTML() + placeHTML() +
       '<div class="f-row" style="margin-top:12px">' +
       bfld('date', '<input class="in" id="vDate" type="date" value="' + A.today() + '">') +
       /* ★도로 작업은 수량 = 측점 연장(자동·읽기전용). 표기 공종만 손입력이다.
@@ -684,7 +777,7 @@
          있는지는 투입이 답할 일이다.
        ★측점은 **선택**이다. 도로가 아닌 공종에서 막으면 안 된다.
          도로·쪽만 골라도 그만큼은 뜬다. */
-    if (t === 'crew') return workHTML() + placeHTML() +
+    if (t === 'crew') return openPickHTML('crew') + workHTML() + placeHTML() +
       '<div class="f-row" style="margin-top:12px">' +
       bfld('date', '<input class="in" id="vDate" type="date" value="' + A.today() + '">') +
       bfld('teams', '<input class="in num" id="vTeams" type="number" min="1" step="1" value="1">') +
@@ -768,6 +861,13 @@
   function bind() {
     $$('[data-vt]').forEach(function (b) {
       b.onclick = function () { V.tab = b.dataset.vt; render(); window.scrollTo(0, 0); };
+    });
+    /* 진행 중 작업 고르기 — 폼에 공종·위치·측점을 되살린다 (v2.37.0) */
+    $$('[data-otk]').forEach(function (b) {
+      b.onclick = function () {
+        var t = myOpenTasks()[+b.dataset.otk];
+        if (t) { applyTask(t); render(); window.scrollTo(0, 0); }
+      };
     });
     $$('[data-v]').forEach(function (el) {
       el.onchange = function () {

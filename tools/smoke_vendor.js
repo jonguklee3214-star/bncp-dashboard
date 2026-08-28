@@ -18,7 +18,18 @@ const sb = { console,
   Blob:function(){}, URL:{createObjectURL:()=>'',revokeObjectURL(){}}, setTimeout:()=>0, XLSX:null, scrollTo(){},
   document:{ documentElement:{}, addEventListener(){}, createElement:()=>El('t'), body:{appendChild(){}},
     querySelector(s){ const m=/^#([A-Za-z0-9_-]+)$/.exec(s); return m && bag[m[1]] ? bag[m[1]] : null; },
-    querySelectorAll(){ return []; } } };
+    /* ★진행 중 작업 고르기(v2.37.0)를 시험하려면 [data-otk] 버튼을 실제로
+       내줘야 bind()가 onclick을 건다. 렌더된 vBody에서 긁어 stub을 만든다.
+       (다른 셀렉터는 종전대로 빈 배열 — 이 시험만 실제 DOM을 흉내낸다.) */
+    querySelectorAll(sel){
+      if (sel === '[data-otk]') {
+        const out = [], re = /data-otk="(\d+)"/g; let mm;
+        while ((mm = re.exec(bag.vBody.innerHTML))) { const e = El('otk'); e.dataset = { otk: mm[1] }; out.push(e); }
+        bag.__otk = out;   /* bind()가 onclick을 건 바로 그 배열을 시험이 다시 집는다 */
+        return out;
+      }
+      return [];
+    } } };
 sb.window = sb; vm.createContext(sb);
 ['version','i18n','data','master','materials','materials2','work_i18n','prod','equip','core','spot','api','matmaster_api','vendor']
   .forEach(f => vm.runInContext(fs.readFileSync(path.join(ROOT,'assets/js',f+'.js'),'utf8'), sb, {filename:f}));
@@ -524,6 +535,85 @@ console.log('\n[V-ANC] 부대토목 — 블록-번호 도로 · 측점은 고르
 
   VS.side = []; VS.sta = {}; VS.rw = ''; VS.rno = ''; S.vend = saveVend3;
   }
+}
+
+/* ════════════════════════════════════════════════════════════
+   [V15] 진행 중 작업 고르기 (v2.37.0 · 2단계)
+   ★인력·장비만 올리고 수량이 아직 안 들어온 작업을, 이 업체 것만 추려
+     작업량·이어하기 탭에 목록으로 띄운다. 고르면 공종·위치·도로·측점이
+     폼에 되살아난다. 오늘 시작한 것은 NEW, 오래 방치된 것은 경고한다.
+   ★0-J : 소스 문자열이 아니라 **부른 결과**(렌더 HTML·되살아난 상태)를 본다.
+   ════════════════════════════════════════════════════════════ */
+console.log('\n[V15] 진행 중 작업 고르기 — 올린 것만 뜨고, 고르면 폼이 채워진다');
+{
+  const VD = sb.window.VENDOR, VS = VD.state;
+  const saveCrew = S.crew.slice(), saveWork = S.work.slice(), saveVend = S.vend.slice();
+  S.vend = [];                                  /* 명부 미등록 → vco()=VS.by (자유입력) */
+  S.crew = []; S.work = [];
+  const today = A.today();
+  const oldD = new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 10);
+  VS.by = 'ACME';
+
+  /* 내 업체(ACME) — 오늘 인력만 올린 도로 18-2 (STA 0+00~2+00), 수량 아직 없음 */
+  S.crew.push({ id: A.uid(), date: today, loc: { s: 'civil', p: 3, c: 1 }, key: 'T-01',
+    spot: null, tag: '', spots: [{ kind: 'road', w: '18', no: '2', memo: '', side: '', f: 0, t: 40 }],
+    teams: 1, ppl: { eng: 0, fmn: 1, wkr: 5 }, eq: [], by: 'ACME', co: 'ACME', st: 'sub', up: 0 });
+  /* 남의 업체(OTHER) — 내 목록에 뜨면 안 된다 */
+  S.crew.push({ id: A.uid(), date: today, loc: { s: 'civil', p: 3, c: 1 }, key: 'T-01',
+    spot: null, tag: '', spots: [{ kind: 'road', w: '18', no: '9', memo: '', side: '', f: 0, t: 20 }],
+    teams: 1, ppl: { eng: 0, fmn: 1, wkr: 3 }, eq: [], by: 'OTHER', co: 'OTHER', st: 'sub', up: 0 });
+
+  /* ── 작업량(work) 탭 ── */
+  VS.tab = 'work'; VS.s = 'civil'; VS.p = 3; VS.c = 1;
+  VS.grp = ''; VS.key = ''; VS.rw = ''; VS.rno = ''; VS.side = []; VS.sta = {};
+  VD.render();
+  const hW = bag.vBody.innerHTML;
+  ok(/class="votp"/.test(hW), '작업량 탭에 진행 중 작업 목록이 뜬다');
+  ok((hW.match(/data-otk="/g) || []).length === 1, '내 업체 것만 1건 (남의 업체는 안 뜬다)');
+  ok(/votp__new">NEW/.test(hW), '오늘 시작한 작업은 NEW 배지');
+  ok(hW.indexOf('18-2') >= 0, '도로명이 라벨에 나온다');
+  ok(hW.indexOf('0+00') >= 0 && hW.indexOf('2+00') >= 0, '측점 구간이 라벨에 나온다');
+  ok(/Tap uploaded work to enter its quantity/.test(hW), '작업량 탭 안내 — 수량 입력');
+
+  /* 고르기(클릭) → 폼이 되살아난다. bind가 render 안에서 건 onclick을 그대로 부른다 */
+  const btns = bag.__otk;
+  ok(btns && btns.length === 1 && typeof btns[0].onclick === 'function',
+     'bind가 고르기 버튼에 onclick을 걸었다');
+  btns[0].onclick();
+  ok(VS.grp === '토공' && VS.key === 'T-01', '고르면 공종이 폼에 채워진다');
+  ok(VS.rw === '18' && VS.rno === '2', '도로 폭·번호가 되살아난다');
+  ok(VS.sta.F && VS.sta.F.fk === 0 && VS.sta.F.fm === 0 && VS.sta.F.tk === 2 && VS.sta.F.tm === 0,
+     '측점(0+00~2+00)이 되살아난다');
+  ok(VS.p === 3 && VS.c === 1, '위치도 그 작업 위치로 맞춰진다');
+
+  /* ── 이어하기(crew) 탭 — 안내 문구가 다르다, 인력·장비는 안 끌어온다 ── */
+  VS.tab = 'crew'; VS.grp = ''; VS.key = ''; VS.rw = ''; VS.rno = ''; VS.side = []; VS.sta = {};
+  VD.render();
+  const hC = bag.vBody.innerHTML;
+  ok((hC.match(/data-otk="/g) || []).length === 1, '이어하기 탭에도 진행 중 작업이 뜬다');
+  ok(/Tap unfinished work to continue/.test(hC), '이어하기 탭 안내 — 인원·장비만 추가');
+
+  /* ── 방치 경고 (요청: 협력업체 화면에도) ── */
+  S.crew.push({ id: A.uid(), date: oldD, loc: { s: 'civil', p: 3, c: 1 }, key: 'T-01',
+    spot: null, tag: '', spots: [{ kind: 'road', w: '18', no: '3', memo: '', side: '', f: 0, t: 20 }],
+    teams: 1, ppl: { eng: 0, fmn: 1, wkr: 4 }, eq: [], by: 'ACME', co: 'ACME', st: 'sub', up: 0 });
+  VS.tab = 'work'; VD.render();
+  const hAged = bag.vBody.innerHTML;
+  ok((hAged.match(/data-otk="/g) || []).length === 2, '방치된 작업까지 2건');
+  ok(/votp__aged">/.test(hAged), '오래 방치된 작업에 방치 경고 배지');
+
+  /* ── 수량이 들어오면 목록에서 빠진다 (완료 판정) ── */
+  S.work.push({ id: A.uid(), date: today, loc: { s: 'civil', p: 3, c: 1 }, key: 'T-01',
+    spot: { kind: 'road', w: '18', no: '2', memo: '', side: '', f: 0, t: 40 }, tag: '',
+    qty: 40, by: 'ACME', subAt: A.nowISO(), st: 'sub', up: 0 });
+  VD.render();
+  const hDone = bag.vBody.innerHTML;
+  ok((hDone.match(/data-otk="/g) || []).length === 1, '수량이 들어온 18-2는 목록에서 빠진다');
+  ok(hDone.indexOf('18-3') >= 0 && hDone.indexOf('18-2') < 0,
+     '남는 것은 아직 수량 없는 방치 작업(18-3)뿐이다');
+
+  S.crew = saveCrew; S.work = saveWork; S.vend = saveVend;
+  VS.tab = 'work'; VS.grp = ''; VS.key = ''; VS.rw = ''; VS.rno = ''; VS.side = []; VS.sta = {};
 }
 
 console.log(fail ? `\n✗ 실패 ${fail}건\n` : '\n✓ 전부 통과\n');

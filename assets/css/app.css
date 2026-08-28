@@ -389,6 +389,34 @@ html[lang="ar"] body{line-height:1.75}
   border:1px solid #F7DCC9;border-left:3px solid var(--orange);
   background:var(--orange-w);border-radius:var(--r);
 }
+/* ── 진행 중 작업 고르기 (v2.37.0 · 2단계) ──────────────────
+   인력·장비만 올리고 수량이 아직 안 들어온 작업을 골라, 수량 입력이나
+   이어하기(인원·장비 추가)로 바로 잇는다. NEW·방치 배지로 구분한다. */
+.votp{margin:0 0 18px;border:1px solid var(--line);border-radius:var(--r);background:var(--wash)}
+.votp__h{
+  padding:10px 12px;font-size:12px;font-weight:700;color:var(--mute);
+  border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;
+}
+.votp__c{
+  min-width:20px;text-align:center;padding:1px 7px;border-radius:10px;
+  background:var(--ink);color:#fff;font-size:11px;font-weight:700;
+}
+.votp__hint{padding:8px 12px 4px;font-size:11px;color:var(--faint);line-height:1.5}
+.votp__none{padding:14px 12px;font-size:12px;color:var(--faint);text-align:center}
+.votp__row{
+  display:block;width:100%;text-align:left;cursor:pointer;
+  padding:11px 12px;border:0;border-top:1px solid var(--line-2);background:var(--bg);
+}
+.votp__row:hover{background:var(--orange-w)}
+.votp__row.is-aged{border-left:3px solid var(--danger)}
+.votp__new,.votp__aged{
+  display:inline-block;font-size:10px;font-weight:800;letter-spacing:.02em;
+  padding:1px 6px;border-radius:2px;margin-right:7px;vertical-align:1px;
+}
+.votp__new{background:var(--orange);color:#fff}
+.votp__aged{background:var(--danger-w);color:var(--danger);border:1px solid var(--danger)}
+.votp__nm{font-size:14px;font-weight:700;color:var(--ink)}
+.votp__mt{display:block;margin-top:3px;font-size:11px;color:var(--mute)}
 .vbar{
   position:sticky;bottom:0;z-index:20;margin-top:16px;padding:12px 0;
   background:linear-gradient(180deg,rgba(250,250,250,0) 0%,var(--wash) 34%);
