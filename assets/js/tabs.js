@@ -3736,6 +3736,10 @@
      기성과 무관한 현장정리·폐기물처리 등. 공종코드 없이 작업내용을 자유 입력한다.
      진행률·생산성 집계에는 넣지 않는다(저장소 S.direct로 분리). */
   var dEdit = '';                      // 수정 중인 기록 id
+  /* ★날짜·입력자·작업내용·설명을 모듈 상태로 든다 (v2.43.1 사용자 지적
+     「장비종류를 고르면 작업내용·입력자가 초기화된다」). 종전엔 이 값들이
+     DOM에만 있어, 장비 선택 등으로 A.render()가 돌면 통째로 날아갔다. */
+  var dF = { date: '', by: '', task: '', note: '' };
   var dPpl = { eng: 0, fmn: 0, wkr: 0 };
   var dEq = [];
   var dCat = '', dSize = '';
@@ -3755,18 +3759,29 @@
     var canAdd = (A.role() !== 'admin');
     if (canAdd || dEdit) {
     var pk = dEdit ? T('d_save') : T('d_add');
+    /* ★입력자(담당자)는 스탭 명부에서 **고른다** (v2.43.1 사용자 지적 「담당자는
+       선택하면 되지 왜 입력하나」). 명부(S.staff)가 비었으면 종전처럼 자유입력.
+       ★편집 중인 옛 이름이 명부에 없어도 그 값이 안 사라지게 목록에 끼워 준다. */
+    var dStaff = A.staffAll().map(function (s) { return s.name; });
+    if (dF.by && dStaff.indexOf(dF.by) < 0) dStaff.unshift(dF.by);
+    var dByField = dStaff.length
+      ? '<select class="in" id="dBy"><option value="">' + T('pick') + '</option>' +
+          dStaff.map(function (n) {
+            return '<option value="' + esc(n) + '"' + (n === dF.by ? ' selected' : '') + '>' + esc(n) + '</option>';
+          }).join('') + '</select>'
+      : '<input class="in" id="dBy" value="' + esc(dF.by) + '">';
     h += '<div style="margin-bottom:16px">' + card(dEdit ? T('d_edit') : T('d_open'), '',
       pkHTML('d', true) +
       '<div class="f-row" style="margin-top:12px">' +
         /* ★조 수(팀 수) 입력을 없앴다(사용자 지시 — 무슨 뜻인지도 모호했다).
            저장은 여전히 teams:1로 고정해 둔다 — A.pplSum·현황판 등 다른 계산이
            teams 값을 참조하는 자리가 있어 값 자체를 지우면 그쪽이 깨진다. */
-        fld(T('date'), '<input class="in" id="dDate" type="date" value="' + esc(A.today()) + '">') +
-        fld(T('d_by'), '<input class="in" id="dBy">') +
+        fld(T('date'), '<input class="in" id="dDate" type="date" value="' + esc(dF.date || A.today()) + '">') +
+        fld(T('d_by'), dByField) +
       '</div>' +
       '<div style="margin-top:12px">' + fld(T('d_task'),
-        '<input class="in" id="dTask" placeholder="' + esc(T('d_task_ph')) + '">') + '</div>' +
-      '<div style="margin-top:12px">' + fld(T('d_note'), '<input class="in" id="dNote">') + '</div>' +
+        '<input class="in" id="dTask" value="' + esc(dF.task) + '" placeholder="' + esc(T('d_task_ph')) + '">') + '</div>' +
+      '<div style="margin-top:12px">' + fld(T('d_note'), '<input class="in" id="dNote" value="' + esc(dF.note) + '">') + '</div>' +
       '<div class="vsec">' + T('people') + '</div>' + dDial() +
       '<div class="vsec">' + T('equip') + '</div>' + dEqHTML(),
       '<button class="btn btn--o" id="dSave">' + pk + '</button>' +
@@ -4063,6 +4078,12 @@
         };
       });
       $$('[data-ddv]').forEach(function (el) { el.oninput = dsync; });
+      /* ★날짜·입력자·작업내용·설명을 칠 때마다 모듈 상태에 담는다 — 그래야
+         장비 선택 등으로 다시 그려도 안 날아간다 (v2.43.1). */
+      if ($('#dDate')) $('#dDate').onchange = function () { dF.date = this.value; };
+      if ($('#dBy')) $('#dBy').oninput = $('#dBy').onchange = function () { dF.by = this.value; };
+      if ($('#dTask')) $('#dTask').oninput = function () { dF.task = this.value; };
+      if ($('#dNote')) $('#dNote').oninput = function () { dF.note = this.value; };
       if ($('#dCat')) $('#dCat').onchange = function () {
         dCat = this.value; dSize = (A.eqSizes(dCat) || [])[0] || ''; A.render();
       };
@@ -4095,10 +4116,12 @@
         else drow = A.addDirect(rec);
         txDirect(drow);
         dPpl = { eng: 0, fmn: 0, wkr: 0 }; dEq = [];
+        dF = { date: '', by: '', task: '', note: '' };
         A.render();
       };
       if ($('#dCancel')) $('#dCancel').onclick = function () {
-        dEdit = ''; dPpl = { eng: 0, fmn: 0, wkr: 0 }; dEq = []; A.render();
+        dEdit = ''; dPpl = { eng: 0, fmn: 0, wkr: 0 }; dEq = [];
+        dF = { date: '', by: '', task: '', note: '' }; A.render();
       };
       $$('[data-ded]').forEach(function (b) {
         b.onclick = function () {
@@ -4107,18 +4130,20 @@
           dEdit = r.id;
           dPpl = JSON.parse(JSON.stringify(r.ppl || { eng: 0, fmn: 0, wkr: 0 }));
           dEq = JSON.parse(JSON.stringify(r.eq || []));
+          /* ★값을 모듈 상태에 담아 두면 렌더가 알아서 채운다 — 종전엔 렌더 뒤에
+             DOM에 직접 꽂았는데(장비 선택 등으로 다시 그리면 또 날아갔다). */
+          dF = { date: r.date, by: r.by || '', task: r.task, note: r.note || '' };
           A.render();
-          if ($('#dDate')) $('#dDate').value = r.date;
-          if ($('#dTask')) $('#dTask').value = r.task;
-          if ($('#dNote')) $('#dNote').value = r.note || '';
-          if ($('#dBy')) $('#dBy').value = r.by || '';
           window.scrollTo(0, 0);
         };
       });
       $$('[data-ddel]').forEach(function (b) {
         b.onclick = function () {
           A.delDirect(b.dataset.ddel);
-          if (dEdit === b.dataset.ddel) { dEdit = ''; dPpl = { eng: 0, fmn: 0, wkr: 0 }; dEq = []; }
+          if (dEdit === b.dataset.ddel) {
+            dEdit = ''; dPpl = { eng: 0, fmn: 0, wkr: 0 }; dEq = [];
+            dF = { date: '', by: '', task: '', note: '' };
+          }
           A.render();
         };
       });

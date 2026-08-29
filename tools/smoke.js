@@ -12,8 +12,8 @@ function El(id) {
     closest() { return null; }, querySelector() { return null; }, querySelectorAll() { return []; } };
 }
 ['logo','appt','hmeta','tabs','view','fltBox','wipe','vendorBtn',
- /* 직영 장비 입력 폼 — [98]이 실제 클릭으로 담기까지 확인한다 */
- 'dCat','dSize','dRun','dBrk','dRep','dEqAdd'].forEach(i => bag[i] = El(i));
+ /* 직영 입력 폼 — [98]이 실제 클릭·타이핑으로 상태 유지까지 확인한다 */
+ 'dCat','dSize','dRun','dBrk','dRep','dEqAdd','dTask','dBy','dNote','dDate'].forEach(i => bag[i] = El(i));
 const store = {};
 const sb = {
   console,
@@ -1125,12 +1125,26 @@ console.log('\n[98] 직영 장비 고장(brk)·정비(rep) 입력 (v2.43.0 · 18
   const hv = bag.view.innerHTML;
   ok(/id="dBrk"/.test(hv) && /id="dRep"/.test(hv), '★직영 장비 입력에 고장·정비 칸이 있다');
 
+  /* ★작업내용을 친 뒤 장비종류를 골라도 안 날아간다 (v2.43.1 버그 수정).
+     dTask에 타이핑(oninput→dF) 후 dCat 변경(A.render)해도 값이 남아야 한다. */
+  bag.dTask.value = '현장정리 작업'; if (bag.dTask.oninput) bag.dTask.oninput();
+  bag.dCat.value = 'Excavator(crawler)'; if (bag.dCat.onchange) bag.dCat.onchange();
+  ok(bag.view.innerHTML.indexOf('value="현장정리 작업"') >= 0,
+     '★장비종류를 골라도 작업내용이 초기화되지 않는다');
+
   /* 실제 클릭으로 담기까지 — 고장만(가동 0) 눌러도 담기고 고장 배지가 뜬다.
      (담는 코드가 brk를 버리면 이 배지가 안 뜬다 → revert가 여기서 걸린다) */
-  bag.dCat.value = 'Excavator(crawler)'; if (bag.dCat.onchange) bag.dCat.onchange();
   bag.dRun.value = '0'; bag.dBrk.value = '2'; bag.dRep.value = '1';
   if (bag.dEqAdd.onclick) bag.dEqAdd.onclick();
   ok(/bd--d/.test(bag.view.innerHTML), '★가동 0·고장 2를 누르면 담기고 고장 배지가 뜬다');
+
+  /* ★입력자(담당자)는 스탭 명부가 있으면 select로 고른다 (v2.43.1) */
+  const kStaff = S.staff.slice();
+  A.staffAdd({ name: '김직영', tel: '', grps: [] });
+  A.go(7);
+  ok(/<select class="in" id="dBy">/.test(bag.view.innerHTML) &&
+     bag.view.innerHTML.indexOf('>김직영<') >= 0, '★입력자는 스탭 명부에서 고른다(select)');
+  S.staff.length = 0; kStaff.forEach(function (x) { S.staff.push(x); });
 
   /* 데이터 — 고장만 있는(run=0) 장비도 담기고 업체집계(직영)에 잡힌다 */
   const LT = { s: 'civil', p: 1, c: 1 };
