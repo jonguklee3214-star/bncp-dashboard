@@ -3828,11 +3828,18 @@
         opts(A.EQ_TREE, dCat, function (x) { return x.cat; }, function (x) { return x.cat; }) + '</select>') +
       fld(T('eqsize'), '<select class="in" id="dSize"' + (sizes.length ? '' : ' disabled') + '>' +
         opts(sizes, dSize) + '</select>') +
+      /* ★고장(brk)·정비중(rep)도 받는다 (v2.43.0 · 18-스펙 「직영 … 고장장비」).
+         종전엔 가동(run)만 있어 직영 장비 고장이 장비현황·지급대조·정비에
+         전혀 안 잡혔다. 협력업체 인원장비 입력과 같은 세 칸으로 맞춘다. */
       fld(T('run'), '<input class="in num" id="dRun" type="number" min="0" step="1" value="0">') +
+      fld(T('brk'), '<input class="in num" id="dBrk" type="number" min="0" step="1" value="0">') +
+      fld(T('rep'), '<input class="in num" id="dRep" type="number" min="0" step="1" value="0">') +
       fld('&nbsp;', '<button class="btn btn--g" id="dEqAdd">' + T('eqadd') + '</button>') + '</div>' +
       (dEq.length ? '<div style="margin-top:12px">' + dEq.map(function (x, i) {
         return '<div class="eqrow"><span class="eqrow__n">' + esc(A.eqLabel(x.cat, x.size)) + '</span>' +
           '<span class="bd">' + esc(T('run')) + ' ' + nf(x.run) + '</span>' +
+          (x.brk ? '<span class="bd bd--d">' + esc(T('brk')) + ' ' + nf(x.brk) + '</span>' : '') +
+          (x.rep ? '<span class="bd bd--o">' + esc(T('rep')) + ' ' + nf(x.rep) + '</span>' : '') +
           '<button class="btn btn--g btn--sm" data-deqd="' + i + '">✕</button></div>';
       }).join('') + '</div>' : '');
   }
@@ -4063,8 +4070,10 @@
       if ($('#dEqAdd')) $('#dEqAdd').onclick = function () {
         if (!dCat) return;
         var r = Math.max(0, parseInt(val('#dRun'), 10) || 0);
-        if (!r) return;
-        dEq.push({ cat: dCat, size: dSize, run: r, brk: 0, rep: 0 });
+        var bk = Math.max(0, parseInt(val('#dBrk'), 10) || 0);
+        var rp = Math.max(0, parseInt(val('#dRep'), 10) || 0);
+        if (!r && !bk && !rp) return;   /* ★고장만 있어도 담는다(run=0 허용) */
+        dEq.push({ cat: dCat, size: dSize, run: r, brk: bk, rep: rp });
         A.render();
       };
       $$('[data-deqd]').forEach(function (b) {

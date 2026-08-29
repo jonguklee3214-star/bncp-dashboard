@@ -11,7 +11,9 @@ function El(id) {
     addEventListener() {}, appendChild() {}, remove() {}, select() {},
     closest() { return null; }, querySelector() { return null; }, querySelectorAll() { return []; } };
 }
-['logo','appt','hmeta','tabs','view','fltBox','wipe','vendorBtn'].forEach(i => bag[i] = El(i));
+['logo','appt','hmeta','tabs','view','fltBox','wipe','vendorBtn',
+ /* 직영 장비 입력 폼 — [98]이 실제 클릭으로 담기까지 확인한다 */
+ 'dCat','dSize','dRun','dBrk','dRep','dEqAdd'].forEach(i => bag[i] = El(i));
 const store = {};
 const sb = {
   console,
@@ -1109,6 +1111,40 @@ console.log('\n[97] 현황판·상단제목 손질 (v2.40.0 사용자 지적)');
   ok(bag.view.innerHTML.indexOf('id="wxBox"') < 0, '★본문(#view)에는 더는 날씨가 없다');
   ok(bag.view.innerHTML.indexOf('sb__wx') < 0, '★현황판 안에도 날씨 칸이 없다');
   ok(/class="sb"/.test(bag.view.innerHTML) && /class="sb__t"/.test(bag.view.innerHTML), '현황판은 그대로 있다');
+  A.setRole(kR); if (kF) A.setFlt(kF); A.go(1);
+}
+
+/* ★[29] 앞에 둔다 — 뒤는 표본 파일 누락으로 안 돈다. */
+console.log('\n[98] 직영 장비 고장(brk)·정비(rep) 입력 (v2.43.0 · 18-스펙)');
+{
+  const keepD = S.direct.slice(), kR = A.role(), kF = A.flt ? A.flt() : null;
+  S.direct.length = 0; A.setRole('staff'); A.setFlt({ s: 'civil', p: 1, c: 1 });
+
+  /* UI — 직영 장비 입력에 고장·정비 칸이 생겼다 */
+  A.go(7);
+  const hv = bag.view.innerHTML;
+  ok(/id="dBrk"/.test(hv) && /id="dRep"/.test(hv), '★직영 장비 입력에 고장·정비 칸이 있다');
+
+  /* 실제 클릭으로 담기까지 — 고장만(가동 0) 눌러도 담기고 고장 배지가 뜬다.
+     (담는 코드가 brk를 버리면 이 배지가 안 뜬다 → revert가 여기서 걸린다) */
+  bag.dCat.value = 'Excavator(crawler)'; if (bag.dCat.onchange) bag.dCat.onchange();
+  bag.dRun.value = '0'; bag.dBrk.value = '2'; bag.dRep.value = '1';
+  if (bag.dEqAdd.onclick) bag.dEqAdd.onclick();
+  ok(/bd--d/.test(bag.view.innerHTML), '★가동 0·고장 2를 누르면 담기고 고장 배지가 뜬다');
+
+  /* 데이터 — 고장만 있는(run=0) 장비도 담기고 업체집계(직영)에 잡힌다 */
+  const LT = { s: 'civil', p: 1, c: 1 };
+  A.addDirect({ date: A.today(), loc: LT, task: '현장정리', teams: 1,
+    ppl: { eng: 0, fmn: 0, wkr: 0 },
+    eq: [{ cat: 'Excavator(crawler)', size: '', run: 0, brk: 2, rep: 1 }], by: '직영' });
+  const co = A.rollupCo(LT).filter(function (g) { return g.dir; })[0];
+  ok(co && co.rows[0].brk === 2 && co.rows[0].rep === 1,
+     '★직영 장비 고장·정비가 업체집계(직영)에 잡힌다');
+  /* 현황판 장비 「가동/고장」의 고장(down)에도 반영된다 */
+  const sr = A.siteRows(LT).filter(function (r) { return A.locKey(r.loc) === A.locKey(LT); })[0];
+  ok(sr && sr.down >= 3, '★현황판 장비 고장(down)에 직영 고장·정비가 더해진다');
+
+  S.direct.length = 0; keepD.forEach(function (x) { S.direct.push(x); });
   A.setRole(kR); if (kF) A.setFlt(kF); A.go(1);
 }
 
