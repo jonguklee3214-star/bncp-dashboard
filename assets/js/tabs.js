@@ -2092,7 +2092,10 @@
        ★기둥은 sticky라 스크롤을 따라오되, 본문 머리행은 화면 맨 위(top:0)에
          그대로 붙는다 — **--sbh 같은 기준점이 이제 필요 없다.**
          v2.19.17~20을 헛돌게 만든 그 변수가 사라진다. */
-    return '<div class="pg"><div class="pg__main">' + h + '</div>' +
+    /* ★날씨 가로 띠 — 현황판에서 빼내 본문 위 전폭에 둔다 (v2.41.0).
+       같은 id="wxBox"라 wxInit이 늦게 온 자료로 이 칸만 갈아 끼운다. */
+    return '<div class="wxbar" id="wxBox">' + A.wxHTML() + '</div>' +
+      '<div class="pg"><div class="pg__main">' + h + '</div>' +
       '<aside class="pg__side">' + summaryHTML(rows) + '</aside></div>';
   }
 
@@ -2219,10 +2222,10 @@
          「현황판만 봐도 승인이 안 되고 있는 것을 경고할 수 있게.」 */
       sbAppr() +
       '<div class="sb__sp"></div>' +
-      /* ★날씨 (v2.19.16 사용자 지시 — 「현황판에 빈공간이 많잖아」).
-         자리만 잡아 두고 내용은 wx.js가 갈아 끼운다. 늦게 와도, 안 와도
-         다른 숫자는 하나도 안 건드린다. */
-      '<div class="sb__k sb__wx" id="wxBox">' + A.wxHTML() + '</div>' +
+      /* ★날씨는 현황판에서 빼내 본문 위 가로 띠로 옮겼다 (v2.41.0 사용자 지시
+         「내리면 움직여 가려진다 · 날씨를 빼내 이동하자」). 날씨+7일예보가 세로로
+         제일 긴 덩어리라, 빼내니 현황판이 짧아져 고정해도 안 잘린다.
+         → wxBox(가로 띠)는 v1에서 .pg 위에 그린다. wxInit은 같은 #wxBox를 찾는다. */
       '<div class="sb__k"><span class="sb__l">' + T('pn_trend') + '</span>' +
       sparkSVG(vals, days) + '</div>' +
       '</div>' +

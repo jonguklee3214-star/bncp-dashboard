@@ -816,6 +816,19 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
 .sb__cov i{font-style:normal;font-size:12px;font-weight:600;color:var(--mute);margin-left:3px}
 .sb__cor{font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
 
+/* ══ 날씨 가로 띠 (v2.41.0) — 현황판에서 빼내 본문 위 전폭으로 옮겼다 ══
+   ★현황판이 세로로 길어 스크롤 때 잘리던 것을, 제일 긴 날씨를 빼내 가로로
+     눕혀 해결한다. 왼쪽 = 라벨·현재기온, 오른쪽 = 7일예보(남는 폭을 채운다). */
+.wxbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px 20px;
+       padding:10px 16px;margin:0 0 16px;
+       border:1px solid var(--line);border-radius:var(--r);background:var(--bg)}
+.wxbar .sb__l{flex:0 0 auto;font-size:13px}
+.wxbar .wx__now{flex:0 1 auto}
+.wxbar .wx__now i{flex-basis:auto}          /* 상세(체감·바람…)를 줄바꿈 없이 옆으로 */
+.wxbar .wx__off{flex:0 0 auto}
+.wxbar .wx__warn{flex:0 0 auto}
+.wxbar .wx__fc{width:auto;flex:1 1 300px;margin-top:0;justify-content:flex-end}
+
 /* ══ 날씨 (v2.19.16) ═══════════════════════════════════════
    ★띠의 빈자리를 채운다. 오렌지는 안 쓴다 — 날씨는 「알림」이 아니라
      배경 정보다. 눈에 걸려야 하는 것은 미확인·확인요청 쪽이다.
@@ -824,10 +837,9 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
 /* ★날씨 글씨 (v2.19.18 사용자 지적 「일기예보 글씨가 너무작아」).
    8~10px은 **띠에서 읽으라고 만든 크기가 아니었다.** 한 단계씩 올리고
    칸 폭도 넓혀 일곱 칸이 눌리지 않게 한다. */
-.sb__wx{min-width:0;gap:5px}
 .wx__now{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
 .wx__now b{font-size:20px;font-weight:800;line-height:1;letter-spacing:-.03em;
-           font-variant-numeric:tabular-nums}          /* 기온은 패널 대표 숫자라 한 급 크게(20) (v2.40.1) */
+           font-variant-numeric:tabular-nums}          /* 날씨 대표 기온 20px (v2.40.1) */
 .wx__now s{text-decoration:none;font-size:15px;line-height:1}
 .wx__now em{font-style:normal;font-size:14px;font-weight:700;color:var(--mute)}
 .wx__now i{font-style:normal;font-size:12px;color:var(--mute);
