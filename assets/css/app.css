@@ -782,11 +782,11 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
 .sb__l{font-size:13px;font-weight:700;color:var(--mute);letter-spacing:0;
        white-space:nowrap}
 .sb__v{display:flex;align-items:baseline;gap:4px}
-/* ★큰 숫자 27→22→18px (v2.40.1 사용자 재지적 「내용 글씨가 지나치게 크다」).
-   라벨(13)·제목(16)과 어울리도록 더 낮춘다 — 좁은 기둥에 22도 과했다. */
-.sb__v b{font-size:18px;font-weight:800;line-height:1;letter-spacing:-.03em;
+/* ★큰 숫자 …18→14px (v2.44.0 사용자 「제목(16)보다 내용 숫자가 크다, 20% 더」).
+   이제 제목 16 > 숫자 14 로 제목이 더 크다. */
+.sb__v b{font-size:14px;font-weight:800;line-height:1;letter-spacing:-.03em;
          font-variant-numeric:tabular-nums}
-.sb__v em{font-style:normal;font-size:13px;color:var(--mute)}
+.sb__v em{font-style:normal;font-size:12px;color:var(--mute)}
 .sb__d{display:inline-flex;align-items:center;gap:4px;margin-left:8px;
        font-size:13px;font-weight:700;color:var(--mute);font-variant-numeric:tabular-nums}
 .sb__d i{width:8px;height:8px;border-radius:2px;display:inline-block;margin-left:6px}
@@ -800,21 +800,25 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
 .sb__k--go:hover{background:var(--wash)}
 .sb__k--go:hover .sb__l{color:var(--orange)}
 .sb__k--go:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
-/* 작업 위치 — 숫자가 아니라 이름 (v2.19.15) */
-.sb__loc{font-size:17px;font-weight:800;line-height:1.25;max-width:100%;
+/* 작업 위치 — 숫자가 아니라 이름 (v2.19.15) · 15px로 낮춤(v2.44.0) */
+.sb__loc{font-size:15px;font-weight:800;line-height:1.25;max-width:100%;
          letter-spacing:-.02em}
-/* 업체별 줄 — 업체가 둘 이상일 때만 나온다 (v2.19.15) */
-.sb__cos{display:flex;flex-direction:column;gap:6px;padding:0 16px 14px;
-         border-top:1px solid var(--line-2);padding-top:12px}
-.sb__co{display:flex;align-items:baseline;gap:8px;padding:6px 10px;
+/* ══ 인원·장비 추이 반반 (v2.44.0) — 나란히, 높이는 안 늘린다 ══ */
+.sb__tw{display:flex;gap:10px;margin-top:4px}
+.sb__thalf{flex:1;min-width:0}
+.sb__tl{display:block;font-size:11px;font-weight:700;color:var(--mute);margin-bottom:1px}
+/* 업체별 줄 — 협력업체 + 직영. 직영이 늘어난 만큼 줄여 크기 유지(v2.44.0) */
+.sb__cos{display:flex;flex-direction:column;gap:4px;padding:0 16px 12px;
+         border-top:1px solid var(--line-2);padding-top:10px}
+.sb__co{display:flex;align-items:baseline;gap:8px;padding:4px 9px;
         border:1px solid var(--line);border-radius:var(--r);background:var(--wash)}
 .sb__co .sb__con{flex:1}
 .sb__co--t{background:var(--bg);border-color:var(--orange)}
-.sb__con{font-size:13px;font-weight:700;max-width:170px;overflow:hidden;
+.sb__con{font-size:12px;font-weight:700;max-width:170px;overflow:hidden;
          text-overflow:ellipsis;white-space:nowrap}
-.sb__cov{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums}
-.sb__cov i{font-style:normal;font-size:12px;font-weight:600;color:var(--mute);margin-left:3px}
-.sb__cor{font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
+.sb__cov{font-size:14px;font-weight:800;font-variant-numeric:tabular-nums}
+.sb__cov i{font-style:normal;font-size:11px;font-weight:600;color:var(--mute);margin-left:3px}
+.sb__cor{font-size:11px;color:var(--mute);font-variant-numeric:tabular-nums}
 
 /* ══ 날씨 — 탭바 오른쪽 끝(알림·전파 옆) (v2.42.2 사용자 지시) ══════════
    ★margin-left:auto로 마지막 탭에서 멀찍이 떨어뜨린다 — 이 간격은 **나중에

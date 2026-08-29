@@ -2121,13 +2121,17 @@
     for (var i = 0; i < cand.length; i++) if (mx / cand[i] <= 4) return cand[i];
     return cand[cand.length - 1];
   }
-  function sparkSVG(vals, days) {
+  function sparkSVG(vals, days, mini) {
     if (vals.length < 2) return '';
     /* ★칸을 키웠다 (v2.19.18) — 8px 눈금은 띠에서 읽으라고 만든 크기가
        아니었다. 글씨를 키운 만큼 눈금·날짜 자리도 같이 넓힌다. */
     /* ★세로를 줄였다 (v2.19.20) — 띠가 화면을 너무 많이 먹었다.
        글씨는 그대로 두고 **높이만** 깎는다. 눈금은 최대·중간·0 셋이면 된다. */
-    var W = 250, H = 62, PL = 34, PB = 15, PT = 6;
+    /* ★mini (v2.44.0) — 인원·장비를 반반으로 나란히 두려고 폭·글씨를 줄인다.
+       높이(H)는 종전과 비슷하게 유지해 전체가 안 길어진다(사용자 「늘리지마」). */
+    var W = mini ? 150 : 250, H = mini ? 56 : 62,
+        PL = mini ? 22 : 34, PB = mini ? 14 : 15, PT = mini ? 5 : 6,
+        LF = mini ? 9 : 11, TF = mini ? 11 : 14;
     var raw = Math.max.apply(null, vals);
     var step = niceStep(raw || 1);
     var top = Math.max(step, Math.ceil((raw || 1) / step) * step);   /* 0에서 시작한다 */
@@ -2144,14 +2148,15 @@
       g += '<line x1="' + PL + '" y1="' + y(t).toFixed(1) + '" x2="' + W + '" y2="' + y(t).toFixed(1) +
         '" stroke="var(--line-2)" stroke-width="1"/>' +
         '<text x="' + (PL - 5) + '" y="' + (y(t) + 4).toFixed(1) + '" text-anchor="end" ' +
-        'font-size="11" fill="var(--mute)">' + t + '</text>';
+        'font-size="' + LF + '" fill="var(--mute)">' + t + '</text>';
     }
     /* 날짜 — 처음·가운데·오늘 셋만. 일곱 개를 다 적으면 겹친다 */
     var lab = '';
-    [0, Math.floor((vals.length - 1) / 2), vals.length - 1].forEach(function (i, k) {
+    /* mini는 가운데 날짜를 뺀다 — 좁아서 겹친다 (처음·오늘만) */
+    (mini ? [0, vals.length - 1] : [0, Math.floor((vals.length - 1) / 2), vals.length - 1]).forEach(function (i, k, arr) {
       var d = (days && days[i]) || '';
-      lab += '<text x="' + (PL + i * st).toFixed(1) + '" y="' + (H - 4) + '" font-size="11" ' +
-        'text-anchor="' + (k === 0 ? 'start' : (k === 2 ? 'end' : 'middle')) + '" ' +
+      lab += '<text x="' + (PL + i * st).toFixed(1) + '" y="' + (H - 4) + '" font-size="' + LF + '" ' +
+        'text-anchor="' + (i === 0 ? 'start' : (i === vals.length - 1 ? 'end' : 'middle')) + '" ' +
         'fill="var(--mute)">' + esc(d.slice(5)) + '</text>';
     });
     /* 값 — 오늘 한 점만 숫자를 붙인다. 일곱 개를 다 붙이면 선이 안 보인다 */
@@ -2159,7 +2164,7 @@
     var tip = '<circle cx="' + (PL + (vals.length - 1) * st).toFixed(1) + '" cy="' + y(last).toFixed(1) +
       '" r="3" fill="var(--orange)"/>' +
       '<text x="' + W + '" y="' + Math.max(12, y(last) - 7).toFixed(1) + '" text-anchor="end" ' +
-      'font-size="14" font-weight="800" fill="var(--orange)">' + nf(last) + '</text>';
+      'font-size="' + TF + '" font-weight="800" fill="var(--orange)">' + nf(last) + '</text>';
     return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '" role="img" aria-hidden="true">' +
       g +
       '<polygon points="' + PL + ',' + (PT + ih) + ' ' + pts.join(' ') + ' ' + W + ',' + (PT + ih) + '" fill="var(--orange-w)"/>' +
@@ -2191,11 +2196,11 @@
     var have = gv - tk, idle = Math.max(0, have - run - down);
     var sr = A.siteRows(flt);
 
-    /* 최근 7일 인원 — 오늘이 맨 오른쪽 */
-    var vals = [], days = [];
+    /* 최근 7일 — 인원(pax)과 장비 가동(run)을 나란히. 오늘이 맨 오른쪽 */
+    var vals = [], eqv = [], days = [];
     for (var i = 6; i >= 0; i--) {
-      var d = addDays(A.today(), -i);
-      days.push(d); vals.push(resAgg(d, d).pax);
+      var d = addDays(A.today(), -i), ra = resAgg(d, d);
+      days.push(d); vals.push(ra.pax); eqv.push(ra.run);
     }
 
     var n = 0, sum = 0;
@@ -2225,8 +2230,12 @@
          「내리면 움직여 가려진다 · 날씨를 빼내 이동하자」). 날씨+7일예보가 세로로
          제일 긴 덩어리라, 빼내니 현황판이 짧아져 고정해도 안 잘린다.
          → wxBox(가로 띠)는 v1에서 .pg 위에 그린다. wxInit은 같은 #wxBox를 찾는다. */
+      /* ★인원·장비 추이를 반반으로 나란히 (v2.44.0 사용자 지시) — 높이는 안 늘린다 */
       '<div class="sb__k"><span class="sb__l">' + T('pn_trend') + '</span>' +
-      sparkSVG(vals, days) + '</div>' +
+      '<div class="sb__tw">' +
+        '<div class="sb__thalf"><span class="sb__tl">' + T('people') + '</span>' + sparkSVG(vals, days, 1) + '</div>' +
+        '<div class="sb__thalf"><span class="sb__tl">' + T('equip') + '</span>' + sparkSVG(eqv, days, 1) + '</div>' +
+      '</div></div>' +
       '</div>' +
       /* ★업체가 둘 이상이면 업체별로 갈라 보인다 (v2.19.15 사용자 지시).
          한 곳뿐이면 위 칸과 같은 숫자라 줄을 만들지 않는다. */
@@ -2261,6 +2270,14 @@
     S.crew.forEach(function (c) {
       if (c.st !== 'ok' || c.date !== day || !A.locMatch(c, flt)) return;
       var o = slot(A.coOf(c, false) || T('e_noco'));   /* ★업체 Master 기준 — core.js A.coOf */
+      o.pax += A.pplSum(c.ppl || {}) + A.oprCount(c.eq || []);
+      (c.eq || []).forEach(function (x) { o.run += Number(x.run) || 0; });
+    });
+    /* ★직영도 한 줄로 넣는다 (v2.44.0 사용자 지시 「협력업체만 있는데 직영도」).
+       직영은 지급 보유(have)가 없다 — 지급대장은 협력업체 것이다. 인원·가동만 뜬다. */
+    S.direct.forEach(function (c) {
+      if (c.date !== day || !A.locMatch(c, flt)) return;
+      var o = slot(T('res_dir'));
       o.pax += A.pplSum(c.ppl || {}) + A.oprCount(c.eq || []);
       (c.eq || []).forEach(function (x) { o.run += Number(x.run) || 0; });
     });

@@ -1090,10 +1090,10 @@ console.log('\n[97] 현황판·상단제목 손질 (v2.40.0 사용자 지적)');
      .ph가 position:sticky를 더는 갖지 않아야 한다. */
   ok(!/\.ph\{[^}]*position:sticky/.test(css97),
      '★작업현황 제목이 더는 고정(sticky)이 아니다 — 현황판을 안 덮는다');
-  /* 제목은 키우고(≥16), 큰 숫자는 균형 구간(16~20)으로 더 낮춘다 (v2.40.1) */
+  /* 제목(≥16) > 내용 숫자 — v2.44.0에서 숫자를 14로 더 낮춰 제목보다 작게 */
   ok(px('.sb__t', 'font-size') >= 16, `★현황판 제목 16px 이상 (${px('.sb__t','font-size')})`);
-  ok(px('.sb__v b', 'font-size') >= 16 && px('.sb__v b', 'font-size') <= 20,
-     `★현황판 큰 숫자 균형 16~20px (${px('.sb__v b','font-size')})`);
+  ok(px('.sb__v b', 'font-size') <= 14 && px('.sb__v b', 'font-size') < px('.sb__t', 'font-size'),
+     `★내용 숫자가 제목보다 작다 (숫자 ${px('.sb__v b','font-size')} < 제목 ${px('.sb__t','font-size')})`);
   ok(px('.sb__l', 'font-size') >= 13, `★라벨(소제목)도 읽히게 13px 이상 (${px('.sb__l','font-size')})`);
   ok(px('.wx__now b', 'font-size') <= 20, `★날씨 기온도 과하지 않게 20px 이하 (${px('.wx__now b','font-size')})`);
   /* ★날씨를 탭바 오른쪽 끝(알림·전파 옆)으로 옮겼다 (v2.42.0) — margin-left:auto.
@@ -1111,6 +1111,27 @@ console.log('\n[97] 현황판·상단제목 손질 (v2.40.0 사용자 지적)');
   ok(bag.view.innerHTML.indexOf('id="wxBox"') < 0, '★본문(#view)에는 더는 날씨가 없다');
   ok(bag.view.innerHTML.indexOf('sb__wx') < 0, '★현황판 안에도 날씨 칸이 없다');
   ok(/class="sb"/.test(bag.view.innerHTML) && /class="sb__t"/.test(bag.view.innerHTML), '현황판은 그대로 있다');
+
+  /* ★인원·장비 추이 반반 + 업체별에 직영 추가 (v2.44.0) — 자료를 넣고 렌더 확인 */
+  const kCrew = S.crew.slice(), kDir = S.direct.slice();
+  const LT97 = { s: 'civil', p: 1, c: 1 }, td97 = A.today();
+  S.crew.push({ id: 'sc97', date: td97, loc: LT97, key: 'T-01', st: 'ok', teams: 1,
+    ppl: { eng: 0, fmn: 1, wkr: 5 }, eq: [{ cat: 'Dozer', size: '', run: 3, brk: 0, rep: 0 }],
+    by: '라비', co: 'RABEE' });
+  A.addDirect({ date: td97, loc: LT97, task: '현장정리', teams: 1, ppl: { eng: 0, fmn: 0, wkr: 4 },
+    eq: [{ cat: 'Dozer', size: '', run: 2, brk: 0, rep: 0 }], by: '직영' });
+  A.setFlt(LT97); A.go(1);
+  const hv = bag.view.innerHTML;
+  ok(/class="sb__tw"/.test(hv) && /class="sb__thalf"/.test(hv), '★추이가 인원·장비 반반(나란히)으로 나온다');
+  ok((hv.match(/sb__thalf/g) || []).length === 2, '★추이 그래프가 둘(인원+장비)');
+  ok(/class="sb__cos"/.test(hv) && hv.indexOf('RABEE') >= 0 && hv.indexOf('>' + A.T('res_dir') + '<') >= 0,
+     '★업체별에 협력업체(RABEE)와 직영이 함께 뜬다');
+  S.crew.length = 0; kCrew.forEach(function (x) { S.crew.push(x); });
+  S.direct.length = 0; kDir.forEach(function (x) { S.direct.push(x); });
+
+  /* CSS — 추이는 높이를 안 늘린다(mini 스파크라인이 짧다) */
+  ok(/\.sb__tw\{[^}]*display:flex/.test(css97), '★추이 두 개가 가로로 나란히(반반)');
+
   A.setRole(kR); if (kF) A.setFlt(kF); A.go(1);
 }
 
