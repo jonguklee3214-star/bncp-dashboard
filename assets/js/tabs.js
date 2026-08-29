@@ -2092,10 +2092,9 @@
        ★기둥은 sticky라 스크롤을 따라오되, 본문 머리행은 화면 맨 위(top:0)에
          그대로 붙는다 — **--sbh 같은 기준점이 이제 필요 없다.**
          v2.19.17~20을 헛돌게 만든 그 변수가 사라진다. */
-    /* ★날씨 가로 띠 — 현황판에서 빼내 본문 위 전폭에 둔다 (v2.41.0).
-       같은 id="wxBox"라 wxInit이 늦게 온 자료로 이 칸만 갈아 끼운다. */
-    return '<div class="wxbar" id="wxBox">' + A.wxHTML() + '</div>' +
-      '<div class="pg"><div class="pg__main">' + h + '</div>' +
+    /* ★날씨는 탭바 오른쪽 끝(알림·전파 옆)으로 옮겼다 (v2.42.0 사용자 지시).
+       render()에서 #tabs에 붙인다 — 여기 본문에는 두지 않는다. */
+    return '<div class="pg"><div class="pg__main">' + h + '</div>' +
       '<aside class="pg__side">' + summaryHTML(rows) + '</aside></div>';
   }
 
@@ -3896,7 +3895,11 @@
     $('#tabs').innerHTML = TABS_ON.map(function (i) {
       return '<button role="tab" data-tab="' + i + '" aria-selected="' + (i === cur) + '">' +
         T('t' + i) + (bd[i] ? '<span class="cnt warn">' + bd[i] + '</span>' : '') + '</button>';
-    }).join('');
+    }).join('') +
+      /* ★날씨를 탭바 오른쪽 끝(마지막 탭 옆)에 붙인다 (v2.42.0 사용자 지시).
+         margin-left:auto로 멀찍이 떨어뜨리고, 가로로 눕혀 컴팩트하게. 같은
+         id="wxBox"라 wxInit이 늦게 온 자료로 이 칸만 갈아 끼운다(렌더 다시 안 함). */
+      '<div class="wxtab" id="wxBox">' + A.wxHTML() + '</div>';
 
     /* ★탭 제목 옆 설명문(t1d·t2d…)을 없앴다 (v2.17.8 사용자 지시).
        「업체가 올린 실적을 스탭이 확인하면…」 같은 안내는 처음 한 번 읽고

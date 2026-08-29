@@ -1094,13 +1094,15 @@ console.log('\n[97] 현황판·상단제목 손질 (v2.40.0 사용자 지적)');
      `★현황판 큰 숫자 균형 16~20px (${px('.sb__v b','font-size')})`);
   ok(px('.sb__l', 'font-size') >= 13, `★라벨(소제목)도 읽히게 13px 이상 (${px('.sb__l','font-size')})`);
   ok(px('.wx__now b', 'font-size') <= 20, `★날씨 기온도 과하지 않게 20px 이하 (${px('.wx__now b','font-size')})`);
-  /* ★날씨를 현황판 밖 가로 띠로 옮겼다 (v2.41.0) — 현황판이 짧아져 안 잘린다 */
+  /* ★날씨를 탭바 오른쪽 끝(알림·전파 옆)으로 옮겼다 (v2.42.0) — margin-left:auto */
+  ok(/\.wxtab\{[^}]*margin-left:auto/.test(css97),
+     '★날씨 탭칸이 오른쪽 끝으로 밀린다(알림·전파와 간격 확보)');
   const kR = A.role(), kF = A.flt ? A.flt() : null;
   A.setRole('admin'); A.setFlt({ s: 'civil', p: 1, c: 1 });
-  const hv97 = bag.view.innerHTML;
-  ok(/class="wxbar" id="wxBox"/.test(hv97), '★날씨가 본문 위 가로 띠(.wxbar)로 나온다');
-  ok(hv97.indexOf('sb__wx') < 0, '★현황판 안에는 더는 날씨 칸이 없다(밖으로 뺐다)');
-  ok(/class="sb"/.test(hv97) && /class="sb__t"/.test(hv97), '현황판은 그대로 있다');
+  ok(/class="wxtab" id="wxBox"/.test(bag.tabs.innerHTML), '★날씨가 탭바(#tabs) 오른쪽에 붙는다');
+  ok(bag.view.innerHTML.indexOf('id="wxBox"') < 0, '★본문(#view)에는 더는 날씨가 없다');
+  ok(bag.view.innerHTML.indexOf('sb__wx') < 0, '★현황판 안에도 날씨 칸이 없다');
+  ok(/class="sb"/.test(bag.view.innerHTML) && /class="sb__t"/.test(bag.view.innerHTML), '현황판은 그대로 있다');
   A.setRole(kR); if (kF) A.setFlt(kF); A.go(1);
 }
 
@@ -3916,8 +3918,8 @@ console.log('\n[59] 증분 수신 — 바뀐 것만');
               ok(String(I3.ko.wx_dow).split(',').length === 7, '요일이 일곱이다');
             }
 
-            /* 72-10 ★날씨는 v2.41.0에서 가로 띠(.wxbar)로 옮겼다 (실검사는 [97]) */
-            ok(/\.wxbar\{/.test(css3), '날씨 가로 띠 자리가 정해져 있다');
+            /* 72-10 ★날씨는 v2.42.0에서 탭바(.wxtab)로 옮겼다 (실검사는 [97]) */
+            ok(/\.wxtab\{/.test(css3), '날씨 탭칸 자리가 정해져 있다');
             ok(/\.wx__fc\{/.test(css3), '7일 예보 줄이 있다');
             ok(/A\.wxHTML\(\)/.test(t6), '띠가 날씨 칸을 그린다');
           }

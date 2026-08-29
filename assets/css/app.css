@@ -816,18 +816,29 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
 .sb__cov i{font-style:normal;font-size:12px;font-weight:600;color:var(--mute);margin-left:3px}
 .sb__cor{font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
 
-/* ══ 날씨 가로 띠 (v2.41.0) — 현황판에서 빼내 본문 위 전폭으로 옮겼다 ══
-   ★현황판이 세로로 길어 스크롤 때 잘리던 것을, 제일 긴 날씨를 빼내 가로로
-     눕혀 해결한다. 왼쪽 = 라벨·현재기온, 오른쪽 = 7일예보(남는 폭을 채운다). */
-.wxbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px 20px;
-       padding:10px 16px;margin:0 0 16px;
-       border:1px solid var(--line);border-radius:var(--r);background:var(--bg)}
-.wxbar .sb__l{flex:0 0 auto;font-size:13px}
-.wxbar .wx__now{flex:0 1 auto}
-.wxbar .wx__now i{flex-basis:auto}          /* 상세(체감·바람…)를 줄바꿈 없이 옆으로 */
-.wxbar .wx__off{flex:0 0 auto}
-.wxbar .wx__warn{flex:0 0 auto}
-.wxbar .wx__fc{width:auto;flex:1 1 300px;margin-top:0;justify-content:flex-end}
+/* ══ 날씨 — 탭바 오른쪽 끝(알림·전파 옆) (v2.42.0 사용자 지시) ══════════
+   ★margin-left:auto로 마지막 탭에서 멀찍이 떨어뜨린다(간격 확보). 가로로 눕혀
+     탭바 높이(--tabbar) 안에 들어가게 컴팩트하게 — 탭바가 높아지면 위쪽 sticky
+     계산(--stick)이 어긋나므로 절대 키우지 않는다. 상세(체감·바람…)는 숨겨
+     현재기온·상태·7일예보만 균형 있게 보인다(짚으면 title로 나온다). */
+.wxtab{margin-left:auto;display:flex;align-items:center;gap:14px;
+       padding:0 var(--pad) 0 40px;flex:0 0 auto;align-self:center;white-space:nowrap}
+.wxtab .sb__l{display:none}                  /* 「날씨 · Baghdad」 라벨은 숨겨 자리 절약 */
+.wxtab .wx__off{font-size:13px;color:var(--faint)}
+.wxtab .wx__now{display:flex;align-items:center;gap:6px}
+.wxtab .wx__now b{font-size:17px;font-weight:800}
+.wxtab .wx__now s{font-size:16px}
+.wxtab .wx__now em{font-size:12px;color:var(--mute)}
+.wxtab .wx__now i{display:none}              /* 상세는 감춘다 — 탭바에 너무 길다 */
+.wxtab .wx__warn{font-size:11px;font-weight:700;color:var(--danger)}
+.wxtab .wx__fc{width:auto;margin:0;gap:2px}
+.wxtab .wx__d{padding:2px 3px}
+.wxtab .wx__d em{font-size:10px}
+.wxtab .wx__d s{font-size:13px}
+.wxtab .wx__d b{font-size:10px}
+/* 좁은 화면 : 7일예보는 접고 현재기온만 남긴다(탭바가 가로로 넘치지 않게) */
+@media(max-width:900px){ .wxtab .wx__fc{display:none} }
+@media(max-width:560px){ .wxtab{display:none} }   /* 아주 좁으면 통째로 숨김 */
 
 /* ══ 날씨 (v2.19.16) ═══════════════════════════════════════
    ★띠의 빈자리를 채운다. 오렌지는 안 쓴다 — 날씨는 「알림」이 아니라
