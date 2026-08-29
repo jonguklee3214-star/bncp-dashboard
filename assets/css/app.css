@@ -816,13 +816,14 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
 .sb__cov i{font-style:normal;font-size:12px;font-weight:600;color:var(--mute);margin-left:3px}
 .sb__cor{font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
 
-/* ══ 날씨 — 탭바 오른쪽 끝(알림·전파 옆) (v2.42.1 사용자 지시) ══════════
-   ★margin-left:auto로 마지막 탭에서 멀찍이 떨어뜨린다(간격 확보). 가로로 눕혀
-     탭바 높이(--tabbar) 안에 들어가게 컴팩트하게 — 탭바가 높아지면 위쪽 sticky
-     계산(--stick)이 어긋나므로 절대 키우지 않는다.
-   ★v2.42.1 : 위치(Baghdad)와 상세(체감·바람·습도·강수·시정)를 **되살린다**
-     (사용자 「위치하고 상세날씨가 없다」). 한 줄 유지(nowrap)하고, 화면이
-     좁아지면 상세 → 7일예보 → 통째 순으로 접어 탭바가 안 넘치게 한다. */
+/* ══ 날씨 — 탭바 오른쪽 끝(알림·전파 옆) (v2.42.2 사용자 지시) ══════════
+   ★margin-left:auto로 마지막 탭에서 멀찍이 떨어뜨린다 — 이 간격은 **나중에
+     탭이 더 들어올 자리**다(사용자 확정). 그 사이는 자동으로 벌어진다.
+   ★v2.42.2 : **접지 않는다.** 위치·현재기온·상세·7일예보를 늘 한 줄로 전부
+     보인다(사용자 「접지 마, 좌우로 넓게, 항상 표시」). 좁으면 탭바가 가로로
+     스크롤될 뿐(overflow-x:auto) 무엇도 숨기지 않는다.
+   ★탭바 높이(--tabbar)만은 지킨다 — 세로로 커지면 위쪽 sticky(--stick)가
+     어긋나 본문이 탭바에 가린다. 그래서 한 줄(nowrap)·컴팩트 글씨로 맞춘다. */
 .wxtab{margin-left:auto;display:flex;align-items:center;gap:12px;
        padding:0 var(--pad) 0 36px;flex:0 0 auto;align-self:center;white-space:nowrap}
 .wxtab .sb__l{display:inline;font-size:12px;font-weight:700;color:var(--mute)}  /* 「날씨 · Baghdad」 */
@@ -839,10 +840,6 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
 .wxtab .wx__d em{font-size:10px}
 .wxtab .wx__d s{font-size:13px}
 .wxtab .wx__d b{font-size:10px}
-/* 좁아지면 접는 순서 : 7일예보 → 상세 → 통째 (탭바가 가로로 안 넘치게) */
-@media(max-width:1280px){ .wxtab .wx__fc{display:none} }
-@media(max-width:1024px){ .wxtab .wx__now i{display:none} }
-@media(max-width:640px){ .wxtab{display:none} }
 
 /* ══ 날씨 (v2.19.16) ═══════════════════════════════════════
    ★띠의 빈자리를 채운다. 오렌지는 안 쓴다 — 날씨는 「알림」이 아니라

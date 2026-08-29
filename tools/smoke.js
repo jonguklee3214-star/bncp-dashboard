@@ -1094,9 +1094,15 @@ console.log('\n[97] 현황판·상단제목 손질 (v2.40.0 사용자 지적)');
      `★현황판 큰 숫자 균형 16~20px (${px('.sb__v b','font-size')})`);
   ok(px('.sb__l', 'font-size') >= 13, `★라벨(소제목)도 읽히게 13px 이상 (${px('.sb__l','font-size')})`);
   ok(px('.wx__now b', 'font-size') <= 20, `★날씨 기온도 과하지 않게 20px 이하 (${px('.wx__now b','font-size')})`);
-  /* ★날씨를 탭바 오른쪽 끝(알림·전파 옆)으로 옮겼다 (v2.42.0) — margin-left:auto */
+  /* ★날씨를 탭바 오른쪽 끝(알림·전파 옆)으로 옮겼다 (v2.42.0) — margin-left:auto.
+     이 간격은 나중에 탭이 더 들어올 자리다(사용자 확정). */
   ok(/\.wxtab\{[^}]*margin-left:auto/.test(css97),
-     '★날씨 탭칸이 오른쪽 끝으로 밀린다(알림·전파와 간격 확보)');
+     '★날씨 탭칸이 오른쪽 끝으로 밀린다(다음 탭 자리 + 간격 확보)');
+  /* ★접지 않는다 (v2.42.2) — 위치·상세·7일예보를 늘 보인다, 숨기는 media 없음 */
+  ok(/\.wxtab \.sb__l\{display:inline/.test(css97), '★위치(날씨·Baghdad)를 늘 보인다');
+  ok(/\.wxtab \.wx__now i\{display:inline/.test(css97), '★상세(체감·바람…)를 늘 보인다');
+  ok(!/\.wxtab[^{]*\{display:none/.test(css97) && !/\.wxtab \.wx__fc\{display:none/.test(css97),
+     '★무엇도 접지 않는다(좁으면 탭바가 가로 스크롤될 뿐)');
   const kR = A.role(), kF = A.flt ? A.flt() : null;
   A.setRole('admin'); A.setFlt({ s: 'civil', p: 1, c: 1 });
   ok(/class="wxtab" id="wxBox"/.test(bag.tabs.innerHTML), '★날씨가 탭바(#tabs) 오른쪽에 붙는다');
