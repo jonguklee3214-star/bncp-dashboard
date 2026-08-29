@@ -122,7 +122,9 @@ main{padding:0 var(--pad) 72px}
 .ph{display:flex;align-items:flex-end;gap:14px;margin:0 0 20px;
     position:sticky;top:var(--stick);z-index:31;background:var(--bg);
     padding:22px 0 12px}
-.ph h1{margin:0;font-size:26px;font-weight:800;letter-spacing:-.035em;line-height:1.1}
+/* ★각 탭 상단 제목 20% 축소 (v2.40.0 · 18-스펙 항목) — 26→21px.
+   제목이 화면 위쪽을 덜 먹어 정작 볼 내용이 넓어진다. 모바일도 같은 비율(21→17). */
+.ph h1{margin:0;font-size:21px;font-weight:800;letter-spacing:-.035em;line-height:1.1}
 .ph p{margin:0 0 3px;font-size:var(--fs-body);color:var(--mute)}
 
 .grid{display:grid;gap:16px}
@@ -492,7 +494,7 @@ html[lang="ar"] body{line-height:1.75}
   /* 제목은 탭바 바로 아래에 붙는다 — 모바일엔 브랜드바가 스크롤로 사라지므로
      기준이 탭 높이 하나다 (요청 ③) */
   .ph{top:var(--tabbar);padding:14px 0 10px}
-  .ph h1{font-size:21px}
+  .ph h1{font-size:17px}   /* 모바일도 20% 축소 (21→17) */
 }
 
 /* 파일 선택 커스텀 버튼 (네이티브 "파일 선택/선택된 파일 없음" 대체 — 언어 제어) */
@@ -724,10 +726,19 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
      그 화면에서는 고정하지 않는다(고정하면 또 덮는다). */
 .pg{display:grid;grid-template-columns:5fr 2fr;gap:16px;align-items:start}
 .pg__main{min-width:0}
-.pg__side{min-width:0;position:sticky;top:var(--stick);align-self:start;z-index:30}
+/* ★현황판 고정 — 스크롤과 무관하게 늘 붙어 있고, 절대 잘리지 않는다 (v2.40.0).
+   ★근본 원인 : 종전엔 position:sticky만 있었다. 현황판이 화면(뷰포트)보다
+     길면 sticky는 위를 top:--stick에 붙여 두므로 **아래가 화면 밖으로 잘려
+     닿을 수가 없었다** — 사용자가 본 「일부 가려짐·잘림」의 정체다.
+   ★고침 : 높이를 화면 안으로 묶고(max-height), 넘치면 기둥이 **자기 안에서**
+     스크롤하게 한다(overflow-y:auto). 그러면 늘 붙어 있으면서 어떤 화면에서도
+     전부 볼 수 있다. overscroll-behavior로 안쪽 스크롤이 페이지로 안 튄다. */
+.pg__side{min-width:0;position:sticky;top:var(--stick);align-self:start;z-index:30;
+  max-height:calc(100vh - var(--stick) - 16px);overflow-y:auto;overscroll-behavior:contain}
 @media (max-width:1180px){
   .pg{grid-template-columns:1fr}
-  .pg__side{position:static;order:-1}
+  /* 좁은 화면에선 위로 올려 한 단으로 — 여기선 화면 높이에 안 묶는다(세로로 쌓임) */
+  .pg__side{position:static;order:-1;max-height:none;overflow:visible}
 }
 
 /* ══ 현황판 ═══════════════════════════════════════════════
@@ -743,7 +754,8 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
 .sb{border:1px solid var(--line);border-radius:var(--r);background:var(--bg)}
 /* ★현황판 제목 (v2.30.0 · 요청 ②) — 종전엔 제목이 없어 숫자만 바로 시작했다.
    카드 제목과 같은 톤(굵은 산세리프). 오렌지는 밑줄 포인트로만 절제 사용. */
-.sb__t{padding:12px 16px;font-size:var(--fs-base);font-weight:700;letter-spacing:-.01em;
+/* ★현황판 제목 — 너무 작았다(13px). 카드 제목답게 키운다 (v2.40.0 사용자 지적). */
+.sb__t{padding:13px 16px;font-size:16px;font-weight:800;letter-spacing:-.01em;
        border-bottom:1px solid var(--line);
        box-shadow:inset 0 -2px 0 var(--orange)}
 /* ★가로 균형 (v2.19.18 사용자 지적 「빈공간도 많아」).
@@ -767,7 +779,9 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
 .sb__l{font-size:12px;font-weight:700;color:var(--mute);letter-spacing:0;
        white-space:nowrap}
 .sb__v{display:flex;align-items:baseline;gap:4px}
-.sb__v b{font-size:27px;font-weight:800;line-height:1;letter-spacing:-.03em;
+/* ★큰 숫자 27→22px — 제목·다른 칸과 균형을 맞춘다 (v2.40.0 사용자 지적
+   「글씨가 큰 것들이 있음, 보기 좋게 균형」). 좁은 기둥에서 27px은 과했다. */
+.sb__v b{font-size:22px;font-weight:800;line-height:1;letter-spacing:-.03em;
          font-variant-numeric:tabular-nums}
 .sb__v em{font-style:normal;font-size:13px;color:var(--mute)}
 .sb__d{display:inline-flex;align-items:center;gap:4px;margin-left:8px;
@@ -809,9 +823,9 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
    칸 폭도 넓혀 일곱 칸이 눌리지 않게 한다. */
 .sb__wx{min-width:0;gap:5px}
 .wx__now{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
-.wx__now b{font-size:27px;font-weight:800;line-height:1;letter-spacing:-.03em;
-           font-variant-numeric:tabular-nums}
-.wx__now s{text-decoration:none;font-size:18px;line-height:1}
+.wx__now b{font-size:22px;font-weight:800;line-height:1;letter-spacing:-.03em;
+           font-variant-numeric:tabular-nums}          /* 큰 숫자와 같은 22px로 균형 (v2.40.0) */
+.wx__now s{text-decoration:none;font-size:16px;line-height:1}
 .wx__now em{font-style:normal;font-size:14px;font-weight:700;color:var(--mute)}
 .wx__now i{font-style:normal;font-size:12px;color:var(--mute);
            font-variant-numeric:tabular-nums;flex-basis:100%}

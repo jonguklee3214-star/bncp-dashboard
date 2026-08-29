@@ -1067,6 +1067,30 @@ console.log('\n[96] 모바일 복귀 즉시 수신 — 백그라운드 타이머
   API.changed = savedChanged; API.on = savedOn; sb.document.hidden = false;
 }
 
+/* ★[29] 앞에 둔다 — [74]의 같은 검사는 표본 CSV 누락으로 안 도는 죽은 구역에 있다. */
+console.log('\n[97] 현황판·상단제목 손질 (v2.40.0 사용자 지적)');
+{
+  const css97 = fs.readFileSync(path.join(ROOT, 'assets/css/app.css'), 'utf8');
+  const px = (sel, prop) => {
+    const m = css97.match(new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\{[^}]*?' + prop + ':(\\d+)px'));
+    return m ? +m[1] : 0;
+  };
+  /* 각 탭 상단 제목 20% 축소 (18-스펙) — 26→21, 모바일 21→17 */
+  ok(/\.ph h1\{margin:0;font-size:21px/.test(css97), '★상단 제목 20% 축소(26→21px)');
+  ok(/\.ph h1\{font-size:17px\}/.test(css97), '★모바일 상단 제목도 20% 축소(21→17px)');
+  /* 현황판 고정 — 화면보다 길어도 안 잘리게 높이를 묶고 안에서 스크롤 */
+  ok(/\.pg__side\{[^}]*max-height:calc/.test(css97) && /\.pg__side\{[^}]*overflow-y:auto/.test(css97),
+     '★현황판이 화면에 묶여 잘리지 않고 안에서 스크롤(고정+근본수정)');
+  /* 좁은 화면에선 높이 안 묶는다(세로로 쌓임) */
+  ok(/\.pg__side\{position:static;order:-1;max-height:none/.test(css97),
+     '좁은 화면에선 현황판을 위로 올리고 높이 제한을 푼다');
+  /* 제목은 키우고(≥16), 큰 숫자는 균형 구간(20~24)으로 낮춘다 */
+  ok(px('.sb__t', 'font-size') >= 16, `★현황판 제목 16px 이상 (${px('.sb__t','font-size')})`);
+  ok(px('.sb__v b', 'font-size') >= 20 && px('.sb__v b', 'font-size') <= 24,
+     `★현황판 큰 숫자 균형 20~24px (${px('.sb__v b','font-size')})`);
+  ok(px('.wx__now b', 'font-size') <= 24, `★날씨 기온도 과하지 않게 24px 이하 (${px('.wx__now b','font-size')})`);
+}
+
 /* ── 29 내역서 원본 인식 (v2.14.0) ────────────────────── */
 console.log('\n[29] 내역서 원본 인식 — 실제 P3-1 파일로 검사');
 {
@@ -3935,9 +3959,10 @@ console.log('\n[59] 증분 수신 — 바뀐 것만');
             /* 라벨 — 10px에 --faint였다. 무슨 숫자인지가 안 보였다 */
             ok(px('.sb__l', 'font-size') >= 12, `★띠 라벨 12px 이상 (${px('.sb__l','font-size')})`);
             ok(!/\.sb__l\{[^}]*var\(--faint\)/.test(css5), '★라벨이 --faint가 아니다');
-            /* ★v2.19.20에서 32→27px. 띠 높이를 깎느라 한 단계 내렸다.
-               하한은 유지한다 — 26px 아래로 내려가면 균형이 다시 깨진다. */
-            ok(px('.sb__v b', 'font-size') >= 26, '★큰 숫자가 26px 이상');
+            /* ★v2.40.0 — 사용자가 「큰 숫자가 너무 크다, 균형 맞춰라」로 뒤집었다.
+               27→22px. 균형 구간(20~24)만 지킨다. (실검사는 [97]에 있다 — 여긴 죽은 구역) */
+            ok(px('.sb__v b', 'font-size') >= 20 && px('.sb__v b', 'font-size') <= 24,
+               `★큰 숫자가 균형 구간 20~24px (${px('.sb__v b','font-size')})`);
             ok(px('.sb__loc', 'font-size') >= 16, '★작업 위치 이름이 16px 이상');
             /* 날씨 — 8~10px이었다 */
             ok(px('.wx__d em', 'font-size') >= 11, '★예보 요일 11px 이상');
