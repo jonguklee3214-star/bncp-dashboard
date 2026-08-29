@@ -117,10 +117,13 @@ main{padding:0 var(--pad) 72px}
 /* ★제목을 스크롤해도 붙여 둔다 (v2.30.0 · 요청 ③).
    종전에는 그냥 본문 맨 위에 한 번 찍혀 스크롤하면 사라졌다. 탭바 바로
    아래에 고정해, 어느 탭을 길게 내려 봐도 「지금 무슨 탭인지」가 남는다.
-   ★배경·z-index를 줘 본문이 제목 뒤로 지나가게 한다. 현황판(z:30)보다
-     위(z:31)에 둬 가로로 겹치는 구간에서도 제목이 이긴다. */
+   ★v2.40.1 — 제목 고정을 **해제**했다(사용자 지시 「작업현황 제목 고정시킨거
+     수정해」). 고정한 제목(z:31)이 sticky 현황판(z:30)의 **위를 덮어**, 현황판
+     맨 위(제목·오늘 투입)가 가려졌다 — 사용자가 캡처로 잡은 그 「가려짐」이다.
+     제목은 본문과 같이 스크롤로 올라가게 두면 현황판이 온전히 보인다.
+     ★되살리려면 현황판을 제목 높이만큼 더 내려 붙여야 한다(top을 키운다).
+       그냥 sticky만 되돌리면 덮는 문제가 그대로 돌아온다. */
 .ph{display:flex;align-items:flex-end;gap:14px;margin:0 0 20px;
-    position:sticky;top:var(--stick);z-index:31;background:var(--bg);
     padding:22px 0 12px}
 /* ★각 탭 상단 제목 20% 축소 (v2.40.0 · 18-스펙 항목) — 26→21px.
    제목이 화면 위쪽을 덜 먹어 정작 볼 내용이 넓어진다. 모바일도 같은 비율(21→17). */
@@ -493,7 +496,7 @@ html[lang="ar"] body{line-height:1.75}
 
   /* 제목은 탭바 바로 아래에 붙는다 — 모바일엔 브랜드바가 스크롤로 사라지므로
      기준이 탭 높이 하나다 (요청 ③) */
-  .ph{top:var(--tabbar);padding:14px 0 10px}
+  .ph{padding:14px 0 10px}   /* 제목은 고정 안 함(v2.40.1) — top 불필요 */
   .ph h1{font-size:17px}   /* 모바일도 20% 축소 (21→17) */
 }
 
@@ -776,12 +779,12 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
 .sb__k{display:flex;flex-direction:column;gap:2px;min-width:0}
 /* ★라벨 (v2.19.18) — 10px에 --faint는 **읽으라고 만든 크기가 아니었다.**
    숫자만 크고 그게 무슨 숫자인지는 안 보였다. 12px · --mute로 올린다. */
-.sb__l{font-size:12px;font-weight:700;color:var(--mute);letter-spacing:0;
+.sb__l{font-size:13px;font-weight:700;color:var(--mute);letter-spacing:0;
        white-space:nowrap}
 .sb__v{display:flex;align-items:baseline;gap:4px}
-/* ★큰 숫자 27→22px — 제목·다른 칸과 균형을 맞춘다 (v2.40.0 사용자 지적
-   「글씨가 큰 것들이 있음, 보기 좋게 균형」). 좁은 기둥에서 27px은 과했다. */
-.sb__v b{font-size:22px;font-weight:800;line-height:1;letter-spacing:-.03em;
+/* ★큰 숫자 27→22→18px (v2.40.1 사용자 재지적 「내용 글씨가 지나치게 크다」).
+   라벨(13)·제목(16)과 어울리도록 더 낮춘다 — 좁은 기둥에 22도 과했다. */
+.sb__v b{font-size:18px;font-weight:800;line-height:1;letter-spacing:-.03em;
          font-variant-numeric:tabular-nums}
 .sb__v em{font-style:normal;font-size:13px;color:var(--mute)}
 .sb__d{display:inline-flex;align-items:center;gap:4px;margin-left:8px;
@@ -823,9 +826,9 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
    칸 폭도 넓혀 일곱 칸이 눌리지 않게 한다. */
 .sb__wx{min-width:0;gap:5px}
 .wx__now{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
-.wx__now b{font-size:22px;font-weight:800;line-height:1;letter-spacing:-.03em;
-           font-variant-numeric:tabular-nums}          /* 큰 숫자와 같은 22px로 균형 (v2.40.0) */
-.wx__now s{text-decoration:none;font-size:16px;line-height:1}
+.wx__now b{font-size:20px;font-weight:800;line-height:1;letter-spacing:-.03em;
+           font-variant-numeric:tabular-nums}          /* 기온은 패널 대표 숫자라 한 급 크게(20) (v2.40.1) */
+.wx__now s{text-decoration:none;font-size:15px;line-height:1}
 .wx__now em{font-style:normal;font-size:14px;font-weight:700;color:var(--mute)}
 .wx__now i{font-style:normal;font-size:12px;color:var(--mute);
            font-variant-numeric:tabular-nums;flex-basis:100%}

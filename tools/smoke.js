@@ -1084,11 +1084,16 @@ console.log('\n[97] 현황판·상단제목 손질 (v2.40.0 사용자 지적)');
   /* 좁은 화면에선 높이 안 묶는다(세로로 쌓임) */
   ok(/\.pg__side\{position:static;order:-1;max-height:none/.test(css97),
      '좁은 화면에선 현황판을 위로 올리고 높이 제한을 푼다');
-  /* 제목은 키우고(≥16), 큰 숫자는 균형 구간(20~24)으로 낮춘다 */
+  /* ★작업현황 제목 고정 해제 (v2.40.1) — 고정한 제목이 현황판 위를 덮어 가렸다.
+     .ph가 position:sticky를 더는 갖지 않아야 한다. */
+  ok(!/\.ph\{[^}]*position:sticky/.test(css97),
+     '★작업현황 제목이 더는 고정(sticky)이 아니다 — 현황판을 안 덮는다');
+  /* 제목은 키우고(≥16), 큰 숫자는 균형 구간(16~20)으로 더 낮춘다 (v2.40.1) */
   ok(px('.sb__t', 'font-size') >= 16, `★현황판 제목 16px 이상 (${px('.sb__t','font-size')})`);
-  ok(px('.sb__v b', 'font-size') >= 20 && px('.sb__v b', 'font-size') <= 24,
-     `★현황판 큰 숫자 균형 20~24px (${px('.sb__v b','font-size')})`);
-  ok(px('.wx__now b', 'font-size') <= 24, `★날씨 기온도 과하지 않게 24px 이하 (${px('.wx__now b','font-size')})`);
+  ok(px('.sb__v b', 'font-size') >= 16 && px('.sb__v b', 'font-size') <= 20,
+     `★현황판 큰 숫자 균형 16~20px (${px('.sb__v b','font-size')})`);
+  ok(px('.sb__l', 'font-size') >= 13, `★라벨(소제목)도 읽히게 13px 이상 (${px('.sb__l','font-size')})`);
+  ok(px('.wx__now b', 'font-size') <= 20, `★날씨 기온도 과하지 않게 20px 이하 (${px('.wx__now b','font-size')})`);
 }
 
 /* ── 29 내역서 원본 인식 (v2.14.0) ────────────────────── */
@@ -3959,10 +3964,10 @@ console.log('\n[59] 증분 수신 — 바뀐 것만');
             /* 라벨 — 10px에 --faint였다. 무슨 숫자인지가 안 보였다 */
             ok(px('.sb__l', 'font-size') >= 12, `★띠 라벨 12px 이상 (${px('.sb__l','font-size')})`);
             ok(!/\.sb__l\{[^}]*var\(--faint\)/.test(css5), '★라벨이 --faint가 아니다');
-            /* ★v2.40.0 — 사용자가 「큰 숫자가 너무 크다, 균형 맞춰라」로 뒤집었다.
-               27→22px. 균형 구간(20~24)만 지킨다. (실검사는 [97]에 있다 — 여긴 죽은 구역) */
-            ok(px('.sb__v b', 'font-size') >= 20 && px('.sb__v b', 'font-size') <= 24,
-               `★큰 숫자가 균형 구간 20~24px (${px('.sb__v b','font-size')})`);
+            /* ★v2.40.1 — 「내용 글씨가 지나치게 크다」로 27→22→18px. 균형 구간
+               16~20만 지킨다. (실검사는 [97]에 있다 — 여긴 표본CSV 없으면 죽은 구역) */
+            ok(px('.sb__v b', 'font-size') >= 16 && px('.sb__v b', 'font-size') <= 20,
+               `★큰 숫자가 균형 구간 16~20px (${px('.sb__v b','font-size')})`);
             ok(px('.sb__loc', 'font-size') >= 16, '★작업 위치 이름이 16px 이상');
             /* 날씨 — 8~10px이었다 */
             ok(px('.wx__d em', 'font-size') >= 11, '★예보 요일 11px 이상');
