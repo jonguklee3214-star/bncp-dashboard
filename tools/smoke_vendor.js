@@ -670,5 +670,42 @@ console.log('\n[V16] 작업 중단·재개 — 사유 고르면 세우고, 재�
   VS.tab = 'work'; VS.grp = ''; VS.key = ''; VS.rw = ''; VS.rno = ''; VS.side = []; VS.sta = {};
 }
 
+/* ════════════════════════════════════════════════════════════
+   [V17] 모바일/네트워크 복귀 시 자동 재전송 (v2.39.0)
+   ★현장 폰은 신호가 오락가락한다. 전송이 실패하면 로컬엔 남지만 서버로는
+     안 올라간 채로 있고, 종전엔 [재전송]을 사람이 눌러야만 올라갔다.
+     네트워크·앱 복귀 순간 안 올라간 것을 자동으로 다시 보낸다.
+   ════════════════════════════════════════════════════════════ */
+console.log('\n[V17] 모바일/네트워크 복귀 시 안 올라간 것 자동 재전송');
+{
+  const API = sb.BNCP_API;
+  const savedSend = API.send, savedOn = API.on;
+  /* 다른 검사가 남긴 미전송 줄이 섞이지 않게 다섯 상자를 통째로 비운다 */
+  const save = { work: S.work, crew: S.crew, insp: S.insp, surv: S.surv, mreq: S.mreq };
+  S.work = []; S.crew = []; S.insp = []; S.surv = []; S.mreq = [];
+  let sendN = 0;
+  API.send = function () { sendN++; return Promise.resolve({ ok: true, row: 1 }); };
+  API.on = true;
+  S.work.push({ id: A.uid(), date: A.today(), loc: { s: 'civil', p: 1, c: 1 }, key: 'T-01',
+    qty: 10, by: 'ACME', st: 'sub', up: 0 });          /* 안 올라간(up:0) 실적 하나 */
+
+  ok(typeof sb.window.__vAutoRetry === 'function', '자동 재전송 함수가 노출된다');
+  sb.document.hidden = false;
+  const b1 = sendN; sb.window.__vAutoRetry();
+  ok(sendN === b1 + 1, '★복귀하면 안 올라간 것을 자동으로 다시 보낸다');
+
+  sb.document.hidden = true;
+  const b2 = sendN; sb.window.__vAutoRetry();
+  ok(sendN === b2, '숨겨진 상태(백그라운드)에서는 재전송 안 함');
+
+  sb.document.hidden = false;
+  S.work.forEach(function (w) { w.up = 1; });          /* 다 올라감 */
+  const b3 = sendN; sb.window.__vAutoRetry();
+  ok(sendN === b3, '이미 올라간 것만 있으면 재전송 안 함');
+
+  S.work = save.work; S.crew = save.crew; S.insp = save.insp; S.surv = save.surv; S.mreq = save.mreq;
+  API.send = savedSend; API.on = savedOn; sb.document.hidden = false;
+}
+
 console.log(fail ? `\n✗ 실패 ${fail}건\n` : '\n✓ 전부 통과\n');
 process.exit(fail ? 1 : 0);

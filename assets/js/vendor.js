@@ -1330,6 +1330,29 @@
     }
   }
 
+  /* ★모바일 복귀·네트워크 복귀 시 자동 재전송 (v2.39.0 · 사용자 지적
+       「모바일로 보면 서버와 통신이 안 되어 반영이 안 되는 것들이 있다」).
+     ★협력업체 폰은 현장에서 신호가 오락가락한다. 전송이 실패하면 로컬엔
+       남지만 서버로는 안 올라간 채로 있고, 종전엔 사람이 [재전송]을 눌러야만
+       올라갔다 — 안 누르면 관리자 화면엔 영영 안 뜬다(「반영 안 됨」).
+     ★고침 : 네트워크가 돌아오거나(online) 앱으로 돌아오면(focus·visible·
+       pageshow) 안 올라간 것을 자동으로 다시 보낸다. 같은 id라 서버가
+       덮어써 중복은 안 생긴다. */
+  function autoRetry() {
+    var api = window.BNCP_API;
+    if (!api || !api.on) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+    if (pending().length) retryAll();
+  }
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('online', autoRetry);
+    window.addEventListener('focus', autoRetry);
+    window.addEventListener('pageshow', autoRetry);
+  }
+  if (typeof document !== 'undefined' && document.addEventListener)
+    document.addEventListener('visibilitychange', autoRetry);
+  window.__vAutoRetry = autoRetry;   /* 검사(smoke)에서 부른다 */
+
   /* state는 검사(smoke)에서 화면 상태를 만들기 위해 노출한다.
      화면 코드는 내부 V를 쓰므로 이걸 통해 조작해도 동작이 달라지지 않는다. */
   window.VENDOR = { render: render, state: V };

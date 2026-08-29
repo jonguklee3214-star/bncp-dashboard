@@ -23,8 +23,12 @@ const sb = {
   URL: { createObjectURL: () => '', revokeObjectURL() {} },
   setTimeout: () => 0, XLSX: null, scrollTo() {}, TextDecoder,
   setInterval: (fn) => { sb.__ivFn = fn; return 7; }, clearInterval: (id) => { if (id === 7) sb.__ivFn = null; },
-  document: { documentElement: {}, addEventListener() {}, createElement: () => El('t'),
-    body: { appendChild() {} },
+  /* ★window 리스너를 잡아 둔다 — 모바일 복귀 수신(v2.39.0)을 시험이 직접 불러 본다 */
+  addEventListener(type, fn) { (sb.__evt = sb.__evt || {})['win:' + type] = fn; },
+  document: { documentElement: {}, hidden: false,
+    /* ★document 리스너도 잡아 둔다(visibilitychange) */
+    addEventListener(type, fn) { (sb.__evt = sb.__evt || {})[type] = fn; },
+    createElement: () => El('t'), body: { appendChild() {} },
     querySelector(s) { const m = /^#([A-Za-z0-9_-]+)$/.exec(s); return m && bag[m[1]] ? bag[m[1]] : null; },
     querySelectorAll() { return []; } }
 };
@@ -1020,6 +1024,47 @@ console.log('\n[95] 작업 중단 — 세우고(사유·중단일) 다시 잇는
   S.work.length = 0; keepWork.forEach(function (w) { S.work.push(w); });
   S.stop.length = 0; keepStop.forEach(function (s) { S.stop.push(s); });
   A.setRole(keepRole); if (keepFlt) A.setFlt(keepFlt); A.go(1);
+}
+
+/* ★[29] 앞에 둔다 — 뒤는 표본 파일 누락으로 안 돈다. */
+console.log('\n[96] 모바일 복귀 즉시 수신 — 백그라운드 타이머가 멈춰도 반영된다');
+{
+  const API = sb.BNCP_API;
+  const savedChanged = API.changed, savedOn = API.on;
+  let changedN = 0;
+  API.changed = function () { changedN++; return Promise.resolve([]); };
+  API.on = true;
+  sb.__evt = {};
+
+  A.startAutoSync();
+  const vis = sb.__evt['visibilitychange'];
+  ok(typeof vis === 'function', '★visibilitychange 리스너가 걸린다(모바일 복귀 감지)');
+  ok(typeof sb.__evt['win:online'] === 'function', '★online(네트워크 복귀) 리스너가 걸린다');
+  ok(typeof sb.__evt['win:pageshow'] === 'function', '★pageshow(뒤로가기 복귀) 리스너가 걸린다');
+  ok(typeof sb.__evt['win:focus'] === 'function', 'focus 리스너가 걸린다');
+
+  /* ★syncNow는 진행중 플래그를 microtask에서 내리는데, 동기 실행뿐인 검사에선
+     [23]이 부른 A.sync가 그 플래그를 켠 채로 남겨 둔다. stopAutoSync가 이제
+     그 플래그를 내리므로 여기서 턴 뒤 각 wake를 본다(실화면과 같은 상태). */
+  A.stopAutoSync();
+  sb.document.hidden = false;
+  const b1 = changedN; vis();
+  ok(changedN === b1 + 1, '★복귀하면 즉시 수신을 당긴다(최대 1분 안 기다린다)');
+
+  /* 아직 안 보이면(백그라운드로 넘어가는 순간) 안 받는다 */
+  A.stopAutoSync();
+  sb.document.hidden = true;
+  const b2 = changedN; vis();
+  ok(changedN === b2, '숨겨진 상태에서는 안 받는다(헛통신 방지)');
+
+  /* online도 같은 wake를 탄다 */
+  A.stopAutoSync();
+  sb.document.hidden = false;
+  const b3 = changedN; sb.__evt['win:online']();
+  ok(changedN === b3 + 1, '★네트워크가 돌아오면 즉시 수신');
+
+  A.stopAutoSync();
+  API.changed = savedChanged; API.on = savedOn; sb.document.hidden = false;
 }
 
 /* ── 29 내역서 원본 인식 (v2.14.0) ────────────────────── */

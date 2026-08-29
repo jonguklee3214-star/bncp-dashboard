@@ -3920,9 +3920,35 @@
        바뀐 게 없으면 meta(수십 바이트)만 오가고 끝난다.
      ★syncing이면 건너뛴다(syncNow 안에서 막지만, 타이머가 헛불리는 것도 막는다).
      ★한 번만 건다 — 여러 번 걸면 같은 수신이 겹친다. */
-  var autoSyncTimer = null;
+  var autoSyncTimer = null, syncHooked = false;
   A.AUTO_SYNC_MS = 60000;
+  /* ★모바일 복귀 즉시 수신 (v2.39.0 · 사용자 지적 「모바일로 보면 서버와
+       통신이 안 되어 반영이 안 되는 것들이 있다」).
+     ★원인 : 자동수신은 1분 setInterval인데, **모바일 브라우저는 화면을 끄거나
+       앱을 뒤로 돌리면 이 타이머를 멈춘다(throttle·suspend).** 그래서 현장에서
+       폰을 다시 켜도 최대 1분(혹은 영영) 낡은 화면이 남는다 — 서버엔 올라와
+       있는데 이 폰에만 안 뜨는 「반영 안 됨」의 정체다.
+     ★고침 : 돌아오는 순간(visibilitychange·focus·online·pageshow)을 잡아
+       그 자리에서 한 번 당긴다. pageshow는 모바일 뒤로가기(bfcache 복귀)를
+       잡는다 — 그때는 스크립트가 다시 안 도므로 이 이벤트가 유일한 신호다. */
+  function wakeSync() {
+    if (!window.BNCP_API || syncing) return;
+    if (typeof document !== 'undefined' && document.hidden) return;  /* 아직 안 보이면 쉰다 */
+    syncNow(true);
+  }
+  function hookWake() {
+    if (syncHooked) return;
+    syncHooked = true;
+    if (typeof document !== 'undefined' && document.addEventListener)
+      document.addEventListener('visibilitychange', wakeSync);
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('focus', wakeSync);
+      window.addEventListener('online', wakeSync);
+      window.addEventListener('pageshow', wakeSync);
+    }
+  }
   A.startAutoSync = function () {
+    hookWake();                    /* ★타이머와 별개로 늘 건다 — 이미 돌고 있어도 복귀 수신은 필요하다 */
     if (autoSyncTimer) return;
     autoSyncTimer = setInterval(function () {
       if (!window.BNCP_API || syncing) return;
@@ -3932,6 +3958,7 @@
   };
   A.stopAutoSync = function () {
     if (autoSyncTimer) { clearInterval(autoSyncTimer); autoSyncTimer = null; }
+    syncing = false;   /* 자동수신을 끄면 진행중 표시도 턴다 — 다음 수신이 옛 플래그에 막히지 않게 */
   };
 
   A.flt = function () { return flt; };
