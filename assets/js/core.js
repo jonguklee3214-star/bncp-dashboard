@@ -410,7 +410,15 @@
     if (isDir) return A.T('res_dir');
     var raw = (rec && (rec.co || rec.by)) || '';
     var v = A.vendFind(raw);
-    return v ? v.name : String(raw || '');
+    if (v) return v.name;
+    /* ★명부(협력업체 Master)가 등록돼 있는데 못 찾은 이름은 **사람 이름을 그대로
+       회사 자리에 내보내지 않는다** (v2.45.0 사용자 지시 「이름이 들어가지 않도록」).
+       현황판·업체별·현장현황·집계가 전부 이 함수를 거치므로 여기 한 곳이면 된다.
+       명부에 등록된 회사·코드·담당자만 회사명으로 뜬다.
+       ★명부가 아예 없는 현장은 종전대로 입력값을 쓴다 — 그 현장은 자유입력으로
+         업체명을 관리하므로 「미등록」으로 덮으면 오히려 다 지워진다. */
+    if (S.vend && S.vend.length) return A.T('e_nocomp');
+    return String(raw || '');
   };
 
   /** 그 업체에서 이 공종을 맡은 사람 — 없으면 공종 없는 담당자를 준다 */

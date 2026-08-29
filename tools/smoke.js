@@ -750,9 +750,12 @@ console.log('\n[91] 업체 Master — 담당자 이름이 업체로 서지 않�
   const cos = {}; sr.forEach(r => Object.keys(r.co).forEach(c => cos[c] = 1));
   ok(!cos['Ahmed'] && cos['KEW Company'], '현장 현황 업체 칸에도 담당자 이름이 없다');
 
-  // 명부에 없는 업체는 사라지면 안 된다
-  ok(A.coOf({ co: 'Unknown Sub Co' }) === 'Unknown Sub Co',
-     '★명부에 없는 업체는 원문 그대로 남는다(조용히 지우지 않는다)');
+  // ★명부가 있으면, 못 찾은 이름은 사람 이름을 회사 자리에 내보내지 않는다
+  //   (v2.45.0 사용자 지시 「이름이 들어가지 않도록」 — 종전엔 원문 유지였다).
+  ok(A.coOf({ co: 'Unknown Sub Co' }) === A.T('e_nocomp'),
+     '★명부에 없는 이름은 「미등록 업체」로 뜬다(사람 이름이 회사 자리에 안 나온다)');
+  ok(A.coOf({ by: 'Ahmed' }) !== 'Ahmed',
+     '★담당자 개인 이름은 회사 자리에 절대 안 나온다');
 
   // 직영은 업체로 섞이지 않는다
   ok(A.coOf({ by: '이과장' }, true) === A.T('res_dir'), '직영은 직영 줄로 간다');
@@ -1181,6 +1184,22 @@ console.log('\n[98] 직영 장비 고장(brk)·정비(rep) 입력 (v2.43.0 · 18
 
   S.direct.length = 0; keepD.forEach(function (x) { S.direct.push(x); });
   A.setRole(kR); if (kF) A.setFlt(kF); A.go(1);
+}
+
+/* ★[29] 앞 — 명부 유무에 따른 coOf 안전장치 (v2.45.0) */
+console.log('\n[99] 회사 자리에 사람 이름 안 나오기 — 명부 유무별');
+{
+  const kVend = S.vend.slice();
+  /* 명부 없음 → 종전대로 입력값 유지(자유입력 현장을 지우면 안 된다) */
+  S.vend.length = 0; A.coDirty && A.coDirty();
+  ok(A.coOf({ by: 'Some Person' }) === 'Some Person', '명부 없으면 입력값 그대로(자유입력 현장 보호)');
+  /* 명부 있음 → 미등록 이름은 「미등록 업체」, 등록 담당자는 회사명 */
+  S.vend.length = 0;
+  S.vend.push({ name: 'ACME Co', code: 'AC01', staff: ['토공|Mustafah Jassem Abowd|0770'], key: 'AC01-x' });
+  A.coDirty && A.coDirty();
+  ok(A.coOf({ by: 'Mustafah Jassem Abowd' }) === 'ACME Co', '★등록 담당자 이름 → 회사명');
+  ok(A.coOf({ by: 'Nobody' }) === A.T('e_nocomp'), '★미등록 이름 → 미등록 업체(사람 이름 안 나옴)');
+  S.vend.length = 0; kVend.forEach(function (x) { S.vend.push(x); }); A.coDirty && A.coDirty();
 }
 
 /* ── 29 내역서 원본 인식 (v2.14.0) ────────────────────── */
