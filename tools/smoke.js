@@ -1199,6 +1199,18 @@ console.log('\n[99] 회사 자리에 사람 이름 안 나오기 — 명부 유�
   A.coDirty && A.coDirty();
   ok(A.coOf({ by: 'Mustafah Jassem Abowd' }) === 'ACME Co', '★등록 담당자 이름 → 회사명');
   ok(A.coOf({ by: 'Nobody' }) === A.T('e_nocomp'), '★미등록 이름 → 미등록 업체(사람 이름 안 나옴)');
+
+  /* ★모바일(명부 없음)이 서버로 명부를 받으면(mergeVend) 회사명이 풀린다 (v2.45.1) */
+  S.vend.length = 0; A.coDirty && A.coDirty();
+  ok(A.coOf({ by: 'Kim Site' }) === 'Kim Site', '받기 전 — 명부 없어 이름 그대로(모바일 상태)');
+  ok(typeof A._mergeVend === 'function', 'A._mergeVend 노출됨');
+  const got = A._mergeVend({ type: 'vend', code: 'V9', name: 'World Sub Co', staff: ['토공|Kim Site|010'] });
+  ok(got === true, '명부 한 줄을 받아 S.vend에 upsert');
+  ok(A.coOf({ by: 'Kim Site' }) === 'World Sub Co',
+     '★서버로 명부를 받으면 담당자 이름이 회사명으로 풀린다(모바일도 PC와 같아짐)');
+  ok(A._mergeVend({ type: 'vend', code: 'V9', name: 'World Sub Co', staff: ['토공|Kim Site|010'] }) === false,
+     '같은 내용은 두 번 세지 않는다');
+
   S.vend.length = 0; kVend.forEach(function (x) { S.vend.push(x); }); A.coDirty && A.coDirty();
 }
 

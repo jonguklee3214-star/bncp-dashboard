@@ -491,6 +491,45 @@
     } catch (e) { /* 전송 실패는 무시 — 로컬 저장이 우선 */ }
   }
 
+  /* ★협력업체 명부 서버 전송 (v2.45.1 사용자 지적 「모바일엔 등록 업체가 없다」).
+     명부(S.vend)는 기기별 localStorage라, PC에서만 등록하면 모바일은 회사명을
+     못 풀어 사람 이름이 그대로 뜬다. 명부도 서버로 올려 모든 기기가 같은 것을
+     쓰게 한다. id를 'vend|코드'로 고정해 다시 올리면 그 줄을 덮어쓴다(upsert).
+     ★모르는 종류라 서버 etc 시트에 원문으로 쌓이고 무type 수신으로 되돌아온다
+       (Code.gs 재배포 불필요 — 'stop'과 같은 길). */
+  function txVend(v) {
+    var api = window.BNCP_API;
+    if (!api || !api.on || !v || !v.code) return;
+    try {
+      api.send('vend', { id: 'vend|' + v.code, type: 'vend', code: v.code,
+        name: v.name || '', staff: v.staff || [], key: v.key || '', tel: v.tel || '' });
+    } catch (e) { /* 전송 실패는 무시 — 로컬이 우선 */ }
+  }
+  function txVendAll() { S.vend.forEach(txVend); }
+  /* ★서버에서 받은 명부 한 줄을 S.vend에 code로 upsert. 바뀌면 회사명 색인을
+     다시 만든다(coDirty) — 사람 이름으로 올라온 것도 곧바로 회사로 묶인다.
+     반환 : 실제로 바뀌었으면 true(수신 건수에 센다). */
+  function mergeVend(r) {
+    if (!r || !r.code || !r.name) return false;
+    var hit = null;
+    S.vend.forEach(function (v) { if (v.code === r.code) hit = v; });
+    var stf = Array.isArray(r.staff) ? r.staff : (r.staff ? [String(r.staff)] : []);
+    if (hit) {
+      var ch = hit.name !== r.name || JSON.stringify(hit.staff || []) !== JSON.stringify(stf);
+      hit.name = r.name;
+      if (stf.length) hit.staff = stf;
+      if (r.tel) hit.tel = r.tel;
+      if (!hit.key && r.key) hit.key = r.key;
+      if (!ch) return false;
+    } else {
+      S.vend.push({ code: r.code, name: r.name, tel: r.tel || '',
+        staff: stf, key: r.key || A.vendKey(r.code) });
+    }
+    A.coDirty();
+    return true;
+  }
+  A._mergeVend = mergeVend;   /* 검사에서 부른다 */
+
   /* ★설계량 서버 전송 (v2.18.4 사용자 지적).
      종전에는 브라우저 localStorage에만 있었다. 다른 PC에서 열면 안 보이고
      브라우저를 정리하면 사라졌다 — 힘들게 올린 자료가 없어지는 자리다.
@@ -655,6 +694,8 @@
           if (up && up.box === '_plan') add++;
           return;
         }
+        /* ★협력업체 명부 (v2.45.1) — code로 upsert. 링크(key)는 기존 것을 지킨다. */
+        if (r.type === 'vend') { if (mergeVend(r)) add++; return; }
         /* ★중단 기록은 상태(st)가 아니라 **재개일(to)**이 바뀐다 (v2.38.0).
            한쪽에서 재개하면 to가 찍혀 되돌아온다 — 그것만 반영한다.
            빈 to가 채워진 to를 덮지 않게, 채워진 쪽만 받는다. */
@@ -1203,6 +1244,7 @@
     if ($('#vdMk')) $('#vdMk').onclick = function () {
       var r = A.vendCreate(val('#vdCode'), val('#vdName'));
       if (!r.ok) { say('#vdMsg', T('vd_need'), false); return; }
+      txVendAll();                       /* ★명부를 서버로 — 모바일도 같은 회사명을 쓴다 */
       vdEdit = null; A.render();
       setTimeout(function () { say('#vdMsg', T(r.dup ? 'vd_upd' : 'vd_made'), true); }, 30);
     };
@@ -1214,6 +1256,7 @@
         : A.vendStaffAdd(code, g, nm, tel);
       if (!r.ok) { say('#vdMsg', T(r.why === 'sname' ? 'vd_sneed' : 'vd_first'), false); return; }
       var was = !!vdEdit || r.edit;
+      txVendAll();                       /* ★담당자 추가·수정도 서버로 (v2.45.1) */
       vdEdit = null; A.render();
       setTimeout(function () { say('#vdMsg', T(was ? 'vd_sedit' : 'vd_sok'), true); }, 30);
     };
@@ -4411,6 +4454,7 @@
       var rd = new FileReader();
       rd.onload = function () {
         var r = A.vendLoad(rd.result);
+        txVendAll();                     /* ★CSV 업로드도 서버로 — 모바일도 받는다 (v2.45.1) */
         A.render();
         setTimeout(function () { say('#vdMsg', T('vd_ok').replace('%c', nf(r.comp)).replace('%s', nf(r.staff)), r.comp > 0); }, 30);
       };
