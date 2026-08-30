@@ -887,10 +887,6 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
      길이가 들쭉날쭉한 **작업위치 한 칸**이 받는다(측점이 여럿 나열되는 칸이다).
    ★width:1% + nowrap = 내용만큼만. 이 표(.tw--site)에만 건다 —
      진행률 표·자재 표는 종전 그대로다. */
-.tw--site table{width:100%}
-.tw--site th,.tw--site td{width:1%;white-space:nowrap}
-.tw--site th:nth-child(5),.tw--site td:nth-child(5){width:auto}
-.tw--site .sp2{max-width:none}
 .sp2{position:relative;display:block;max-width:280px;cursor:default}
 .sp2__1{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
         font-size:11px;color:var(--mute)}
@@ -932,3 +928,18 @@ tr[data-sloc]{cursor:pointer}
 
 /* 자재 신청 처리 — 지급 / 미지급(사유) (v2.19.1) */
 .mta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:2px 0;font-size:11px}
+
+/* ★인원+장비 한 카드 (v2.49.0) — 업체마다 인원 줄과 장비 줄을 나란히.
+   좁은 화면에서는 위아래로 접힌다. */
+.ce{border-top:1px solid var(--line-2);padding:10px 0}
+.ce:first-child{border-top:0;padding-top:0}
+.ce__h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding:0 16px 6px}
+.ce__h .nm{font-size:14px;font-weight:700}
+.ce__b{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 16px}
+.ce__t{font-size:11px;font-weight:600;color:var(--mute);margin-bottom:4px}
+.ce__z{padding:8px 0}
+@media (max-width:860px){.ce__b{grid-template-columns:1fr}}
+/* ★협력업체·직영 작업내용 — 한 카드 안에서 서로 갈라 둔다 (v2.49.0) */
+.wc__s{padding:10px 0;border-top:1px solid var(--line-2)}
+.wc__s:first-child{border-top:0;padding-top:0}
+.wc__t{font-size:11px;font-weight:600;color:var(--mute);padding:0 16px 4px}

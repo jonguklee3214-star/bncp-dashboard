@@ -237,9 +237,17 @@
      해당 카드 제목 옆에 두면 무엇을 바꾸는 단추인지 스스로 설명된다.
      ★표마다 따로 고른다 (v2.18.1) — 인원은 업체별, 장비는 공종별로
        보고 싶을 수 있다. 종전에는 하나로 묶여 같이 바뀌었다. */
+  /* ★축은 무엇을 세느냐에 따라 다르다 (v2.49.0 사용자 지적 「공종별 보기가 아니라고,
+     공종을 보는 것 같잖아 — 장비 구분·분류·종류 중에 골라라」).
+     · 인원은 **공종별/업체별** — 사람은 공종에 붙는다.
+     · 장비는 **장비종류별/업체별** — 장비 자료가 가진 축이 종류(cat)·규격(size)다.
+       장비에 공종 축을 두면 「장비가 공종을 돈다」는 딴 이야기가 섞인다. */
   function grpBtn(which) {
+    var opt = which === 'eq'
+      ? [['cat', 't_bykind'], ['co', 't_byco']]
+      : [['work', 't_bywork'], ['co', 't_byco']];
     return '<span class="seg seg--sm noprint">' +
-      [['work', 't_bywork'], ['co', 't_byco']].map(function (x) {
+      opt.map(function (x) {
         return '<button data-gb="' + which + '|' + x[0] +
           '" aria-pressed="' + (grpBy[which] === x[0]) + '">' + T(x[1]) + '</button>';
       }).join('') + '</span>';
@@ -1855,17 +1863,9 @@
 
   function eqBody() {
     if (grpBy.eq === 'co') return eqCoHTML() + eqAddHTML();
-    var st = A.eqStatus(flt), mt = mtRows(), ru = A.rollup(flt);
+    var st = A.eqStatus(flt), mt = mtRows();
     if (!st.length) return empty(T('z_norecon'), T('z_norecon_n')) + eqAddHTML();
 
-    /* 공종별 투입 — 종류마다 어느 공종에 갔는지 */
-    var byCat = {};
-    ru.forEach(function (x) {
-      Object.keys(x.eq).forEach(function (k) {
-        var q = x.eq[k], o = byCat[q.cat] || (byCat[q.cat] = {});
-        o[x.e.grp] = (o[x.e.grp] || 0) + (+q.run || 0);
-      });
-    });
     var mtBy = {};
     mt.forEach(function (o) { (mtBy[o.cat] = mtBy[o.cat] || []).push(o); });
 
@@ -1928,14 +1928,8 @@
             '<td class="r sp">·</td><td class="r sp">·</td><td class="r sp">·</td><td></td></tr>';
         });
       });
-      /* 공종별 — 종전 「장비투입현황」이 하던 일 */
-      var gs = byCat[o.cat] || {}, gk = Object.keys(gs);
-      if (gk.length) {
-        gk.sort(function (a, b) { return gs[b] - gs[a]; });
-        h += '<tr class="sub"><td class="ind sp" colspan="8">' + T('eq_bywork') + ' — ' +
-          gk.map(function (g) { return esc(A.trW(g)) + ' ' + nf(gs[g]); }).join(' · ') +
-          '<br><span class="hint">' + T('ro_eq_dup') + '</span></td></tr>';
-      }
+      /* ★「공종별 투입」 줄을 지웠다 (v2.49.0) — 장비 표에서 공종을 보여 주니
+         공종을 보는 화면처럼 읽혔다(사용자 지적). 장비의 축은 종류와 규격이다. */
       /* 정비 건 */
       (mtBy[o.cat] || []).forEach(function (m) {
         h += '<tr class="sub"><td class="ind" colspan="3">' +
@@ -2184,11 +2178,18 @@
   /* ★표마다 따로 고른다 (v2.18.1 사용자 지적).
      v2.17.5에서 상태 하나를 두 카드가 같이 보게 묶었는데, 인원은 업체별로
      보면서 장비는 공종별로 보고 싶은 경우를 막고 있었다. */
-  var grpBy = { ppl: 'work', eq: 'work' };
+  /* ★장비는 **업체별이 기본**이다 (v2.49.0 사용자 지시 「장비현황 기본은 업체별이야」).
+     장비의 다른 축은 'cat'(장비종류)다 — 'work'(공종)가 아니다. */
+  var grpBy = { ppl: 'work', eq: 'co' };
   A._grpBy = function (which, v) {
     if (typeof which === 'string' && v === undefined && (which === 'work' || which === 'co')) {
-      grpBy.ppl = grpBy.eq = which; return which;   /* 옛 호출 방식 — 둘 다 */
+      grpBy.ppl = which;
+      /* 장비에는 공종 축이 없다 — 옛 호출의 'work'는 장비종류로 받는다(호환) */
+      grpBy.eq = (which === 'work') ? 'cat' : which;
+      return which;
     }
+    /* 장비에 'work'가 들어오면 'cat'으로 받는다 — 부르는 데가 옛 이름을 쓸 수 있다 */
+    if (which === 'eq' && v === 'work') v = 'cat';
     if (v) grpBy[which] = v;
     return grpBy[which];
   };
@@ -2390,42 +2391,37 @@
     /* ── ⓪ 공구 표 ──
        ★현황판은 여기 없다. **오른쪽 기둥으로 옮겼다** (v2.19.21 사용자 확정
          「세로로 바꾸자」). 아래 return에서 붙인다. */
-    h += siteTable();
 
     /* 내역서에서 코드를 못 붙인 줄 — 손봐야 하는 것이라 표 앞에 둔다 */
     h += boqNeedHTML();
 
-    /* ★진행 중 작업 — 인력은 올렸는데 아직 수량이 안 들어온 것 (요청).
-       오래 방치된 것은 붉게 경고한다. 관리자·스탭 둘 다 여기서 본다. */
-    h += openTaskHTML();
-
-    /* ★순서 : 인력 → 장비 → 직영 → 작업량 → 진행률 → 생산성 → 준비
-       (v2.17.3 사용자 지시). 오늘 누가 몇 명 나왔는지가 먼저고, 진행률처럼
-       누적으로 읽는 것은 뒤로 뺀다. */
-
-    /* ── ① 인력 ── */
+    /* ★순서 (v2.49.0 사용자 지시) :
+         ① 협력업체 인원 및 장비현황  ② 직영 인원 및 장비현황
+         ③ 협력업체·직영 작업내용     ④ 작업량   ⑤ 진행률   ⑥ 생산성   ⑦ 준비
+       ★인원과 장비를 **한 카드**로 합쳤다 — 같은 업체를 두 표에서 찾던 것을 없앤다.
+       ★확인 대기·재검측·내역서 확인필요는 위에 그대로 둔다(스탭의 「내 차례」). */
     var ru = A.rollup(flt);
-    if (!ru.length) {
-      h += '<div style="margin-bottom:16px">' + card(T('rollup'), '',
-        empty(T('z_noconf'), ''), 'flush', grpBtn('ppl'), 'cdPpl') + '</div>';
-    } else {
-      h += '<div style="margin-bottom:16px">' + card(T('ro_ppl'), '',
-        withRng('ppl', function () { return rollPpl(A.rollup(flt)); }), 'flush',
-        grpBtn('ppl') + rngBtn('ppl'), 'cdPpl') + '</div>';
-    }
 
-    /* 오늘 투입 · 정비 의뢰 · 누계 — 탭8을 없애고 여기로 합쳤다(v2.13.0) */
+    /* ── ① 협력업체 인원 및 장비현황 ── */
+    h += '<div style="margin-bottom:16px">' + card(T('pn_co_ce'), '',
+      withRng('ppl', function () { return crewEqHTML('co'); }), 'flush',
+      rngBtn('ppl'), 'cdPpl') + '</div>';
+
+    /* ── ② 직영 인원 및 장비현황 — 협력업체와 같은 꼴 ── */
+    h += '<div style="margin-bottom:16px">' + card(T('pn_dir_ce'), '',
+      withRng('ppl', function () { return crewEqHTML('dir'); }), 'flush', '', 'cdDir') + '</div>';
+
+    /* ── ③ 협력업체·직영 작업내용 — 한 카드 안에서 **서로 갈라** 보인다 ── */
+    var otH = openTaskHTML();
+    h += '<div style="margin-bottom:16px">' + card(T('pn_work_ct'), '',
+      '<div class="wc"><div class="wc__s"><div class="wc__t">' + T('t_byco') + '</div>' +
+        (otH || '<div class="ce__z sp">' + T('z_none') + '</div>') + '</div>' +
+      '<div class="wc__s"><div class="wc__t">' + T('res_dir') + '</div>' +
+        (A.role() === 'admin' ? v7() : '<div class="ce__z sp">' + T('z_none') + '</div>') +
+      '</div></div>', 'flush') + '</div>';
+
+    /* 장비 표(장비종류·규격·정비)는 준비 위쪽에 그대로 둔다 — 지급대조가 여기 붙어 있다 */
     h += eqTableHTML();
-
-    /* ★관리자 화면에만 직영을 붙인다 (v2.17.2 사용자 지시).
-       「합치는 것」이 아니라 「추가하는 것」이다 — 스탭 화면(탭7)은 그대로 두고,
-       관리자만 작업현황에서 직영까지 한눈에 본다.
-       관리자에게는 탭7을 감춘다 — 안 그러면 같은 것이 두 곳에 나온다.
-       ★대분류 제목(구획 헤더)은 뺐다 (v2.17.7 사용자 지적).
-         직영이 따로 분류된 것처럼 갈라 보였다 — 작업현황 안의 여느 표와
-         같은 자리에 같은 무게로 놓는다. 카드 자체가 「직영 작업 기록」이라고
-         이름을 갖고 있어(T('d_list')) 별도 표제가 없어도 무엇인지 안다. */
-    if (A.role() === 'admin') h += v7();
 
     /* ── ④ 작업량 ── */
     if (ru.length) {
@@ -2811,52 +2807,6 @@
   }
 
   /* 공구 표 — 한 줄 = 한 공구 */
-  function siteTable() {
-    var rows = A.siteRows(flt);
-    if (!rows.length) return '';
-    var body = rows.map(function (o) {
-      var spots = o.spots.length
-        ? '<span class="sp2" tabindex="0"><span class="sp2__1">' +
-            esc(o.spots.join(', ')) + '</span>' +
-            '<span class="sp2__all">' + o.spots.map(function (x) {
-              return '<i>' + esc(x) + '</i>';
-            }).join('') + '</span></span>'
-        : '<span class="sp">—</span>';
-      function nb(v, tab) {
-        return v ? '<button class="lk" data-sgo="' + esc(A.locKey(o.loc)) + '|' + tab + '">' + nf(v) + '</button>'
-                 : '<span class="sp">·</span>';
-      }
-      return '<tr class="prow" data-sloc="' + esc(A.locKey(o.loc)) + '">' +
-        '<td><b class="code">' + esc(A.locShort(o.loc)) + '</b></td>' +
-        '<td class="nm">' + esc(o.cos.join(', ') || '—') + '</td>' +
-        '<td class="r em">' + nf(o.pax) + '<span class="sp">' + T('u_pax') + '</span></td>' +
-        '<td class="r">' + nf(o.run) + '<span class="sp">' + T('u_unitq') + '</span>' +
-          (o.down ? ' <span class="bd bd--d">' + nf(o.down) + '</span>' : '') + '</td>' +
-        '<td>' + spots + '</td>' +
-        '<td class="r">' + nb(o.insp, 2) + '</td>' +
-        '<td class="r">' + nb(o.surv, 3) + '</td>' +
-        '<td class="r">' + nb(o.mat, 4) + '</td></tr>';
-    }).join('');
-    var tot = rows.reduce(function (a, o) {
-      a.pax += o.pax; a.run += o.run; a.down += o.down;
-      a.insp += o.insp; a.surv += o.surv; a.mat += o.mat; return a;
-    }, { pax: 0, run: 0, down: 0, insp: 0, surv: 0, mat: 0 });
-
-    return '<div style="margin-bottom:16px">' + card(T('sb_t'), '',
-      '<div class="tw tw--site"><table><thead><tr>' +
-      '<th>' + T('u_sec') + '</th><th>' + T('vd_name') + '</th>' +
-      '<th class="r">' + T('pn_pax') + '</th><th class="r">' + T('equip') + '</th>' +
-      '<th>' + T('sp_loc') + '</th>' +
-      '<th class="r">' + T('t2') + '</th><th class="r">' + T('t3') + '</th>' +
-      '<th class="r">' + T('t4') + '</th></tr></thead><tbody>' + body +
-      '</tbody><tfoot><tr class="tot"><td colspan="2">' + T('tot_t') + '</td>' +
-      '<td class="r">' + nf(tot.pax) + '</td>' +
-      '<td class="r">' + nf(tot.run) + (tot.down ? ' <span class="bd bd--d">' + nf(tot.down) + '</span>' : '') + '</td>' +
-      '<td></td><td class="r">' + (tot.insp || '·') + '</td>' +
-      '<td class="r">' + (tot.surv || '·') + '</td>' +
-      '<td class="r">' + (tot.mat || '·') + '</td></tr></tfoot></table></div>',
-      'flush', '<span class="hint">' + T('sb_n') + '</span>', 'cdSite') + '</div>';
-  }
 
   /* ★panelHTML(오른쪽 현황판)과 donutSVG는 v2.18.0에서 지웠다.
      기둥을 철거하고 요약 띠 + 공구 표로 눕혔다(사용자 지시).
@@ -3088,6 +3038,70 @@
           '<td class="r em">' + nf(x.qty, 1) + ' <span class="sp">' + esc(A.trU(x.e.unit)) + '</span></td>' +
           '<td class="r sp">' + esc(x.last) + '</td></tr>';
       }).join('') + '</tbody></table></div>';
+  }
+
+  /* ★인원과 장비를 **한 카드**로 합친다 (v2.49.0 사용자 지시).
+     종전에는 「인원 투입 현황」과 「장비 현황」이 따로 있어, 같은 업체를 두 표에서
+     따로 찾아야 했다. 이제 한 자리에서 업체별로 인원과 장비를 함께 본다.
+     ★mode 'co' = 협력업체 · 'dir' = 직영. **둘은 서로 섞이지 않는다** —
+       rollupCo가 직영에 dir 표를 달아 주므로 그것으로 가른다.
+     ★표는 새로 쓰지 않는다 — 인원은 rollPpl, 장비는 eqCoHTML이 이미 업체 축이다. */
+  function ceGroups(mode) {
+    return A.rollupCo(flt).filter(function (g) { return mode === 'dir' ? g.dir : !g.dir; });
+  }
+  function crewEqHTML(mode) {
+    var gs = ceGroups(mode);
+    if (!gs.length) return empty(T('z_noconf'), '');
+    var h = '';
+    gs.forEach(function (G) {
+      var s = { teams: 0, pplT: 0, opr: 0, run: 0, down: 0 };
+      A.JOBS.forEach(function (j) { s[j.id] = 0; });
+      var eqBy = {};
+      G.rows.forEach(function (x) {
+        s.teams += x.teams; s.pplT += x.pplT; s.opr += x.opr;
+        A.JOBS.forEach(function (j) { s[j.id] += (x.ppl[j.id] || 0); });
+        Object.keys(x.eq || {}).forEach(function (k) {
+          var q = x.eq[k], o = eqBy[q.cat] || (eqBy[q.cat] = { cat: q.cat, run: 0, brk: 0, rep: 0 });
+          o.run += (+q.run || 0); o.brk += (+q.brk || 0); o.rep += (+q.rep || 0);
+        });
+      });
+      Object.keys(eqBy).forEach(function (k) { s.run += eqBy[k].run; s.down += eqBy[k].brk + eqBy[k].rep; });
+
+      /* 업체 한 칸 — 인원 줄과 장비 줄을 나란히 */
+      h += '<div class="ce">' +
+        '<div class="ce__h"><b class="nm">' + esc(G.co) + '</b>' +
+        '<span class="sp">' + T('res_pax') + ' ' + nf(s.pplT) + ' · ' +
+        T('res_run') + ' ' + nf(s.run) + (s.down ? ' · ' + T('res_brk') + ' ' + nf(s.down) : '') +
+        '</span></div>' +
+        '<div class="ce__b">' +
+          '<div class="ce__c"><div class="ce__t">' + T('ro_ppl') + '</div>' +
+            '<div class="tw"><table><thead><tr>' +
+            '<th>' + T('u_crew') + '</th>' +
+            A.JOBS.map(function (j) { return '<th class="r">' + LJ(j) + '</th>'; }).join('') +
+            '<th class="r">' + T('res_pax') + '</th></tr></thead><tbody><tr>' +
+            '<td class="r">' + nf(s.teams) + '</td>' +
+            A.JOBS.map(function (j) { return '<td class="r">' + (s[j.id] ? nf(s[j.id]) : '·') + '</td>'; }).join('') +
+            '<td class="r em">' + nf(s.pplT) + '</td>' +
+            '</tr></tbody></table></div></div>' +
+          /* ★장비는 **장비종류**로 가른다 — 공종이 아니다(사용자 지적) */
+          '<div class="ce__c"><div class="ce__t">' + T('eq_st') + '</div>' +
+            (Object.keys(eqBy).length
+              ? '<div class="tw"><table><thead><tr><th>' + T('t_bykind') + '</th>' +
+                '<th class="r">' + T('res_run') + '</th><th class="r">' + T('res_brk') + '</th>' +
+                '</tr></thead><tbody>' +
+                Object.keys(eqBy).sort(function (a, b) { return eqBy[b].run - eqBy[a].run; })
+                  .map(function (k) {
+                    var o = eqBy[k], dn = o.brk + o.rep;
+                    return '<tr><td><span class="ab">' + esc(A.eqAbbr(o.cat)) + '</span> ' +
+                      '<span class="sp">' + esc(o.cat) + '</span></td>' +
+                      '<td class="r em">' + nf(o.run) + '</td>' +
+                      '<td class="r' + (dn ? ' em' : '') + '">' + (dn ? nf(dn) : '·') + '</td></tr>';
+                  }).join('') + '</tbody></table></div>'
+              : '<div class="ce__z sp">' + T('z_none') + '</div>') +
+          '</div>' +
+        '</div></div>';
+    });
+    return h;
   }
 
   /* ── 인원투입 ── 대분류별 소계를 먼저 보이고, 펼치면 공종별로 */

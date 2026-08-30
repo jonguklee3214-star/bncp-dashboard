@@ -39,6 +39,10 @@ sb.window = sb; vm.createContext(sb);
   .forEach(f => vm.runInContext(fs.readFileSync(path.join(ROOT, 'assets/js', f + '.js'), 'utf8'), sb, { filename: f }));
 
 const A = sb.APP, S = A.S;
+/* ★묶음 축의 **초기 기본값**을 여기서 붙잡는다 (v2.49.0).
+   아래 검사들이 토글을 눌러 바꾸므로, 나중에 물으면 「기본」이 아니라 「마지막 상태」가
+   된다. 실제로 그렇게 물었다가 기본을 되돌려도 검사가 통과하는 헛검사가 됐다(0-J). */
+const GRP_DEFAULT = { ppl: A._grpBy('ppl'), eq: A._grpBy('eq') };
 let fail = 0;
 const ok = (c, m) => { console.log((c ? '  ok   ' : '  FAIL ') + m); if (!c) fail++; };
 const near = (a, b, t) => Math.abs(a - b) <= (t == null ? 1e-6 : t);
@@ -878,7 +882,9 @@ console.log('\n[92] 군더더기 제거 — 설명 문구 · 「N개 공종」 �
   S.crew.length = 0; keepCrew.forEach(function (c) { S.crew.push(c); });
   S.issue.length = 0; keepIssue.forEach(function (g) { S.issue.push(g); });
   S.mreq.length = 0; keepMreq.forEach(function (m) { S.mreq.push(m); });
-  A._grpBy('work'); A.setRole(keepRole); if (keepFlt) A.setFlt(keepFlt); A.go(1);
+  /* ★기본으로 되돌린다 — v2.49.0부터 인원은 공종별, **장비는 업체별**이 기본이다 */
+  A._grpBy('ppl', 'work'); A._grpBy('eq', 'co');
+  A.setRole(keepRole); if (keepFlt) A.setFlt(keepFlt); A.go(1);
 }
 
 /* ── 93 스탭 화면에는 '준비'가 없다 (요청 : 스탭화면 작업현황) ──
@@ -897,8 +903,10 @@ console.log('\n[93] 준비는 관리자 전용 — 스탭 작업현황에는 없
   ok(hs.indexOf(spT) < 0, "★준비 카드가 스탭 화면에 없다");
   ok(!/data-stp=/.test(hs), '★준비 하위 버튼(data-stp)이 없다 — 입력 기능도 제거');
   ok(!/id="stMe"/.test(hs), '★「나는 누구」 셀렉트도 스탭 화면엔 없다');
-  ok(hs.indexOf(A.T('ro_ppl')) > 0 || hs.indexOf(A.T('rollup')) > 0,
-     '작업현황 본체(인력 표)는 스탭에게도 그대로');
+  /* ★v2.49.0에서 인원·장비를 한 카드로 합쳤다 — 본체 카드는 이제 pn_co_ce다.
+     통과시키려고 고친 것이 아니라 **화면 구성이 바뀌어 검사도 바뀐 것**이다. */
+  ok(hs.indexOf(A.T('pn_co_ce')) > 0,
+     '작업현황 본체(협력업체 인원 및 장비현황)는 스탭에게도 그대로');
 
   A.setRole('admin'); A.go(1);
   const ha = bag.view.innerHTML;
@@ -1578,6 +1586,84 @@ console.log('\n[86] 묶음 전송 · 삭제 전파 (v2.48.0)');
   S.issue.length = 0; kIssue6.forEach(function (x) { S.issue.push(x); });
   A._txReset();
   API.send = savedSend; API.sendMany = savedMany; API.on = savedOn; API.canBatch = savedCan;
+}
+
+/* ★[29] 앞 — 작업현황 화면 재구성 (v2.49.0 사용자 지시) */
+console.log('\n[85] 작업현황 구성 — 순서 · 인원+장비 통합 · 장비는 업체/장비종류 축');
+{
+  const kRole = A.role();
+  A.setRole('admin');
+  /* 업체·인원·장비가 있어야 표가 선다 */
+  const kVend7 = S.vend.slice(), kCrew7 = S.crew.slice(), kWork7 = S.work.slice();
+  const kFlt7 = A.flt ? A.flt() : null, kCoFlt = A.coFlt;
+  /* [92]와 같은 꼴로 자리를 만든다 — 위치를 정하고 그 위치에 오늘 자 자료를 둔다 */
+  S.vend.length = 0; S.crew.length = 0; S.work.length = 0;
+  A.coFlt = '';
+  const LC = { s: 'civil', p: 1, c: 1 }, td = A.today();
+  A.setFlt(LC);
+  A.vendAdd('HB1', '한빛건설', '토공|김담당|964770000009');
+  S.crew.push({ id: 'ce1', date: td, loc: LC, key: 'T-01', st: 'ok', teams: 2,
+    ppl: { eng: 1, fmn: 2, wkr: 10 }, co: '한빛건설', by: '김담당',
+    eq: [{ cat: 'Dump Truck', size: '25ton', run: 4, brk: 1, rep: 0 },
+         { cat: 'Excavator (crawler)', size: '0.8m3', run: 2, brk: 0, rep: 0 }] });
+  S.work.push({ id: 'ce2', date: td, loc: LC, key: 'T-01', qty: 100,
+    co: '한빛건설', by: '김담당', st: 'ok' });
+  A.go(1);
+  const h = bag.view.innerHTML;
+  const at = k => h.indexOf(A.T(k));
+
+  /* ① 순서 — 1~7이 그 차례로 나온다 */
+  ok(at('pn_co_ce') > 0, '① 협력업체 인원 및 장비현황이 있다');
+  ok(at('pn_dir_ce') > at('pn_co_ce'), '② 직영 인원 및 장비현황이 그다음이다');
+  ok(at('pn_work_ct') > at('pn_dir_ce'), '③ 협력업체·직영 작업내용이 그다음이다');
+  ok(at('ro_out') > at('pn_work_ct'), '④ 작업량이 그다음이다');
+  ok(at('progress') > at('ro_out'), '⑤ 공정별 진행률이 그다음이다');
+  ok(at('prod') > at('progress'), '⑥ 실측 생산성이 그다음이다');
+  ok(at('sp_t') > at('prod'), '⑦ 준비가 맨 뒤다');
+
+  /* ② 현장 현황 삭제 — 현황판과 겹치던 표 */
+  ok(!/siteTable/.test(h), '★현장 현황 표가 없다(현황판과 중복이라 지웠다)');
+  ok(typeof A.T('sb_t') === 'string' ? h.indexOf('현장 현황') < 0 : true,
+     '★「현장 현황」 제목이 화면에 없다');
+
+  /* ③ 인원과 장비가 **한 카드** 안에 있다 */
+  const co1 = at('pn_co_ce'), dir1 = at('pn_dir_ce');
+  const seg = h.slice(co1, dir1);
+  ok(seg.indexOf(A.T('ro_ppl')) > 0 && seg.indexOf(A.T('eq_st')) > 0,
+     '★인원과 장비가 같은 카드 안에 함께 있다(따로 두 카드가 아니다)');
+  ok(seg.indexOf('한빛건설') > 0, '★업체별로 구분해 보인다');
+
+  /* ④ 장비 축 — 공종이 아니라 장비종류 */
+  ok(seg.indexOf(A.T('t_bykind')) > 0, '★장비는 장비종류로 가른다');
+  ok(seg.indexOf(A.T('t_bywork')) < 0, '★인원·장비 카드에 「공종별」이 없다');
+  ok(!/eq_bywork/.test(h), '★「공종별 투입」 줄이 사라졌다(장비가 공종을 보여주지 않는다)');
+
+  /* ⑤ 장비 표 토글도 공종이 아니다 — 장비종류별/업체별 둘뿐 */
+  ok(/data-gb="eq\|cat"/.test(h), '★장비 토글이 장비종류별이다');
+  ok(/data-gb="eq\|co"/.test(h), '장비 토글에 업체별이 있다');
+  ok(!/data-gb="eq\|work"/.test(h), '★장비 토글에 공종별이 없다');
+  ok(GRP_DEFAULT.eq === 'co', '★장비 기본은 업체별이다(처음 켰을 때)');
+  ok(GRP_DEFAULT.ppl === 'work', '인원 기본은 공종별 그대로');
+  /* ★토글에 붙은 **글자**도 본다 — 값(cat)만 보면 이름이 「공종별」로 바뀌어도 못 잡는다 */
+  const gbTxt = (h.match(/data-gb="eq\|cat"[^>]*>([^<]*)</) || [])[1] || '';
+  ok(gbTxt === A.T('t_bykind'), '★장비 토글 글자가 「장비종류별」이다(공종별이 아니다)');
+  ok(gbTxt !== A.T('t_bywork'), '★장비 토글에 「공종별」이라 안 쓴다');
+
+  /* ⑥ 진행 중 작업은 3번 카드 안 — 맨 위가 아니다 */
+  const w1 = at('pn_work_ct');
+  if (A.openTasks(A.flt ? A.flt() : {}).length) {
+    ok(h.indexOf(A.T('ot_t')) > w1, '★진행 중 작업이 3번 카드 안으로 들어갔다');
+  } else {
+    ok(w1 > 0, '진행 중 작업이 없어도 3번 카드는 선다');
+  }
+  /* ⑦ 협력업체와 직영이 서로 갈라져 있다 */
+  ok(/wc__s/.test(h), '★협력업체와 직영 내용이 서로 분리돼 표시된다');
+
+  S.vend.length = 0; kVend7.forEach(x => S.vend.push(x)); A.coDirty && A.coDirty();
+  S.crew.length = 0; kCrew7.forEach(x => S.crew.push(x));
+  S.work.length = 0; kWork7.forEach(x => S.work.push(x));
+  A.coFlt = kCoFlt; if (kFlt7) A.setFlt(kFlt7);
+  A.setRole(kRole); A.go(1);
 }
 
 /* ── 29 내역서 원본 인식 (v2.14.0) ────────────────────── */
