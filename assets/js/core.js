@@ -92,7 +92,8 @@
     stock: {},                    /* ★재고수량 — 사람이 직접 넣는다(v2.17.1). {위치키:{자재id:수량}} */
     tab: 1,                       /* ★마지막으로 보던 탭 — 다시 들어오면 그 자리(v2.16.2) */
     rxLast: '',                   /* ★서버에서 마지막으로 받은 시각 — 증분 수신 기준(v2.19.3) */
-    cfgTx: {}                     /* ★설정·명부 전송 완료 서명 — 바뀐 것만 다시 올린다(v2.46.0) */
+    cfgTx: {},                    /* ★설정·명부 전송 완료 서명 — 바뀐 것만 다시 올린다(v2.46.0) */
+    fixJunk: 0                    /* ★업체 없는 지급 줄 정리를 한 번 돌렸는가(v2.46.3) */
   };
   function load() {
     try {
@@ -410,6 +411,13 @@
   A.coOf = function (rec, isDir) {
     if (isDir) return A.T('res_dir');
     var raw = (rec && (rec.co || rec.by)) || '';
+    /* ★업체가 **비어 있으면** 「미등록 업체」가 아니다 (v2.46.3 사용자 지적
+       「미등록 업체가 생겼는데 준 적이 없다」). 「미등록」은 **명부에 없는 이름**을
+       뜻해야지, **이름이 아예 없는 것**까지 회사로 세우면 안 된다. 종전에는 빈 값도
+       여기를 지나 e_nocomp가 되어, 업체 없는 줄 하나가 화면에 없는 업체 한 줄을
+       만들어 냈다. 부르는 쪽은 이미 빈 값을 받아 넘길 채비가 돼 있다
+       (rollupCo `|| '—'`, sbCoRow `|| e_noco`(미지정), eqRecon `if (co)`). */
+    if (!raw) return '';
     var v = A.vendFind(raw);
     if (v) return v.name;
     /* ★명부(협력업체 Master)가 등록돼 있는데 못 찾은 이름은 **사람 이름을 그대로
@@ -985,6 +993,24 @@
     S.issue = S.issue.filter(function (x) { return x.id !== id; });
     A.save();
   };
+
+  /** ★업체 없는 지급 줄을 덜어낸다 (v2.46.3). 반환 : 지운 줄 수.
+      ★화면은 업체 없이 지급 줄을 만들 수 없다 — 손입력은 업체를 안 고르면 막고
+        (tabs #eqAdd), CSV 업로드도 업체를 먼저 고르게 한다(#isCo). 그러므로 업체가
+        빈 줄은 v2.46.0 동기화 결함(업체를 안 싣고 올린 것)으로 들어온 것뿐이다.
+      ★두면 어느 업체 것인지 영영 알 수 없는 채로 보유 총계에만 얹혀, 업체별 합계와
+        총계가 어긋난다. 지운 수를 알려 준다 — 조용히 지우지 않는다(0-Z 원칙). */
+  A.dropNoCoIssue = function () {
+    var n = S.issue.length;
+    S.issue = S.issue.filter(function (g) { return !!(g.by || g.co); });
+    return n - S.issue.length;
+  };
+  /* 한 번만 돈다. 지운 수는 A.junkFix에 남긴다 — 조용히 지우지 않는다.
+     (콘솔에서 BNCP.junkFix로 확인. 지급대장을 다시 올리면 그 업체 것으로 되살아난다.) */
+  if (!S.fixJunk) {
+    A.junkFix = A.dropNoCoIssue();
+    S.fixJunk = 1;
+  }
 
   /* 규격 한 칸의 지급(또는 회수) 총량을 그 값으로 맞춘다.
      ★줄을 새로 쌓지 않는다 — 같은 자리를 고친다. 그래야 표가 안 길어진다.

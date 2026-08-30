@@ -1315,6 +1315,50 @@ console.log('\n[90] 설정·명부 동기화 — additive 병합(빈 수신이 �
   ok(typeof A._txCfgAll === 'function', 'A._txCfgAll 노출됨(등록·업로드 시 서버로 밀어 올린다)');
 }
 
+/* ★[29] 앞 — 업체가 **비어 있는** 줄이 「미등록 업체」로 서지 않는다 (v2.46.3).
+   사용자 지적 : 「미등록 업체가 갑자기 생겼다 — 준 적이 없다」.
+   「미등록」은 명부에 없는 **이름**을 뜻해야지, 이름이 **아예 없는 것**까지
+   회사로 세우면 화면에 없는 업체가 한 줄 생긴다. */
+console.log('\n[89] 업체 빈 줄이 「미등록 업체」로 서지 않는다 (v2.46.3)');
+{
+  const kVend3 = S.vend.slice(), kIssue3 = S.issue.slice(), kFix = S.fixJunk;
+  S.vend.length = 0;
+  S.vend.push({ name: 'ACME Co', code: 'AC01', staff: ['토공|김담당|010'], key: 'AC01-x' });
+  A.coDirty && A.coDirty();
+
+  /* 빈 업체 → 「미등록 업체」가 아니라 빈 값. 부르는 쪽이 미지정·—로 받아 넘긴다 */
+  ok(A.coOf({ by: '' }, false) === '', '★업체가 비면 빈 값 — 미등록 업체가 아니다');
+  ok(A.coOf({}, false) === '', '★업체 칸 자체가 없어도 빈 값');
+  /* 이름이 있는데 명부에 없을 때만 「미등록 업체」다 (v2.45.0 규칙 유지) */
+  ok(A.coOf({ by: '모르는이름' }, false) === A.T('e_nocomp'),
+     '명부에 없는 **이름**은 종전대로 미등록 업체(v2.45.0 규칙 유지)');
+  ok(A.coOf({ by: '김담당' }, false) === 'ACME Co', '등록 담당자는 종전대로 회사명');
+
+  /* 업체별 집계에 없는 업체 줄이 서지 않는다 — eqRecon은 `if (co)`로 거른다 */
+  S.issue.length = 0;
+  S.issue.push({ id: 'JX1', date: A.today(), cat: '굴착기', size: '06W', kind: 'give', cnt: 3, by: '' });
+  /* ★화면(eqCoHTML)이 실제로 읽는 칸은 gby다 — 그 칸으로 확인한다(0-J) */
+  const rec89 = A.eqRecon({});
+  const cos89 = [];
+  rec89.forEach(function (r) { Object.keys(r.gby || {}).forEach(function (c) { if (cos89.indexOf(c) < 0) cos89.push(c); }); });
+  ok(rec89.length > 0, '업체 없는 지급 줄도 종류별 집계에는 잡힌다(검사가 헛돌지 않게)');
+  ok(cos89.indexOf(A.T('e_nocomp')) < 0,
+     '★업체별 장비에 「미등록 업체」 줄이 서지 않는다(사용자가 본 그 줄)');
+
+  /* 업체 없는 지급 줄 정리 — 화면으로는 만들 수 없는 줄(동기화 결함 잔재)만 지운다 */
+  ok(typeof A.dropNoCoIssue === 'function', 'A.dropNoCoIssue 노출됨');
+  S.issue.length = 0;
+  S.issue.push({ id: 'JK1', date: A.today(), cat: '굴착기', size: '06W', kind: 'give', cnt: 3, by: '' });
+  S.issue.push({ id: 'JG1', date: A.today(), cat: '덤프', size: '15T', kind: 'give', cnt: 2, by: '김담당' });
+  ok(A.dropNoCoIssue() === 1, '★업체 없는 줄 1줄을 덜어냈다');
+  ok(!S.issue.some(function (x) { return x.id === 'JK1'; }), '업체 없는 줄이 없어졌다');
+  ok(S.issue.some(function (x) { return x.id === 'JG1'; }), '★업체 있는 줄은 그대로 남는다(멀쩡한 자료 보호)');
+
+  S.issue.length = 0; kIssue3.forEach(function (x) { S.issue.push(x); });
+  S.vend.length = 0; kVend3.forEach(function (x) { S.vend.push(x); }); A.coDirty && A.coDirty();
+  S.fixJunk = kFix;
+}
+
 /* ── 29 내역서 원본 인식 (v2.14.0) ────────────────────── */
 console.log('\n[29] 내역서 원본 인식 — 실제 P3-1 파일로 검사');
 {
