@@ -1236,20 +1236,34 @@ console.log('\n[90] 설정·명부 동기화 — additive 병합(빈 수신이 �
      '이름 수정은 반영된다');
   S.staff.length = 0; kStaff.forEach(function (x) { S.staff.push(x); });
 
-  /* ── 지급장비(issue) ── */
+  /* ── 지급장비(issue) — ★업체는 `by`에 실린다(coOf가 co||by로 읽는다).
+     v2.46.0은 없는 co를 보내 업체가 빈 채 넘어가 지급대조가 어긋났다.
+     여기서 「받은 줄의 업체가 회사명으로 풀리는지」까지 확인한다(v2.46.1). */
   ok(typeof A._mergeIssue === 'function', 'A._mergeIssue 노출됨');
-  const kIssue = S.issue.slice();
+  const kIssue = S.issue.slice(), kVend2 = S.vend.slice();
+  S.vend.length = 0;
+  S.vend.push({ name: 'PC 협력사', code: 'PC01', staff: ['토공|김담당|010'], key: 'PC01-x' });
+  A.coDirty && A.coDirty();
   S.issue.length = 0;
-  S.issue.push({ id: 'IL1', date: '2026-08-01', loc: 'x', cat: '굴착기', size: '06W', kind: 'give', cnt: 2, co: '로컬사' });
-  ok(A._mergeIssue({ type: 'issue', iid: 'IP1', date: '2026-08-02', loc: 'y', cat: '덤프', size: '15T', kind: 'give', cnt: 3, co: 'PC사' }) === true,
+  S.issue.push({ id: 'IL1', date: '2026-08-01', loc: 'x', cat: '굴착기', size: '06W', kind: 'give', cnt: 2, by: '로컬사' });
+  ok(A._mergeIssue({ type: 'issue', iid: 'IP1', date: '2026-08-02', loc: 'y', cat: '덤프', size: '15T', kind: 'give', cnt: 3, by: '김담당' }) === true,
      '지급장비 한 줄 수신 → upsert');
-  ok(S.issue.some(function (x) { return x.id === 'IP1' && x.cnt === 3; }), '수신 지급장비가 들어왔다');
+  const rxIssue = S.issue.filter(function (x) { return x.id === 'IP1'; })[0];
+  ok(rxIssue && rxIssue.cnt === 3, '수신 지급장비가 들어왔다');
+  ok(rxIssue && A.coOf(rxIssue, false) === 'PC 협력사',
+     '★받은 지급장비의 업체가 회사명으로 풀린다(by 복원 — 안 채우면 이 단언 실패)');
   ok(S.issue.some(function (x) { return x.id === 'IL1'; }), '★로컬 지급장비는 그대로 남는다(union)');
-  ok(A._mergeIssue({ type: 'issue', iid: 'IP1', date: '2026-08-02', loc: 'y', cat: '덤프', size: '15T', kind: 'give', cnt: 3, co: 'PC사' }) === false,
+  ok(A._mergeIssue({ type: 'issue', iid: 'IP1', date: '2026-08-02', loc: 'y', cat: '덤프', size: '15T', kind: 'give', cnt: 3, by: '김담당' }) === false,
      '같은 내용 두 번은 안 센다');
-  ok(A._mergeIssue({ type: 'issue', iid: 'IP1', date: '2026-08-02', loc: 'y', cat: '덤프', size: '15T', kind: 'give', cnt: 5, co: 'PC사' }) === true,
+  ok(A._mergeIssue({ type: 'issue', iid: 'IP1', date: '2026-08-02', loc: 'y', cat: '덤프', size: '15T', kind: 'give', cnt: 5, by: '김담당' }) === true,
      '수량 수정은 반영된다');
+  /* 옛 형식(co만) 수신도 업체가 풀려야 한다 — 호환 */
+  ok(A._mergeIssue({ type: 'issue', iid: 'IP2', date: '2026-08-03', cat: '로더', size: '3T', kind: 'give', cnt: 1, co: '김담당' }) === true,
+     '옛 co 형식 수신도 받는다');
+  const rxOld = S.issue.filter(function (x) { return x.id === 'IP2'; })[0];
+  ok(rxOld && A.coOf(rxOld, false) === 'PC 협력사', '옛 co 형식도 회사명으로 풀린다(호환)');
   S.issue.length = 0; kIssue.forEach(function (x) { S.issue.push(x); });
+  S.vend.length = 0; kVend2.forEach(function (x) { S.vend.push(x); }); A.coDirty && A.coDirty();
 
   /* ── 내역서 별칭(alias/alias2) ── */
   ok(typeof A._mergeAlias === 'function', 'A._mergeAlias 노출됨');

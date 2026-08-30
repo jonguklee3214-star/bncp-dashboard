@@ -552,9 +552,11 @@
   }
   function txIssueAll() {
     S.issue.forEach(function (g) {
+      /* ★업체는 `by`에 있다 (core.eqPut : by:co). coOf가 co||by로 읽는다.
+         v2.46.0에서 없는 co를 보내 업체가 빈 채 넘어가 지급대조가 어긋났다(v2.46.1). */
       txCfg('issue', 'issue|' + g.id,
         { iid: g.id, date: g.date || '', loc: g.loc || '', cat: g.cat || '',
-          size: g.size || '', kind: g.kind || '', cnt: g.cnt, co: g.co || '' });
+          size: g.size || '', kind: g.kind || '', cnt: g.cnt, by: g.by || g.co || '' });
     });
   }
   function txAliasAll() {
@@ -586,12 +588,16 @@
     var api = window.BNCP_API;
     if (!api || !api.on) return;
     S.cfgTx = S.cfgTx || {};
+    /* ★전송 형식이 바뀌면 SIG_V를 올린다 — 옛 서명과 안 맞아 모든 기기가 다음
+       주기에 config 전부를 한 번 다시 보낸다(같은 id upsert라 서버 옛 줄을
+       올바른 값으로 덮는다). v2.46.1 : issue 업체 필드(co→by) 고침 재전송. */
+    var SIG_V = 'v2';
     var sig = {
-      staff: JSON.stringify(S.staff || []),
-      issue: JSON.stringify(S.issue || []),
-      alias: JSON.stringify([S.alias || {}, S.alias2 || {}]),
-      stock: JSON.stringify(S.stock || {}),
-      mt: JSON.stringify(S.mt || {})
+      staff: SIG_V + JSON.stringify(S.staff || []),
+      issue: SIG_V + JSON.stringify(S.issue || []),
+      alias: SIG_V + JSON.stringify([S.alias || {}, S.alias2 || {}]),
+      stock: SIG_V + JSON.stringify(S.stock || {}),
+      mt: SIG_V + JSON.stringify(S.mt || {})
     };
     var changed = false;
     if (sig.staff !== S.cfgTx.staff) { txStaffAll(); S.cfgTx.staff = sig.staff; changed = true; }
@@ -630,15 +636,17 @@
     var hit = null;
     S.issue.forEach(function (g) { if (g.id === r.iid) hit = g; });
     var cnt = (r.cnt === 0 || r.cnt) ? (Number(r.cnt) || 0) : 0;
+    /* ★업체는 `by`다 (coOf가 co||by로 읽는다). 옛 형식(co)도 받아 준다. */
+    var by = r.by || r.co || '';
     var nu = { date: r.date || '', loc: r.loc || '', cat: r.cat || '', size: r.size || '',
-               kind: r.kind || '', cnt: cnt, co: r.co || '' };
+               kind: r.kind || '', cnt: cnt, by: by };
     if (hit) {
-      var ch = hit.date !== nu.date || hit.loc !== nu.loc || hit.cat !== nu.cat ||
-               hit.size !== nu.size || hit.kind !== nu.kind || hit.cnt !== nu.cnt ||
-               hit.co !== nu.co;
+      /* loc은 표시에 안 쓰고 객체라 비교가 불안정하므로 변경 감지에서 뺀다 */
+      var ch = hit.date !== nu.date || hit.cat !== nu.cat || hit.size !== nu.size ||
+               hit.kind !== nu.kind || hit.cnt !== nu.cnt || (hit.by || '') !== by;
       if (!ch) return false;
       hit.date = nu.date; hit.loc = nu.loc; hit.cat = nu.cat; hit.size = nu.size;
-      hit.kind = nu.kind; hit.cnt = nu.cnt; hit.co = nu.co;
+      hit.kind = nu.kind; hit.cnt = nu.cnt; hit.by = by;
     } else {
       nu.id = r.iid; S.issue.push(nu);
     }
