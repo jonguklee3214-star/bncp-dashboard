@@ -1459,6 +1459,7 @@ console.log('\n[87] 시설계수·자재설계수량 수신 · 대량 전송 줄
   const kSt5 = S.staff.slice(), kIs5 = S.issue.slice(), kVd5 = S.vend.slice();
   const kAl5 = JSON.stringify(S.alias || {}), kAl25 = JSON.stringify(S.alias2 || {});
   const kStk5 = JSON.stringify(S.stock || {}), kMt5 = JSON.stringify(S.mt || {});
+  const kGone5 = JSON.stringify(S.gone || []);
   let peak = 0, live = 0, nSent = 0;
   const hold = [];
   API.on = true;
@@ -1470,6 +1471,7 @@ console.log('\n[87] 시설계수·자재설계수량 수신 · 대량 전송 줄
   A._txReset();
   S.cfgTx = {}; S.fac = {}; S.mdesign = {}; S.vend.length = 0;
   S.staff.length = 0; S.issue.length = 0; S.alias = {}; S.alias2 = {}; S.stock = {}; S.mt = {};
+  S.gone = [];                    /* 지운 것 표식도 비운다 — 설계수량만 세려는 검사다 */
   const many = {};
   for (let i = 0; i < 30; i++) many['E' + i] = i + 1;
   S.plan = { 'C|3|1': many };
@@ -1488,8 +1490,94 @@ console.log('\n[87] 시설계수·자재설계수량 수신 · 대량 전송 줄
   S.issue.length = 0; kIs5.forEach(function (x) { S.issue.push(x); });
   S.vend.length = 0; kVd5.forEach(function (x) { S.vend.push(x); }); A.coDirty && A.coDirty();
   S.alias = JSON.parse(kAl5); S.alias2 = JSON.parse(kAl25);
-  S.stock = JSON.parse(kStk5); S.mt = JSON.parse(kMt5);
+  S.stock = JSON.parse(kStk5); S.mt = JSON.parse(kMt5); S.gone = JSON.parse(kGone5);
   API.send = savedSend; API.on = savedOn;
+}
+
+/* ★[29] 앞 — 묶음 전송과 삭제 전파 (v2.48.0) */
+console.log('\n[86] 묶음 전송 · 삭제 전파 (v2.48.0)');
+{
+  const API = sb.BNCP_API;
+  const savedSend = API.send, savedMany = API.sendMany, savedOn = API.on, savedCan = API.canBatch;
+
+  /* ── 묶음 전송 : 재배포 전(canBatch 거짓)에는 절대 묶음을 쓰지 않는다 ──
+     옛 서버에 'batch'를 보내면 모르는 종류라 etc 시트에 통째로 쌓여 자료가 뭉개진다. */
+  let nOne = 0, nMany = 0, packMax = 0;
+  API.on = true;
+  API.send = function () { nOne++; return Promise.resolve({ ok: true }); };
+  API.sendMany = function (rows) { nMany++; if (rows.length > packMax) packMax = rows.length; return Promise.resolve({ ok: true }); };
+
+  const kPlan6 = JSON.stringify(S.plan || {}), kCfg6 = JSON.stringify(S.cfgTx || {});
+  const kGone6 = JSON.stringify(S.gone || []), kVend6 = S.vend.slice();
+  const kStaff6 = S.staff.slice(), kIssue6 = S.issue.slice(), kStock6 = JSON.stringify(S.stock || {});
+  const blank = function () {
+    S.cfgTx = {}; S.gone = []; S.fac = {}; S.mdesign = {}; S.stock = {}; S.mt = {};
+    S.alias = {}; S.alias2 = {}; S.staff.length = 0; S.issue.length = 0; S.vend.length = 0;
+    const m = {}; for (let i = 0; i < 12; i++) m['E' + i] = i + 1;
+    S.plan = { 'C|3|1': m };
+    A._txReset();
+  };
+
+  API.canBatch = false;
+  blank(); A._txCfgAll();
+  ok(nMany === 0, '★서버가 묶음을 모르면 묶음으로 안 보낸다(재배포 전 자료 보호)');
+  ok(nOne > 0, '재배포 전에는 종전대로 한 줄씩 보낸다');
+
+  API.canBatch = true;
+  nOne = 0; nMany = 0;
+  blank(); A._txCfgAll();
+  ok(nMany > 0, '★서버가 묶음을 알면 묶음으로 보낸다');
+  ok(packMax > 1, '★한 요청에 여러 줄이 실린다(왕복이 줄어든다)');
+
+  /* ── 삭제 전파 ── */
+  A._txReset(); S.cfgTx = {}; S.gone = [];
+  S.vend.length = 0;
+  S.vend.push({ name: '지울업체', code: 'DEL1', staff: [], key: 'k' });
+  A.vendDel('DEL1');
+  ok((S.gone || []).some(function (g) { return g.t === 'vend' && g.k === 'DEL1'; }),
+     '★지우면 표식이 남는다(전송 실패해도 잊지 않는다)');
+
+  const sent = [];
+  API.canBatch = false;
+  API.send = function (type, body) { sent.push({ type: type, body: body }); return Promise.resolve({ ok: true }); };
+  A._txReset(); S.cfgTx = {};
+  A._txCfgAll();
+  const all2 = sent.concat(A._txPeek());
+  const tomb = all2.filter(function (x) { return x.type === 'vend' && x.body.del; })[0];
+  ok(!!tomb, '★지운 것이 del 표식으로 서버에 올라간다');
+  ok(tomb && tomb.body.id === 'vend|DEL1',
+     '★올릴 때와 **같은 id**로 보낸다(다르면 줄이 둘이 되어 되살아난다)');
+
+  /* 받는 쪽 — del이 참일 때만 지운다 */
+  S.vend.length = 0;
+  S.vend.push({ name: '지울업체', code: 'DEL1', staff: [], key: 'k' });
+  S.vend.push({ name: '남을업체', code: 'KEEP1', staff: [], key: 'k2' });
+  ok(A._mergeVend({ type: 'vend', code: 'DEL1', del: 1 }) === true, '삭제 표식을 받으면 지운다');
+  ok(!S.vend.some(function (v) { return v.code === 'DEL1'; }), '★다른 기기에서도 사라진다');
+  ok(S.vend.some(function (v) { return v.code === 'KEEP1'; }), '남은 업체는 그대로다');
+  ok(A._mergeVend({ type: 'vend', code: 'DEL1', del: 1 }) === false, '이미 없으면 두 번 안 센다');
+  /* ★del 없는 줄은 절대 안 지운다 — 빈 값을 지움으로 읽으면 v2.46 사고가 되풀이된다 */
+  ok(A._mergeVend({ type: 'vend', code: 'KEEP1', name: '남을업체' }) === false, 'del 없는 줄은 안 지운다');
+  ok(S.vend.some(function (v) { return v.code === 'KEEP1'; }), '★del 없이는 절대 안 지운다');
+
+  /* 담당자·지급장비·재고도 같은 규칙 */
+  S.staff.length = 0; S.staff.push({ id: 'SD1', name: '지울사람', tel: '', grps: [] });
+  ok(A._mergeStaff({ type: 'staff', sid: 'SD1', del: 1 }) === true, '담당자 삭제 표식이 먹는다');
+  ok(!S.staff.some(function (m) { return m.id === 'SD1'; }), '담당자가 사라졌다');
+  S.issue.length = 0; S.issue.push({ id: 'ID1', cat: '덤프', size: '15T', kind: 'give', cnt: 1, by: '가' });
+  ok(A._mergeIssue({ type: 'issue', iid: 'ID1', del: 1 }) === true, '지급장비 삭제 표식이 먹는다');
+  ok(!S.issue.some(function (g) { return g.id === 'ID1'; }), '지급장비가 사라졌다');
+  S.stock = { 'C|3|1': { m1: 5, m2: 9 } };
+  ok(A._mergeStock({ type: 'stock', lk: 'C|3|1', mid: 'm1', del: 1 }) === true, '재고 삭제 표식이 먹는다');
+  ok(S.stock['C|3|1'].m1 === undefined && S.stock['C|3|1'].m2 === 9, '★그 칸만 지우고 옆칸은 지킨다');
+
+  S.plan = JSON.parse(kPlan6); S.cfgTx = JSON.parse(kCfg6); S.gone = JSON.parse(kGone6);
+  S.stock = JSON.parse(kStock6);
+  S.vend.length = 0; kVend6.forEach(function (x) { S.vend.push(x); }); A.coDirty && A.coDirty();
+  S.staff.length = 0; kStaff6.forEach(function (x) { S.staff.push(x); });
+  S.issue.length = 0; kIssue6.forEach(function (x) { S.issue.push(x); });
+  A._txReset();
+  API.send = savedSend; API.sendMany = savedMany; API.on = savedOn; API.canBatch = savedCan;
 }
 
 /* ── 29 내역서 원본 인식 (v2.14.0) ────────────────────── */

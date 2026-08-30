@@ -245,5 +245,49 @@ ok(post({ type: 'login', pw: 'x' }).ok === false, '틀린 비밀번호는 거절
   ok(cp === gs, '★tools/AppsScript_Code.gs가 Code.gs와 같다 (사본이 낡지 않았다)');
 }
 
+/* ══ 9 묶음 저장 (v6 · v2.48.0) ═══════════════════════ */
+console.log('\n[G9] 묶음 저장 — 한 요청에 여러 줄, 잠금은 한 번');
+{
+  const rd = t => {
+    const sh = book.getSheetByName(t);
+    return sh ? sh._v.slice(1).map(r => { try { return JSON.parse(r[11]); } catch (e) { return {}; } }) : [];
+  };
+  const r1 = post({ type: 'batch', rows: [
+    { type: 'work', id: 'B1', s: 'civil', key: 'E1', qty: 1 },
+    { type: 'work', id: 'B2', s: 'civil', key: 'E2', qty: 2 },
+    { type: 'vend', id: 'vend|VB', type2: '', code: 'VB', name: '묶음업체' }
+  ] });
+  ok(r1.ok === true && r1.batch === true, '묶음을 받아들인다');
+  ok(r1.n === 3, '세 줄을 처리했다');
+  ok(rd('work').filter(o => o.id === 'B1' || o.id === 'B2').length === 2, '★work 시트에 두 줄이 들어갔다');
+  ok(rd('etc').some(o => o.id === 'vend|VB'), '★모르는 종류는 etc로 간다(종전 규칙 그대로)');
+
+  /* 같은 id를 다시 보내면 덮어쓴다 — 줄이 늘지 않는다 */
+  const before = book.getSheetByName('work').getLastRow();
+  const r2 = post({ type: 'batch', rows: [{ type: 'work', id: 'B1', s: 'civil', key: 'E1', qty: 99 }] });
+  ok(r2.ok === true, '다시 보내도 받아들인다');
+  ok(book.getSheetByName('work').getLastRow() === before, '★같은 id는 덮어쓴다(줄이 안 는다)');
+  ok(rd('work').filter(o => o.id === 'B1')[0].qty === 99, '덮어쓴 값이 남는다');
+
+  /* ★한 묶음 안에 같은 id가 두 번 — 줄이 둘이 되면 안 된다 */
+  const b3 = book.getSheetByName('work').getLastRow();
+  post({ type: 'batch', rows: [
+    { type: 'work', id: 'B9', s: 'civil', key: 'E9', qty: 1 },
+    { type: 'work', id: 'B9', s: 'civil', key: 'E9', qty: 7 }
+  ] });
+  ok(book.getSheetByName('work').getLastRow() === b3 + 1, '★한 묶음 안 같은 id는 한 줄만 생긴다');
+  ok(rd('work').filter(o => o.id === 'B9').length === 1, '중복 줄이 안 생겼다');
+
+  ok(post({ type: 'batch', rows: [] }).ok === true, '빈 묶음도 탈 없이 넘어간다');
+
+  /* ★옛 단건 갈래가 그대로 돈다 — 재배포 전 화면이 계속 동작해야 한다 */
+  const r4 = post({ type: 'work', id: 'S1x', s: 'civil', key: 'E1', qty: 5 });
+  ok(r4.ok === true && r4.mode, '★단건 저장이 종전대로 동작한다');
+
+  /* ★meta가 묶음 가능함을 알린다 — 화면은 이것을 보고서야 묶음을 쓴다 */
+  const meta = JSON.parse(sb.doGet({ parameter: { action: 'meta' } }).getContent());
+  ok(meta.ok === true && meta.batch === true, '★meta가 batch:true로 알린다(재배포 판별)');
+}
+
 console.log(fail ? `\n✗ 실패 ${fail}건\n` : '\n✓ 전부 통과\n');
 process.exit(fail ? 1 : 0);

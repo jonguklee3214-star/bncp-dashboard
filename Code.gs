@@ -201,6 +201,56 @@ function doPost(e) {
     /* 로그인은 시트를 건드리지 않으므로 잠금 없이 먼저 처리한다 */
     if (b.type === 'login') return json_(login_(b.pw));
 
+    /* ══ 묶음 저장 (v6 · v2.48.0) ═══════════════════════════
+       ★한 줄에 요청 하나였다. 설계수량은 **칸 하나가 한 줄**이라 한 현장에 수백~수천
+         요청이 되고, 아래 doPost는 waitLock으로 쓰기를 한 줄로 세운다. 그래서
+         받는 데 아주 오래 걸렸다(사용자 확인).
+       ★이제 여러 줄을 한 요청으로 받는다. **잠금을 한 번만 잡고**, 시트마다 id 지도를
+         한 번만 읽고, 새 줄은 모아서 한 번에 붙인다. 왕복도 잠금도 한 번이다.
+       ★단건 갈래(아래)는 그대로 둔다 — 옛 화면이 계속 돌아야 한다.
+       ★화면은 meta의 batch:true를 보고서야 이 길을 쓴다. 재배포 전이면 안 쓴다 —
+         모르는 종류로 왔다가 etc 시트에 통째로 쌓이면 자료가 뭉개지기 때문이다. */
+    if (b.type === 'batch') {
+      var rows = b.rows || [];
+      if (!rows.length) return json_({ ok: true, n: 0 });
+      lock.waitLock(30000);
+      var bag = {}, i, r, nm;
+      for (i = 0; i < rows.length; i++) {
+        r = rows[i];
+        if (!r || !r.id) continue;
+        nm = sheetName_(r.type);
+        if (!bag[nm]) bag[nm] = [];
+        bag[nm].push(r);
+      }
+      var n = 0;
+      for (nm in bag) {
+        if (!Object.prototype.hasOwnProperty.call(bag, nm)) continue;
+        var sh2 = getSheetByName_(nm);
+        var map2 = idMap_(sh2);
+        var add = [], last2 = sh2.getLastRow();
+        for (i = 0; i < bag[nm].length; i++) {
+          r = bag[nm][i];
+          var row2 = rowOf_(r, JSON.stringify(r));
+          var at2 = map2[String(r.id)];
+          if (at2) {
+            sh2.getRange(at2, 1, 1, COLS.length).setValues([row2]);
+          } else {
+            add.push(row2);
+            /* ★같은 묶음 안에 같은 id가 또 오면 방금 붙일 자리를 가리키게 해 둔다 —
+               안 그러면 한 묶음에서 같은 id가 두 줄이 된다. */
+            map2[String(r.id)] = last2 + add.length;
+          }
+          n++;
+        }
+        if (add.length) {
+          sh2.getRange(last2 + 1, 1, add.length, COLS.length).setValues(add);
+        }
+        /* 행번호가 달라졌다 — 캐시를 지운다(다음에 다시 읽어 바로잡는다) */
+        try { CacheService.getScriptCache().remove(cacheKey_(sh2)); } catch (eB) { }
+      }
+      return json_({ ok: true, n: n, batch: true });
+    }
+
     lock.waitLock(20000);
     var sh = sheetFor_(b.type);          /* ★v5 — 종류에 맞는 시트 */
     var row = rowOf_(b, raw);
@@ -264,7 +314,10 @@ function doGet(e) {
       for (var b0 = 0; b0 < shs0.length; b0++) {
         cells += shs0[b0].getMaxRows() * shs0[b0].getMaxColumns();
       }
-      return json_({ ok: true, last: mx, count: cnt,
+      /* ★batch:true — 「나는 묶음 저장을 받을 줄 안다」는 알림 (v6 · v2.48.0).
+         화면은 이것을 보고서야 묶음으로 보낸다. 재배포하지 않은 서버는 이 칸이
+         없으므로 화면이 종전대로 한 줄씩 보낸다 — 재배포 전에도 안 깨진다. */
+      return json_({ ok: true, last: mx, count: cnt, batch: true,
                      cells: cells, cellCap: CELL_CAP,
                      cellPct: Math.min(100, Math.round(cells / CELL_CAP * 100)) });
     } catch (err0) {

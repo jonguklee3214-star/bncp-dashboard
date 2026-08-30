@@ -93,7 +93,8 @@
     tab: 1,                       /* ★마지막으로 보던 탭 — 다시 들어오면 그 자리(v2.16.2) */
     rxLast: '',                   /* ★서버에서 마지막으로 받은 시각 — 증분 수신 기준(v2.19.3) */
     cfgTx: {},                    /* ★설정·명부 전송 완료 서명 — 바뀐 것만 다시 올린다(v2.46.0) */
-    fixJunk: 0                    /* ★업체 없는 지급 줄 정리를 한 번 돌렸는가(v2.46.3) */
+    fixJunk: 0,                   /* ★업체 없는 지급 줄 정리를 한 번 돌렸는가(v2.46.3) */
+    gone: []                      /* ★지운 것 표식 — 다른 기기에도 지우라고 알린다(v2.48.0) */
   };
   function load() {
     try {
@@ -512,13 +513,30 @@
   /** ★명부 전체를 비운다. 되돌릴 수 없다 — 부르는 쪽에서 반드시 확인을 받는다. */
   A.vendReset = function () {
     var n = S.vend.length;
+    S.vend.forEach(function (v) { A.tomb('vend', v.code); });   /* ★전체 삭제도 알린다 */
     S.vend = [];
     A.save();
     return n;
   };
 
+  /** ★지운 것 표식(tombstone) — v2.48.0.
+      ★동기화는 여태 **추가·수정만** 옮겼다. 그래서 PC에서 지운 업체·담당자가 모바일에
+        남았고, 그 기기가 다시 올리면 **되살아났다.** 지우는 것도 「한 줄 보내기」로
+        바꾼다 : 같은 id로 del:1을 보내면 서버가 그 줄을 덮고, 받는 기기가 지운다.
+        서버에 id마다 줄이 하나뿐이라 다시 살아나지 않는다.
+      ★t = 종류(vend·staff·issue·stock), k = 그 종류의 열쇠. */
+  A.tomb = function (t, k) {
+    if (!t || !k) return;
+    S.gone = S.gone || [];
+    for (var i = 0; i < S.gone.length; i++) {
+      if (S.gone[i].t === t && S.gone[i].k === k) return;   /* 이미 적어 뒀다 */
+    }
+    S.gone.push({ t: t, k: String(k), at: A.today() });
+  };
+
   A.vendDel = function (code) {
     S.vend = S.vend.filter(function (v) { return v.code !== code; });
+    A.tomb('vend', code);
     A.save();
   };
   A.vendStaffDel = function (code, staff) {
@@ -991,6 +1009,7 @@
   };
   A.delIssueRow = function (id) {
     S.issue = S.issue.filter(function (x) { return x.id !== id; });
+    A.tomb('issue', id);                 /* ★다른 기기에서도 지운다 (v2.48.0) */
     A.save();
   };
 
@@ -1796,6 +1815,7 @@
   A.staffDel = function (id) {
     S.staff = S.staff.filter(function (x) { return x.id !== id; });
     if (S.me === id) S.me = '';          /* ★지운 사람으로 남아 있으면 안 된다 */
+    A.tomb('staff', id);                 /* ★다른 기기에서도 지운다 (v2.48.0) */
     A.save();
   };
   /** 그 공종그룹을 맡은 사람들 — ★여럿일 수 있다 */
@@ -2400,7 +2420,7 @@
   A.setStock = function (f, id, qty) {
     var k = A.locKey(f);
     S.stock[k] = S.stock[k] || {};
-    if (qty === '' || qty == null) delete S.stock[k][id];
+    if (qty === '' || qty == null) { delete S.stock[k][id]; A.tomb('stock', k + '|' + id); }
     else S.stock[k][id] = Number(qty) || 0;
     A.save();
   };

@@ -12,7 +12,8 @@
     log: [],      // 최근 통신 결과 50건
     rxAt: '',     // 마지막 수신 시각(내 시계 — 표시용)
     last: '',     // ★서버가 알려준 마지막 수신시각 — 다음 조회의 since
-    rxErr: ''     // 마지막 수신 오류
+    rxErr: '',    // 마지막 수신 오류
+    canBatch: false  // ★서버가 묶음 저장을 받는가 — meta가 알려준다(v2.48.0)
   };
 
   function rec(kind, type) {
@@ -51,6 +52,39 @@
         r.err = String((e && e.message) || e);
         return r;
       });
+  };
+
+  /* ── 묶음 전송 (v2.48.0) ─────────────────────────────
+     ★한 줄에 요청 하나면 설계수량 수천 건이 수천 왕복이 된다. 서버는 쓰기를 한 줄로
+       세우므로(waitLock) 받는 데 아주 오래 걸렸다 — 사용자가 확인한 그 느림이다.
+     ★여러 줄을 한 요청으로 보낸다. 서버는 잠금을 한 번만 잡는다.
+     ★쓸 수 있는지는 meta의 batch로 안다 — API.cap.batch가 참일 때만 부를 것.
+       재배포 안 한 서버에 보내면 모르는 종류라 etc 시트에 통째로 쌓여 자료가 뭉개진다.
+     ★100줄씩 잘라 보낸다(Apps Script 실행시간·본문 크기 여유). */
+  API.BATCH_MAX = 100;
+  API.sendMany = function (rows) {
+    var list = (rows || []).filter(function (r) { return r && r.id; });
+    var r = rec('tx', 'batch');
+    r.row = list.length;
+    if (!live() || !list.length) { r.ok = false; r.err = 'no transport'; return Promise.resolve(r); }
+
+    var packs = [], i;
+    for (i = 0; i < list.length; i += API.BATCH_MAX) packs.push(list.slice(i, i + API.BATCH_MAX));
+
+    /* 한 묶음씩 차례로 — 서버가 어차피 한 줄로 세운다. 동시에 쏠 이유가 없다. */
+    var okAll = true;
+    return packs.reduce(function (chain, pack) {
+      return chain.then(function () {
+        return fetch(API.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ type: 'batch', rows: pack })
+        })
+          .then(function (res) { return res.json(); })
+          .then(function (d) { if (!d || !d.ok) { okAll = false; r.err = (d && d.err) || 'rejected'; } })
+          .catch(function (e) { okAll = false; r.err = String((e && e.message) || e); });
+      });
+    }, Promise.resolve()).then(function () { r.ok = okAll; return r; });
   };
 
   /* ── 수신 ───────────────────────────────────────────
@@ -93,6 +127,9 @@
         if (d && d.ok && d.cellPct != null) {
           API.cap = { cells: d.cells, cap: d.cellCap, pct: d.cellPct, rows: d.count };
         }
+        /* ★서버가 묶음을 받을 줄 아는가 (v2.48.0). meta는 동기화마다 도는 길이라
+           따로 물으러 갈 필요가 없다. 옛 서버는 이 칸이 없어 false로 남는다. */
+        if (d && d.ok) API.canBatch = !!d.batch;
         return (d && d.ok) ? d : null;
       })
       .catch(function () { return null; });

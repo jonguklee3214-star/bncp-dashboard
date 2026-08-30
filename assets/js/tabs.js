@@ -508,21 +508,37 @@
   function txPump() {
     var api = window.BNCP_API;
     if (!api || !api.on) { txQ.length = 0; txRun = 0; return; }
+    /* ★서버가 묶음을 받을 줄 알면 한 요청에 여러 줄을 실어 보낸다 (v2.48.0).
+       한 줄에 한 요청이면 설계수량 수천 건이 수천 왕복이 된다 — 사용자가 겪은 느림.
+       ★재배포 전(canBatch 거짓)에는 종전대로 한 줄씩 — 모르는 종류로 보내면
+         etc 시트에 통째로 쌓여 자료가 뭉개지므로 **절대 먼저 쓰지 않는다.** */
+    var many = api.canBatch && typeof api.sendMany === 'function';
     while (txRun < TX_MAX && txQ.length) {
-      var it = txQ.shift();
       txRun++;
       try {
-        api.send(it[0], it[1]).then(fin, fin);
+        if (many) {
+          var pack = txQ.splice(0, api.BATCH_MAX || 100).map(function (x) {
+            var b = x[1]; b.type = b.type || x[0]; return b;
+          });
+          api.sendMany(pack).then(fin, fin);
+        } else {
+          var it = txQ.shift();
+          api.send(it[0], it[1]).then(fin, fin);
+        }
       } catch (e) { fin(); }
     }
     function fin() { txRun--; txPump(); }
   }
-  /** 묶음 전송 한 줄을 줄에 세운다. 보내는 내용은 부르는 쪽이 정한다. */
+  /** 묶음 전송 한 줄을 줄에 세운다. 보내는 내용은 부르는 쪽이 정한다.
+      ★txHold 동안에는 줄에 쌓기만 한다 (v2.48.0). 한 줄 넣을 때마다 곧바로 보내면
+        묶음이 **한 줄짜리**가 되어 묶는 뜻이 없다. 묶음 전송(txCfgAll)은 다 쌓은 뒤
+        한 번만 깨운다. */
+  var txHold = false;
   function txSend(type, body) {
     var api = window.BNCP_API;
     if (!api || !api.on) return;
     txQ.push([type, body]);
-    txPump();
+    if (!txHold) txPump();
   }
   A._txQlen = function () { return txQ.length; };     /* 검사에서 본다 */
   A._txRun = function () { return txRun; };
@@ -541,7 +557,17 @@
      다시 만든다(coDirty) — 사람 이름으로 올라온 것도 곧바로 회사로 묶인다.
      반환 : 실제로 바뀌었으면 true(수신 건수에 센다). */
   function mergeVend(r) {
-    if (!r || !r.code || !r.name) return false;
+    if (!r || !r.code) return false;
+    /* ★지운 것 표식 (v2.48.0) — del이 **참일 때만** 지운다. 빈 값·없는 칸은 절대
+       지움으로 보지 않는다(v2.46의 교훈 : 빈 값을 뜻 있는 값으로 읽으면 사고가 난다). */
+    if (r.del) {
+      var had = S.vend.some(function (v) { return v.code === r.code; });
+      if (!had) return false;
+      S.vend = S.vend.filter(function (v) { return v.code !== r.code; });
+      A.coDirty();
+      return true;
+    }
+    if (!r.name) return false;
     var hit = null;
     S.vend.forEach(function (v) { if (v.code === r.code) hit = v; });
     var stf = Array.isArray(r.staff) ? r.staff : (r.staff ? [String(r.staff)] : []);
@@ -627,6 +653,22 @@
         txCfg('mdes', 'mdes|' + lk + '|' + id, { lk: lk, mid: id, qty: md[lk][id] });
     }
   }
+  /* ★지운 것 표식을 보낸다 (v2.48.0). 같은 id에 del:1을 실어 보내면 서버가 그 줄을
+     덮고, 다른 기기가 받아서 지운다. id는 각 종류가 올릴 때 쓰는 것과 **같아야** 한다 —
+     달라지면 서버에 줄이 둘이 되어 지운 것이 되살아난다. */
+  function txGoneAll() {
+    (S.gone || []).forEach(function (g) {
+      if (!g || !g.t || !g.k) return;
+      if (g.t === 'vend')  return txCfg('vend',  'vend|' + g.k,  { code: g.k, del: 1 });
+      if (g.t === 'staff') return txCfg('staff', 'staff|' + g.k, { sid: g.k, del: 1 });
+      if (g.t === 'issue') return txCfg('issue', 'issue|' + g.k, { iid: g.k, del: 1 });
+      if (g.t === 'stock') {
+        var p = String(g.k).split('|');            /* 위치키(C|3|1) + 자재id */
+        var mid = p.pop(), lk = p.join('|');
+        return txCfg('stock', 'stock|' + lk + '|' + mid, { lk: lk, mid: mid, del: 1 });
+      }
+    });
+  }
   function txMtAll() {
     var mt = S.mt || {}, id;
     for (id in mt) if (Object.prototype.hasOwnProperty.call(mt, id)) {
@@ -641,6 +683,10 @@
   function txCfgAll() {
     var api = window.BNCP_API;
     if (!api || !api.on) return;
+    txHold = true;               /* ★다 쌓은 뒤 한 번에 보낸다 — 묶음이 커진다 */
+    try { txCfgCollect(); } finally { txHold = false; txPump(); }
+  }
+  function txCfgCollect() {
     S.cfgTx = S.cfgTx || {};
     /* ★전송 형식이 바뀌면 SIG_V를 올린다 — 옛 서명과 안 맞아 모든 기기가 다음
        주기에 config 전부를 한 번 다시 보낸다(같은 id upsert라 서버 옛 줄을
@@ -660,7 +706,8 @@
       vend: SIG_V + JSON.stringify(S.vend || []),
       plan: SIG_V + JSON.stringify(S.plan || {}),
       fac: SIG_V + JSON.stringify(S.fac || {}),
-      mdes: SIG_V + JSON.stringify(S.mdesign || {})
+      mdes: SIG_V + JSON.stringify(S.mdesign || {}),
+      gone: SIG_V + JSON.stringify(S.gone || [])
     };
     var changed = false;
     if (sig.staff !== S.cfgTx.staff) { txStaffAll(); S.cfgTx.staff = sig.staff; changed = true; }
@@ -672,6 +719,7 @@
     if (sig.plan !== S.cfgTx.plan) { txPlanEvery(); S.cfgTx.plan = sig.plan; changed = true; }
     if (sig.fac !== S.cfgTx.fac) { txFacAll(); S.cfgTx.fac = sig.fac; changed = true; }
     if (sig.mdes !== S.cfgTx.mdes) { txMdesAll(); S.cfgTx.mdes = sig.mdes; changed = true; }
+    if (sig.gone !== S.cfgTx.gone) { txGoneAll(); S.cfgTx.gone = sig.gone; changed = true; }
     if (changed) A.save();
   }
   A._txCfgAll = txCfgAll;   /* 검사에서 부른다 */
@@ -681,7 +729,15 @@
      삭제 전파는 하지 않는다(vend·plan과 동일 — tombstone 미구현).
      각 함수 반환 : 실제로 바뀌었으면 true(수신 건수에 센다). */
   function mergeStaff(r) {
-    if (!r || !r.sid || !r.name) return false;
+    if (!r || !r.sid) return false;
+    if (r.del) {                       /* ★지운 것 표식 (v2.48.0) */
+      var hadS = S.staff.some(function (m) { return m.id === r.sid; });
+      if (!hadS) return false;
+      S.staff = S.staff.filter(function (m) { return m.id !== r.sid; });
+      if (S.me === r.sid) S.me = '';
+      return true;
+    }
+    if (!r.name) return false;
     var hit = null;
     S.staff.forEach(function (m) { if (m.id === r.sid) hit = m; });
     var grps = Array.isArray(r.grps) ? r.grps : (r.grps ? [String(r.grps)] : []);
@@ -700,6 +756,12 @@
   }
   function mergeIssue(r) {
     if (!r || !r.iid) return false;
+    if (r.del) {                       /* ★지운 것 표식 (v2.48.0) */
+      var hadI = S.issue.some(function (g) { return g.id === r.iid; });
+      if (!hadI) return false;
+      S.issue = S.issue.filter(function (g) { return g.id !== r.iid; });
+      return true;
+    }
     var hit = null;
     S.issue.forEach(function (g) { if (g.id === r.iid) hit = g; });
     var cnt = (r.cnt === 0 || r.cnt) ? (Number(r.cnt) || 0) : 0;
@@ -744,6 +806,11 @@
   function mergeStock(r) {
     if (!r || !r.lk || !r.mid) return false;
     S.stock = S.stock || {};
+    if (r.del) {                       /* ★지운 것 표식 (v2.48.0) */
+      if (!S.stock[r.lk] || S.stock[r.lk][r.mid] == null) return false;
+      delete S.stock[r.lk][r.mid];
+      return true;
+    }
     S.stock[r.lk] = S.stock[r.lk] || {};
     var qty = Number(r.qty) || 0;
     if (S.stock[r.lk][r.mid] === qty) return false;
