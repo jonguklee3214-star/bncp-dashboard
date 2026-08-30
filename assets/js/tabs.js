@@ -497,13 +497,44 @@
      쓰게 한다. id를 'vend|코드'로 고정해 다시 올리면 그 줄을 덮어쓴다(upsert).
      ★모르는 종류라 서버 etc 시트에 원문으로 쌓이고 무type 수신으로 되돌아온다
        (Code.gs 재배포 불필요 — 'stop'과 같은 길). */
-  function txVend(v) {
+  /* ★묶음 전송을 줄 세운다 (v2.47.0). 설계수량은 **칸 하나가 한 줄**이라 한 현장에
+     수백~수천 건이다. 종전에는 전부 동시에 쐈는데, 서버(Code.gs doPost)는
+     LockService.waitLock(20000)으로 쓰기를 한 줄로 세운다 — 뒤쪽은 20초 잠금 대기를
+     넘겨 실패하고, 전송 실패는 무시하도록 돼 있어 **조용히 사라진다.** 모바일
+     설계수량이 「일부만」 맞던 자리다.
+     ★동시 3건까지만 보내고 나머지는 차례를 기다린다. 느려지는 게 아니라, 버려지지
+       않는다. txBack·txDirect(응답으로 row.up을 찍는 갈래)는 건드리지 않는다. */
+  var txQ = [], txRun = 0, TX_MAX = 3;
+  function txPump() {
     var api = window.BNCP_API;
-    if (!api || !api.on || !v || !v.code) return;
-    try {
-      api.send('vend', { id: 'vend|' + v.code, type: 'vend', code: v.code,
-        name: v.name || '', staff: v.staff || [], key: v.key || '', tel: v.tel || '' });
-    } catch (e) { /* 전송 실패는 무시 — 로컬이 우선 */ }
+    if (!api || !api.on) { txQ.length = 0; txRun = 0; return; }
+    while (txRun < TX_MAX && txQ.length) {
+      var it = txQ.shift();
+      txRun++;
+      try {
+        api.send(it[0], it[1]).then(fin, fin);
+      } catch (e) { fin(); }
+    }
+    function fin() { txRun--; txPump(); }
+  }
+  /** 묶음 전송 한 줄을 줄에 세운다. 보내는 내용은 부르는 쪽이 정한다. */
+  function txSend(type, body) {
+    var api = window.BNCP_API;
+    if (!api || !api.on) return;
+    txQ.push([type, body]);
+    txPump();
+  }
+  A._txQlen = function () { return txQ.length; };     /* 검사에서 본다 */
+  A._txRun = function () { return txRun; };
+  A._txPeek = function () {                            /* 아직 줄에 선 것 */
+    return txQ.map(function (x) { return { type: x[0], body: x[1] }; });
+  };
+  A._txReset = function () { txQ.length = 0; txRun = 0; };
+
+  function txVend(v) {
+    if (!v || !v.code) return;
+    txSend('vend', { id: 'vend|' + v.code, type: 'vend', code: v.code,
+      name: v.name || '', staff: v.staff || [], key: v.key || '', tel: v.tel || '' });
   }
   function txVendAll() { S.vend.forEach(txVend); }
   /* ★서버에서 받은 명부 한 줄을 S.vend에 code로 upsert. 바뀌면 회사명 색인을
@@ -539,10 +570,8 @@
        쌓였다가 무type 수신으로 원문 그대로 돌아온다(Code.gs 재배포 불필요).
      ★id를 '종류|키'로 고정해 다시 보내면 그 줄을 덮어쓴다(upsert). */
   function txCfg(type, id, body) {
-    var api = window.BNCP_API;
-    if (!api || !api.on) return;
     body.type = type; body.id = id;
-    try { api.send(type, body); } catch (e) { /* 전송 실패는 무시 — 로컬이 우선 */ }
+    txSend(type, body);          /* ★줄 세워 보낸다 (v2.47.0) */
   }
   function txStaffAll() {
     S.staff.forEach(function (m) {
@@ -577,6 +606,27 @@
         txCfg('stock', 'stock|' + lk + '|' + mid, { lk: lk, mid: mid, qty: st[lk][mid] });
     }
   }
+  /* ★시설 계수(v2.47.0) — {위치키:{시설id:[숫자…]}}. **설계량 계산에 쓰인다**
+     (core.js planQty) → 안 맞으면 진행률이 기기마다 다르다. 값이 배열이라 그대로
+     싣는다(원본JSON으로 왕복 — Code.gs 무수정). */
+  function txFacAll() {
+    var fc = S.fac || {}, lk, id;
+    for (lk in fc) if (Object.prototype.hasOwnProperty.call(fc, lk)) {
+      for (id in fc[lk]) if (Object.prototype.hasOwnProperty.call(fc[lk], id)) {
+        var v = fc[lk][id];
+        if (!v || !v.length) continue;          /* 빈 것은 안 올린다 — 남의 것을 덮는다 */
+        txCfg('fac', 'fac|' + lk + '|' + id, { lk: lk, fid: id, cnt: v });
+      }
+    }
+  }
+  /* ★자재 설계수량 (v2.47.0) — {위치키:{자재id:수량}} (core.js setDesign) */
+  function txMdesAll() {
+    var md = S.mdesign || {}, lk, id;
+    for (lk in md) if (Object.prototype.hasOwnProperty.call(md, lk)) {
+      for (id in md[lk]) if (Object.prototype.hasOwnProperty.call(md[lk], id))
+        txCfg('mdes', 'mdes|' + lk + '|' + id, { lk: lk, mid: id, qty: md[lk][id] });
+    }
+  }
   function txMtAll() {
     var mt = S.mt || {}, id;
     for (id in mt) if (Object.prototype.hasOwnProperty.call(mt, id)) {
@@ -595,14 +645,22 @@
     /* ★전송 형식이 바뀌면 SIG_V를 올린다 — 옛 서명과 안 맞아 모든 기기가 다음
        주기에 config 전부를 한 번 다시 보낸다(같은 id upsert라 서버 옛 줄을
        올바른 값으로 덮는다). v2.46.1 : issue 업체 필드(co→by) 고침 재전송.
-       v2.46.2 : 빈 by 줄을 안 올리도록 고친 뒤 서버의 옛(빈 by) 줄을 덮으러 재전송. */
-    var SIG_V = 'v3';
+       v2.46.2 : 빈 by 줄을 안 올리도록 고친 뒤 서버의 옛(빈 by) 줄을 덮으러 재전송.
+       v2.47.0 : 명부·설계수량·시설계수·자재설계수량을 새로 담아 1회 전송. */
+    var SIG_V = 'v4';
+    /* ★v2.47.0 — 여기 담기지 않은 것은 「등록하는 그 순간」에만 올라간다. 그래서
+       그 전에 등록해 둔 자료는 서버에 한 번도 안 올라가 다른 기기가 못 받았다.
+       사람이 넣는 기준자료는 **빠짐없이 여기에 담는다.** */
     var sig = {
       staff: SIG_V + JSON.stringify(S.staff || []),
       issue: SIG_V + JSON.stringify(S.issue || []),
       alias: SIG_V + JSON.stringify([S.alias || {}, S.alias2 || {}]),
       stock: SIG_V + JSON.stringify(S.stock || {}),
-      mt: SIG_V + JSON.stringify(S.mt || {})
+      mt: SIG_V + JSON.stringify(S.mt || {}),
+      vend: SIG_V + JSON.stringify(S.vend || []),
+      plan: SIG_V + JSON.stringify(S.plan || {}),
+      fac: SIG_V + JSON.stringify(S.fac || {}),
+      mdes: SIG_V + JSON.stringify(S.mdesign || {})
     };
     var changed = false;
     if (sig.staff !== S.cfgTx.staff) { txStaffAll(); S.cfgTx.staff = sig.staff; changed = true; }
@@ -610,6 +668,10 @@
     if (sig.alias !== S.cfgTx.alias) { txAliasAll(); S.cfgTx.alias = sig.alias; changed = true; }
     if (sig.stock !== S.cfgTx.stock) { txStockAll(); S.cfgTx.stock = sig.stock; changed = true; }
     if (sig.mt !== S.cfgTx.mt) { txMtAll(); S.cfgTx.mt = sig.mt; changed = true; }
+    if (sig.vend !== S.cfgTx.vend) { txVendAll(); S.cfgTx.vend = sig.vend; changed = true; }
+    if (sig.plan !== S.cfgTx.plan) { txPlanEvery(); S.cfgTx.plan = sig.plan; changed = true; }
+    if (sig.fac !== S.cfgTx.fac) { txFacAll(); S.cfgTx.fac = sig.fac; changed = true; }
+    if (sig.mdes !== S.cfgTx.mdes) { txMdesAll(); S.cfgTx.mdes = sig.mdes; changed = true; }
     if (changed) A.save();
   }
   A._txCfgAll = txCfgAll;   /* 검사에서 부른다 */
@@ -688,6 +750,29 @@
     S.stock[r.lk][r.mid] = qty;
     return true;
   }
+  /* ★시설 계수 수신 (v2.47.0). 값이 **배열**이다. 빈 배열은 무시한다 —
+     v2.46의 교훈 : 빈 값으로 덮으면 멀쩡한 자료가 지워진다(「미등록 업체」 사고). */
+  function mergeFac(r) {
+    if (!r || !r.lk || !r.fid) return false;
+    var cnt = Array.isArray(r.cnt) ? r.cnt : null;
+    if (!cnt || !cnt.length) return false;
+    S.fac = S.fac || {};
+    S.fac[r.lk] = S.fac[r.lk] || {};
+    if (JSON.stringify(S.fac[r.lk][r.fid] || []) === JSON.stringify(cnt)) return false;
+    S.fac[r.lk][r.fid] = cnt.slice();
+    return true;
+  }
+  /* ★자재 설계수량 수신 (v2.47.0) — 수치 하나. 빈 값은 무시한다. */
+  function mergeMdes(r) {
+    if (!r || !r.lk || !r.mid) return false;
+    if (r.qty == null || r.qty === '') return false;
+    S.mdesign = S.mdesign || {};
+    S.mdesign[r.lk] = S.mdesign[r.lk] || {};
+    var q = Number(r.qty) || 0;
+    if (S.mdesign[r.lk][r.mid] === q) return false;
+    S.mdesign[r.lk][r.mid] = q;
+    return true;
+  }
   function mergeMt(r) {
     if (!r || !r.mid) return false;
     S.mt = S.mt || {};
@@ -706,6 +791,7 @@
   A._mergeStaff = mergeStaff; A._mergeIssue = mergeIssue;
   A._mergeAlias = mergeAlias; A._mergeAlias2 = mergeAlias2;
   A._mergeStock = mergeStock; A._mergeMt = mergeMt;
+  A._mergeFac = mergeFac; A._mergeMdes = mergeMdes;
 
   /* ★설계량 서버 전송 (v2.18.4 사용자 지적).
      종전에는 브라우저 localStorage에만 있었다. 다른 PC에서 열면 안 보이고
@@ -713,22 +799,31 @@
      ★한 칸이 한 줄이다. id는 '위치키|공종코드'로 고정해, 수량을 고쳐 다시
        보내면 서버가 그 줄을 덮어쓴다(upsert). */
   function txPlan(loc, code, qty) {
-    var api = window.BNCP_API;
-    if (!api || !api.on) return;
     var L = loc || {};
-    try {
-      api.send('plan', {
-        id: A.locKey(loc) + '|' + code,
-        date: A.today(), loc: A.locLabel(L),
-        s: L.s, p: L.p, c: L.c, t: L.t, b: L.b,
-        key: code, qty: Number(qty) || 0
-      });
-    } catch (e) { /* 전송 실패는 무시 — 로컬 저장이 우선 */ }
+    txSend('plan', {                     /* ★줄 세워 보낸다 (v2.47.0) */
+      id: A.locKey(loc) + '|' + code,
+      date: A.today(), loc: A.locLabel(L),
+      s: L.s, p: L.p, c: L.c, t: L.t, b: L.b,
+      key: code, qty: Number(qty) || 0
+    });
   }
   /* 한 위치를 통째로 보낸다 — 파일 업로드 직후 */
   function txPlanAll(loc) {
     var pl = S.plan[A.locKey(loc)] || {};
     Object.keys(pl).forEach(function (k) { txPlan(loc, k, pl[k]); });
+  }
+  /* ★모든 위치의 설계량을 보낸다 (v2.47.0 사용자 지적 「설계수량이 다르다」).
+     종전에는 txPlanAll이 **업로드·저장하는 그 순간에만** 돌았다. 그래서 그 기능이
+     생기기 전에 올려 둔 설계량, 또는 그 뒤로 손대지 않은 설계량은 **서버에 한 번도
+     올라간 적이 없어** 다른 기기가 영영 못 받았다.
+     ★locKey의 역함수 A.keyLoc(core.js)로 위치를 되찾아 기존 txPlan을 그대로 쓴다. */
+  function txPlanEvery() {
+    Object.keys(S.plan || {}).forEach(function (lk) {
+      var loc = A.keyLoc(lk);
+      if (!loc) return;                         /* 알 수 없는 열쇠는 건너뛴다 */
+      var pl = S.plan[lk] || {};
+      Object.keys(pl).forEach(function (k) { txPlan(loc, k, pl[k]); });
+    });
   }
 
   /* ★스탭이 처리한 것을 서버로 되돌려 보낸다 (v2.18.6 사용자 지적).
@@ -881,6 +976,8 @@
         if (r.type === 'alias2') { if (mergeAlias2(r)) add++; return; }
         if (r.type === 'stock')  { if (mergeStock(r))  add++; return; }
         if (r.type === 'mt')     { if (mergeMt(r))     add++; return; }
+        if (r.type === 'fac')    { if (mergeFac(r))    add++; return; }
+        if (r.type === 'mdes')   { if (mergeMdes(r))   add++; return; }
         /* ★중단 기록은 상태(st)가 아니라 **재개일(to)**이 바뀐다 (v2.38.0).
            한쪽에서 재개하면 to가 찍혀 되돌아온다 — 그것만 반영한다.
            빈 to가 채워진 to를 덮지 않게, 채워진 쪽만 받는다. */
@@ -4668,7 +4765,8 @@
           var v = parseFloat(i.value); if (isNaN(v)) v = 0;
           S.fac[lk][i.dataset.fac][+i.dataset.ci] = v;
         });
-        A.save(); A.render();
+        A.save(); txCfgAll();            /* ★시설 계수도 서버로 (v2.47.0) */
+        A.render();
       };
     }
 

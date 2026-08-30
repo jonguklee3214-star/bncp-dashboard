@@ -1359,6 +1359,139 @@ console.log('\n[89] 업체 빈 줄이 「미등록 업체」로 서지 않는다
   S.fixJunk = kFix;
 }
 
+/* ★[29] 앞 — 등록해 둔 기준자료가 「손대지 않아도」 서버로 올라간다 (v2.47.0).
+   사용자 지적 : 장비는 같아졌는데 설계수량·협력업체 명부 등이 아직 다르다.
+   원인은 txCfgAll이 staff·issue·alias·stock·mt 다섯만 담고 있어서, 명부·설계수량은
+   「등록하는 그 순간」에만 올라갔다는 것 — 그 전에 등록해 둔 자료는 서버에 한 번도
+   안 올라갔다. 여기서는 **무엇이 실제로 전송되는지**를 가짜 send로 잡아 확인한다. */
+console.log('\n[88] 손대지 않은 기준자료도 자동으로 올라간다 (v2.47.0)');
+{
+  const API = sb.BNCP_API;
+  const savedSend = API.send, savedOn = API.on;
+  const sent = [];
+  API.on = true;
+  API.send = function (type, body) { sent.push({ type: type, body: body }); return Promise.resolve({ ok: true }); };
+  /* ★전송은 줄을 서므로(동시 3건) 「보낸 것 + 줄에 선 것」을 합쳐 봐야 한다.
+     검사는 한 호흡에 도는데 Promise는 그 뒤에 풀리므로, 보낸 것만 세면 3건에서 멈춘다. */
+  A._txReset();
+  const all = function () { return sent.concat(A._txPeek()); };
+  const allTypes = function () { return all().map(function (x) { return x.type; }); };
+
+  const kVend4 = S.vend.slice(), kPlan4 = JSON.stringify(S.plan || {});
+  const kFac4 = JSON.stringify(S.fac || {}), kMdes4 = JSON.stringify(S.mdesign || {});
+  const kCfgTx = JSON.stringify(S.cfgTx || {});
+
+  /* 사람이 등록해 둔 것만 있고, 이번에 아무것도 「손대지 않은」 상태를 만든다 */
+  S.cfgTx = {};
+  S.vend.length = 0;
+  S.vend.push({ name: '한빛건설', code: 'HB01', staff: ['토공|김담당|010'], key: 'HB01-x' });
+  S.plan = { 'C|3|1': { 'E101': 1200, 'E102': 350 } };
+  S.fac = { 'C|3|1': { GL: [2, 3] } };
+  S.mdesign = { 'C|3|1': { '토공|되메우기|모래|-|m3': 88 } };
+
+  A._txCfgAll();
+
+  const types = allTypes();
+  ok(types.indexOf('vend') >= 0, '★협력업체 명부가 자동으로 올라간다(종전엔 안 올라갔다)');
+  ok(types.indexOf('plan') >= 0, '★설계수량이 자동으로 올라간다(종전엔 안 올라갔다)');
+  ok(types.indexOf('fac') >= 0, '★시설 계수가 올라간다(진행률이 기기마다 달라지던 자리)');
+  ok(types.indexOf('mdes') >= 0, '★자재 설계수량이 올라간다');
+
+  const planRows = all().filter(function (x) { return x.type === 'plan'; });
+  ok(planRows.length === 2, '설계수량은 칸 하나가 한 줄 — 2칸이면 2줄');
+  ok(planRows.some(function (x) { return x.body.id === 'C|3|1|E101' && x.body.qty === 1200; }),
+     '★위치키+공종코드로 보내고 수량이 실린다(A.keyLoc로 위치를 되찾는다)');
+  ok(planRows.every(function (x) { return x.body.s === 'civil'; }),
+     '위치정보(s)가 실린다 — 없으면 받는 쪽이 조용히 버린다');
+  const vendRow = all().filter(function (x) { return x.type === 'vend'; })[0];
+  ok(vendRow && vendRow.body.name === '한빛건설', '명부에 회사명이 실린다');
+
+  /* 두 번째 호출은 서명이 같아 아무것도 안 보낸다 — 매 분 같은 것을 다시 안 올린다 */
+  sent.length = 0; A._txReset();
+  A._txCfgAll();
+  ok(all().length === 0, '★바뀐 게 없으면 다시 안 보낸다(서명 게이트)');
+
+  /* 한 칸만 고치면 그 갈래만 다시 나간다 */
+  S.plan['C|3|1']['E101'] = 1500;
+  A._txCfgAll();
+  ok(allTypes().indexOf('plan') >= 0, '설계수량을 고치면 다시 올라간다');
+  ok(allTypes().indexOf('vend') < 0, '안 바뀐 명부는 다시 안 올린다');
+
+  S.vend.length = 0; kVend4.forEach(function (x) { S.vend.push(x); });
+  S.plan = JSON.parse(kPlan4); S.fac = JSON.parse(kFac4); S.mdesign = JSON.parse(kMdes4);
+  S.cfgTx = JSON.parse(kCfgTx);
+  API.send = savedSend; API.on = savedOn;
+}
+
+/* ★[29] 앞 — 시설계수·자재설계수량 수신 병합 + 대량 전송 줄세우기 (v2.47.0) */
+console.log('\n[87] 시설계수·자재설계수량 수신 · 대량 전송 줄세우기 (v2.47.0)');
+{
+  /* ── 시설 계수(fac) — 값이 배열이다 ── */
+  ok(typeof A._mergeFac === 'function', 'A._mergeFac 노출됨');
+  const kFac5 = JSON.stringify(S.fac || {});
+  S.fac = { 'C|3|1': { GL: [1, 1] } };
+  ok(A._mergeFac({ type: 'fac', lk: 'C|3|2', fid: 'PS', cnt: [4, 5] }) === true, '시설 계수 수신 → upsert');
+  ok(JSON.stringify(S.fac['C|3|2'].PS) === '[4,5]', '배열이 그대로 들어왔다');
+  ok(JSON.stringify(S.fac['C|3|1'].GL) === '[1,1]', '★다른 위치의 로컬 계수는 그대로 남는다(union)');
+  ok(A._mergeFac({ type: 'fac', lk: 'C|3|2', fid: 'PS', cnt: [4, 5] }) === false, '같은 값은 두 번 안 센다');
+  ok(A._mergeFac({ type: 'fac', lk: 'C|3|1', fid: 'GL', cnt: [] }) === false,
+     '★빈 배열 수신은 무변경(로컬을 안 지운다 — v2.46의 교훈)');
+  ok(JSON.stringify(S.fac['C|3|1'].GL) === '[1,1]', '빈 수신 뒤에도 로컬 계수가 살아 있다');
+  S.fac = JSON.parse(kFac5);
+
+  /* ── 자재 설계수량(mdesign) ── */
+  ok(typeof A._mergeMdes === 'function', 'A._mergeMdes 노출됨');
+  const kMdes5 = JSON.stringify(S.mdesign || {});
+  S.mdesign = { 'C|3|1': { 'A': 10 } };
+  ok(A._mergeMdes({ type: 'mdes', lk: 'C|3|1', mid: 'B', qty: 7 }) === true, '자재 설계수량 수신 → upsert');
+  ok(S.mdesign['C|3|1'].B === 7, '수신 수량이 들어왔다');
+  ok(S.mdesign['C|3|1'].A === 10, '★같은 위치의 로컬 자재는 그대로 남는다(union)');
+  ok(A._mergeMdes({ type: 'mdes', lk: 'C|3|1', mid: 'B', qty: 7 }) === false, '같은 값은 두 번 안 센다');
+  ok(A._mergeMdes({ type: 'mdes', lk: 'C|3|1', mid: 'A', qty: null }) === false,
+     '★빈 값 수신은 무변경(로컬을 안 지운다)');
+  ok(S.mdesign['C|3|1'].A === 10, '빈 수신 뒤에도 로컬 수량이 살아 있다');
+  S.mdesign = JSON.parse(kMdes5);
+
+  /* ── 대량 전송 줄세우기 — 서버는 쓰기를 한 줄로 세우므로 한꺼번에 쏘면 버려진다 ── */
+  const API = sb.BNCP_API;
+  const savedSend = API.send, savedOn = API.on;
+  const kPlan5 = JSON.stringify(S.plan || {}), kCfg5 = JSON.stringify(S.cfgTx || {});
+  const kSt5 = S.staff.slice(), kIs5 = S.issue.slice(), kVd5 = S.vend.slice();
+  const kAl5 = JSON.stringify(S.alias || {}), kAl25 = JSON.stringify(S.alias2 || {});
+  const kStk5 = JSON.stringify(S.stock || {}), kMt5 = JSON.stringify(S.mt || {});
+  let peak = 0, live = 0, nSent = 0;
+  const hold = [];
+  API.on = true;
+  /* 응답을 붙잡아 둔다 — 실제 서버가 느릴 때(쓰기를 한 줄로 세운다)를 흉내낸다 */
+  API.send = function () {
+    nSent++; live++; if (live > peak) peak = live;
+    return new Promise(function (res) { hold.push(function () { live--; res({ ok: true }); }); });
+  };
+  A._txReset();
+  S.cfgTx = {}; S.fac = {}; S.mdesign = {}; S.vend.length = 0;
+  S.staff.length = 0; S.issue.length = 0; S.alias = {}; S.alias2 = {}; S.stock = {}; S.mt = {};
+  const many = {};
+  for (let i = 0; i < 30; i++) many['E' + i] = i + 1;
+  S.plan = { 'C|3|1': many };
+
+  A._txCfgAll();
+  ok(peak <= 3, '★동시에 3건까지만 보낸다(서버 잠금 대기를 넘겨 버려지지 않게)');
+  ok(A._txQlen() > 0, '나머지는 줄에서 차례를 기다린다');
+  /* ★한 줄도 버려지지 않는다 — 보낸 것 + 줄에 선 것이 설계수량 칸 수와 같다 */
+  ok(nSent + A._txQlen() === 30, '★30칸이면 30줄 — 넘치는 것을 버리지 않고 줄에 세운다');
+
+  while (hold.length) hold.shift()();
+  A._txReset();
+  S.plan = JSON.parse(kPlan5); S.fac = JSON.parse(kFac5); S.mdesign = JSON.parse(kMdes5);
+  S.cfgTx = JSON.parse(kCfg5);
+  S.staff.length = 0; kSt5.forEach(function (x) { S.staff.push(x); });
+  S.issue.length = 0; kIs5.forEach(function (x) { S.issue.push(x); });
+  S.vend.length = 0; kVd5.forEach(function (x) { S.vend.push(x); }); A.coDirty && A.coDirty();
+  S.alias = JSON.parse(kAl5); S.alias2 = JSON.parse(kAl25);
+  S.stock = JSON.parse(kStk5); S.mt = JSON.parse(kMt5);
+  API.send = savedSend; API.on = savedOn;
+}
+
 /* ── 29 내역서 원본 인식 (v2.14.0) ────────────────────── */
 console.log('\n[29] 내역서 원본 인식 — 실제 P3-1 파일로 검사');
 {
