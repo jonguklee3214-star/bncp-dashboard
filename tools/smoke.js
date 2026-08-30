@@ -1262,6 +1262,17 @@ console.log('\n[90] 설정·명부 동기화 — additive 병합(빈 수신이 �
      '옛 co 형식 수신도 받는다');
   const rxOld = S.issue.filter(function (x) { return x.id === 'IP2'; })[0];
   ok(rxOld && A.coOf(rxOld, false) === 'PC 협력사', '옛 co 형식도 회사명으로 풀린다(호환)');
+  /* ★빈 by 수신이 로컬 업체를 덮지 않는다 (v2.46.2 — 「미등록 업체가 생겼다」 방지).
+     v2.46.0이 업체 없이 올린 옛 줄을 되받아도 로컬 업체가 지워지면 안 된다. */
+  S.issue.length = 0;
+  S.issue.push({ id: 'IK1', date: '2026-08-05', cat: '크레인', size: '20T', kind: 'give', cnt: 1, by: '김담당' });
+  ok(A._mergeIssue({ type: 'issue', iid: 'IK1', date: '2026-08-05', cat: '크레인', size: '20T', kind: 'give', cnt: 1, by: '' }) === false,
+     '★빈 by 수신은 무변경(로컬 업체를 안 지운다)');
+  ok(S.issue.filter(function (x) { return x.id === 'IK1'; })[0].by === '김담당',
+     '★로컬 업체가 그대로 남는다 — 미등록 업체가 안 생긴다');
+  ok(A._mergeIssue({ type: 'issue', iid: 'IZ9', date: '2026-08-06', cat: '로더', size: '3T', kind: 'give', cnt: 1, by: '' }) === false,
+     '★업체 없는 새 줄은 받지 않는다(미등록 방지)');
+  ok(!S.issue.some(function (x) { return x.id === 'IZ9'; }), '업체 없는 새 줄이 안 들어왔다');
   S.issue.length = 0; kIssue.forEach(function (x) { S.issue.push(x); });
   S.vend.length = 0; kVend2.forEach(function (x) { S.vend.push(x); }); A.coDirty && A.coDirty();
 

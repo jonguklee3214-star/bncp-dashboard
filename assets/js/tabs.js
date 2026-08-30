@@ -553,10 +553,14 @@
   function txIssueAll() {
     S.issue.forEach(function (g) {
       /* ★업체는 `by`에 있다 (core.eqPut : by:co). coOf가 co||by로 읽는다.
-         v2.46.0에서 없는 co를 보내 업체가 빈 채 넘어가 지급대조가 어긋났다(v2.46.1). */
+         v2.46.0에서 없는 co를 보내 업체가 빈 채 넘어가 지급대조가 어긋났다(v2.46.1).
+         ★업체가 빈(깨진) 줄은 아예 올리지 않는다 (v2.46.2) — 올리면 남의 기기에서
+           멀쩡한 업체를 덮어 「미등록 업체」를 만든다. 정상 지급 줄엔 업체가 늘 있다. */
+      var by = g.by || g.co || '';
+      if (!by) return;
       txCfg('issue', 'issue|' + g.id,
         { iid: g.id, date: g.date || '', loc: g.loc || '', cat: g.cat || '',
-          size: g.size || '', kind: g.kind || '', cnt: g.cnt, by: g.by || g.co || '' });
+          size: g.size || '', kind: g.kind || '', cnt: g.cnt, by: by });
     });
   }
   function txAliasAll() {
@@ -590,8 +594,9 @@
     S.cfgTx = S.cfgTx || {};
     /* ★전송 형식이 바뀌면 SIG_V를 올린다 — 옛 서명과 안 맞아 모든 기기가 다음
        주기에 config 전부를 한 번 다시 보낸다(같은 id upsert라 서버 옛 줄을
-       올바른 값으로 덮는다). v2.46.1 : issue 업체 필드(co→by) 고침 재전송. */
-    var SIG_V = 'v2';
+       올바른 값으로 덮는다). v2.46.1 : issue 업체 필드(co→by) 고침 재전송.
+       v2.46.2 : 빈 by 줄을 안 올리도록 고친 뒤 서버의 옛(빈 by) 줄을 덮으러 재전송. */
+    var SIG_V = 'v3';
     var sig = {
       staff: SIG_V + JSON.stringify(S.staff || []),
       issue: SIG_V + JSON.stringify(S.issue || []),
@@ -636,19 +641,24 @@
     var hit = null;
     S.issue.forEach(function (g) { if (g.id === r.iid) hit = g; });
     var cnt = (r.cnt === 0 || r.cnt) ? (Number(r.cnt) || 0) : 0;
-    /* ★업체는 `by`다 (coOf가 co||by로 읽는다). 옛 형식(co)도 받아 준다. */
+    /* ★업체는 `by`다 (coOf가 co||by로 읽는다). 옛 형식(co)도 받아 준다.
+       ★빈 by는 로컬 업체를 덮지 않는다 (v2.46.2 사용자 지적 「미등록 업체가 생겼다」).
+         v2.46.0이 업체 없이 올린 옛 줄을 되받으면, 채워진 로컬 업체가 빈 값으로
+         지워져 「미등록 업체」가 됐다. 업체 정보는 줄지 않는다(빈→회사만, 회사→빈은 안 됨). */
     var by = r.by || r.co || '';
-    var nu = { date: r.date || '', loc: r.loc || '', cat: r.cat || '', size: r.size || '',
-               kind: r.kind || '', cnt: cnt, by: by };
     if (hit) {
       /* loc은 표시에 안 쓰고 객체라 비교가 불안정하므로 변경 감지에서 뺀다 */
-      var ch = hit.date !== nu.date || hit.cat !== nu.cat || hit.size !== nu.size ||
-               hit.kind !== nu.kind || hit.cnt !== nu.cnt || (hit.by || '') !== by;
+      var ch = hit.date !== (r.date || '') || hit.cat !== (r.cat || '') ||
+               hit.size !== (r.size || '') || hit.kind !== (r.kind || '') ||
+               hit.cnt !== cnt || (by && (hit.by || '') !== by);
       if (!ch) return false;
-      hit.date = nu.date; hit.loc = nu.loc; hit.cat = nu.cat; hit.size = nu.size;
-      hit.kind = nu.kind; hit.cnt = nu.cnt; hit.by = by;
+      hit.date = r.date || ''; hit.loc = r.loc || hit.loc; hit.cat = r.cat || '';
+      hit.size = r.size || ''; hit.kind = r.kind || ''; hit.cnt = cnt;
+      if (by) hit.by = by;                    /* ★빈 by는 무시 — 로컬 업체를 지키다 */
     } else {
-      nu.id = r.iid; S.issue.push(nu);
+      if (!by) return false;                  /* ★업체 없는 새 줄은 안 받는다 — 미등록 업체를 만든다 */
+      S.issue.push({ id: r.iid, date: r.date || '', loc: r.loc || '', cat: r.cat || '',
+                     size: r.size || '', kind: r.kind || '', cnt: cnt, by: by });
     }
     return true;
   }
