@@ -1214,6 +1214,82 @@ console.log('\n[99] 회사 자리에 사람 이름 안 나오기 — 명부 유�
   S.vend.length = 0; kVend.forEach(function (x) { S.vend.push(x); }); A.coDirty && A.coDirty();
 }
 
+/* ★[29] 앞 — 설정·명부 전체 동기화 additive 병합 (v2.46.0).
+   불변식 : 빈/부분 수신이 로컬을 절대 지우지 않는다(union). 각 검사에서
+   「로컬에만 있는 것이 수신 뒤에도 남는다」를 확인한다 — 병합을 덮어쓰기로
+   되돌리면 그 줄이 사라져 이 검사가 실패한다(규칙 3-A). */
+console.log('\n[90] 설정·명부 동기화 — additive 병합(빈 수신이 로컬을 안 지운다)');
+{
+  /* ── 담당자(staff) ── */
+  ok(typeof A._mergeStaff === 'function', 'A._mergeStaff 노출됨');
+  const kStaff = S.staff.slice();
+  S.staff.length = 0;
+  S.staff.push({ id: 'ME1', name: '내 담당자', tel: '111', grps: ['토공'] });   /* 로컬에만 있는 것 */
+  ok(A._mergeStaff({ type: 'staff', sid: 'PC1', name: 'PC 담당자', tel: '222', grps: ['우수공'] }) === true,
+     '담당자 한 줄 수신 → upsert');
+  ok(S.staff.some(function (x) { return x.id === 'PC1' && x.name === 'PC 담당자'; }), '수신 담당자가 들어왔다');
+  ok(S.staff.some(function (x) { return x.id === 'ME1'; }),
+     '★로컬 담당자는 그대로 남는다(union — 덮어쓰기면 사라져 실패)');
+  ok(A._mergeStaff({ type: 'staff', sid: 'PC1', name: 'PC 담당자', tel: '222', grps: ['우수공'] }) === false,
+     '같은 내용 두 번은 안 센다');
+  ok(A._mergeStaff({ type: 'staff', sid: 'PC1', name: 'PC 담당자 수정', tel: '222', grps: ['우수공'] }) === true,
+     '이름 수정은 반영된다');
+  S.staff.length = 0; kStaff.forEach(function (x) { S.staff.push(x); });
+
+  /* ── 지급장비(issue) ── */
+  ok(typeof A._mergeIssue === 'function', 'A._mergeIssue 노출됨');
+  const kIssue = S.issue.slice();
+  S.issue.length = 0;
+  S.issue.push({ id: 'IL1', date: '2026-08-01', loc: 'x', cat: '굴착기', size: '06W', kind: 'give', cnt: 2, co: '로컬사' });
+  ok(A._mergeIssue({ type: 'issue', iid: 'IP1', date: '2026-08-02', loc: 'y', cat: '덤프', size: '15T', kind: 'give', cnt: 3, co: 'PC사' }) === true,
+     '지급장비 한 줄 수신 → upsert');
+  ok(S.issue.some(function (x) { return x.id === 'IP1' && x.cnt === 3; }), '수신 지급장비가 들어왔다');
+  ok(S.issue.some(function (x) { return x.id === 'IL1'; }), '★로컬 지급장비는 그대로 남는다(union)');
+  ok(A._mergeIssue({ type: 'issue', iid: 'IP1', date: '2026-08-02', loc: 'y', cat: '덤프', size: '15T', kind: 'give', cnt: 3, co: 'PC사' }) === false,
+     '같은 내용 두 번은 안 센다');
+  ok(A._mergeIssue({ type: 'issue', iid: 'IP1', date: '2026-08-02', loc: 'y', cat: '덤프', size: '15T', kind: 'give', cnt: 5, co: 'PC사' }) === true,
+     '수량 수정은 반영된다');
+  S.issue.length = 0; kIssue.forEach(function (x) { S.issue.push(x); });
+
+  /* ── 내역서 별칭(alias/alias2) ── */
+  ok(typeof A._mergeAlias === 'function', 'A._mergeAlias 노출됨');
+  const kA = JSON.stringify(S.alias || {}), kA2 = JSON.stringify(S.alias2 || {});
+  S.alias = { '로컬키': 'L001' }; S.alias2 = {};
+  ok(A._mergeAlias({ type: 'alias', k: '서버키', code: 'S001' }) === true, '별칭 한 줄 수신');
+  ok(S.alias['서버키'] === 'S001', '수신 별칭이 들어왔다');
+  ok(S.alias['로컬키'] === 'L001', '★로컬 별칭은 그대로 남는다(union)');
+  ok(A._mergeAlias({ type: 'alias', k: '서버키', code: 'S001' }) === false, '같은 별칭 두 번은 안 센다');
+  ok(A._mergeAlias2({ type: 'alias2', k: 'K', code: 'A' }) === true, 'alias2 처음 수신 → 채움');
+  ok(S.alias2['K'] === 'A', 'alias2 채워졌다');
+  ok(A._mergeAlias2({ type: 'alias2', k: 'K', code: 'B' }) === true, 'alias2 다른 코드 수신 → 갈림');
+  ok(S.alias2['K'] === '*', "★코드가 갈리면 '*'(자동매칭 중단) — learnAlias와 같은 규칙");
+  S.alias = JSON.parse(kA); S.alias2 = JSON.parse(kA2);
+
+  /* ── 자재 재고(stock) ── */
+  ok(typeof A._mergeStock === 'function', 'A._mergeStock 노출됨');
+  const kStock = JSON.stringify(S.stock || {});
+  S.stock = { 'LOC': { 'matLocal': 7 } };
+  ok(A._mergeStock({ type: 'stock', lk: 'LOC', mid: 'matSrv', qty: 9 }) === true, '재고 한 칸 수신 → upsert');
+  ok(S.stock['LOC']['matSrv'] === 9, '수신 재고가 들어왔다');
+  ok(S.stock['LOC']['matLocal'] === 7,
+     '★같은 위치의 로컬 재고는 그대로 남는다(union — 위치 통째 덮어쓰기면 사라져 실패)');
+  ok(A._mergeStock({ type: 'stock', lk: 'LOC', mid: 'matSrv', qty: 9 }) === false, '같은 재고 두 번은 안 센다');
+  ok(A._mergeStock({ type: 'stock', lk: 'LOC', mid: 'matSrv', qty: 12 }) === true, '수량 수정은 반영된다');
+  S.stock = JSON.parse(kStock);
+
+  /* ── 정비대장(mt) ── */
+  ok(typeof A._mergeMt === 'function', 'A._mergeMt 노출됨');
+  const kMt = JSON.stringify(S.mt || {});
+  S.mt = { 'eqLocal': { step: 'req' } };
+  ok(A._mergeMt({ type: 'mt', mid: 'eqSrv', step: 'fix', why: '엔진' }) === true, '정비 한 줄 수신 → upsert');
+  ok(S.mt['eqSrv'] && S.mt['eqSrv'].step === 'fix', '수신 정비가 들어왔다');
+  ok(S.mt['eqLocal'] && S.mt['eqLocal'].step === 'req', '★로컬 정비는 그대로 남는다(union)');
+  ok(A._mergeMt({ type: 'mt', mid: 'eqSrv', step: 'fix', why: '엔진' }) === false, '같은 정비 두 번은 안 센다');
+  S.mt = JSON.parse(kMt);
+
+  ok(typeof A._txCfgAll === 'function', 'A._txCfgAll 노출됨(등록·업로드 시 서버로 밀어 올린다)');
+}
+
 /* ── 29 내역서 원본 인식 (v2.14.0) ────────────────────── */
 console.log('\n[29] 내역서 원본 인식 — 실제 P3-1 파일로 검사');
 {

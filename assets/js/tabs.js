@@ -530,6 +530,165 @@
   }
   A._mergeVend = mergeVend;   /* 검사에서 부른다 */
 
+  /* ★설정·명부 전 항목 서버 동기화 (v2.46.0 사용자 지시 「모든 정보를 PC·모바일이
+     같이 봐야 한다」). 종전에는 담당자(staff)·지급장비(issue)·내역서매칭(alias)·
+     자재재고(stock)·정비대장(mt)이 기기별 localStorage에만 있어, 한쪽에서 등록해도
+     다른 쪽은 못 봤다 — vend(v2.45.1)로 명부만 맞춰 놨던 것을 나머지로 넓힌다.
+     ★vend·plan과 같은 길 — 한 줄 = 한 레코드로 보낸다(blob 금지 : 마지막 writer가
+       blob을 덮어써 다른 키를 잃는 사고를 막는다). 모르는 type이라 서버 etc 시트에
+       쌓였다가 무type 수신으로 원문 그대로 돌아온다(Code.gs 재배포 불필요).
+     ★id를 '종류|키'로 고정해 다시 보내면 그 줄을 덮어쓴다(upsert). */
+  function txCfg(type, id, body) {
+    var api = window.BNCP_API;
+    if (!api || !api.on) return;
+    body.type = type; body.id = id;
+    try { api.send(type, body); } catch (e) { /* 전송 실패는 무시 — 로컬이 우선 */ }
+  }
+  function txStaffAll() {
+    S.staff.forEach(function (m) {
+      txCfg('staff', 'staff|' + m.id,
+        { sid: m.id, name: m.name || '', tel: m.tel || '', grps: (m.grps || []).slice() });
+    });
+  }
+  function txIssueAll() {
+    S.issue.forEach(function (g) {
+      txCfg('issue', 'issue|' + g.id,
+        { iid: g.id, date: g.date || '', loc: g.loc || '', cat: g.cat || '',
+          size: g.size || '', kind: g.kind || '', cnt: g.cnt, co: g.co || '' });
+    });
+  }
+  function txAliasAll() {
+    var a = S.alias || {}, a2 = S.alias2 || {}, k;
+    for (k in a) if (Object.prototype.hasOwnProperty.call(a, k) && a[k])
+      txCfg('alias', 'alias|' + k, { k: k, code: a[k] });
+    for (k in a2) if (Object.prototype.hasOwnProperty.call(a2, k) && a2[k])
+      txCfg('alias2', 'alias2|' + k, { k: k, code: a2[k] });
+  }
+  function txStockAll() {
+    var st = S.stock || {}, lk, mid;
+    for (lk in st) if (Object.prototype.hasOwnProperty.call(st, lk)) {
+      for (mid in st[lk]) if (Object.prototype.hasOwnProperty.call(st[lk], mid))
+        txCfg('stock', 'stock|' + lk + '|' + mid, { lk: lk, mid: mid, qty: st[lk][mid] });
+    }
+  }
+  function txMtAll() {
+    var mt = S.mt || {}, id;
+    for (id in mt) if (Object.prototype.hasOwnProperty.call(mt, id)) {
+      var m = mt[id] || {};
+      txCfg('mt', 'mt|' + id, { mid: id, step: m.step || '', why: m.why || '',
+        reqAt: m.reqAt || '', doneAt: m.doneAt || '' });
+    }
+  }
+  /* ★서명 게이트 — 바뀐 항목만 보낸다. 같은 자료를 매 분 다시 올리지 않는다.
+     서명은 그 상태를 통째로 JSON 문자열로 만든 것이다(항목 수가 적어 가볍다).
+     syncNow가 매 주기 부르므로, 어느 기기에서 등록해도 1분 안에 서버로 올라간다. */
+  function txCfgAll() {
+    var api = window.BNCP_API;
+    if (!api || !api.on) return;
+    S.cfgTx = S.cfgTx || {};
+    var sig = {
+      staff: JSON.stringify(S.staff || []),
+      issue: JSON.stringify(S.issue || []),
+      alias: JSON.stringify([S.alias || {}, S.alias2 || {}]),
+      stock: JSON.stringify(S.stock || {}),
+      mt: JSON.stringify(S.mt || {})
+    };
+    var changed = false;
+    if (sig.staff !== S.cfgTx.staff) { txStaffAll(); S.cfgTx.staff = sig.staff; changed = true; }
+    if (sig.issue !== S.cfgTx.issue) { txIssueAll(); S.cfgTx.issue = sig.issue; changed = true; }
+    if (sig.alias !== S.cfgTx.alias) { txAliasAll(); S.cfgTx.alias = sig.alias; changed = true; }
+    if (sig.stock !== S.cfgTx.stock) { txStockAll(); S.cfgTx.stock = sig.stock; changed = true; }
+    if (sig.mt !== S.cfgTx.mt) { txMtAll(); S.cfgTx.mt = sig.mt; changed = true; }
+    if (changed) A.save();
+  }
+  A._txCfgAll = txCfgAll;   /* 검사에서 부른다 */
+
+  /* ★설정·명부 수신 — 종류별 additive upsert (v2.46.0). 빈/부분 수신이 로컬을
+     절대 지우지 않는다(union — incoming이 실은 키만 갱신·추가, 없는 키는 보존).
+     삭제 전파는 하지 않는다(vend·plan과 동일 — tombstone 미구현).
+     각 함수 반환 : 실제로 바뀌었으면 true(수신 건수에 센다). */
+  function mergeStaff(r) {
+    if (!r || !r.sid || !r.name) return false;
+    var hit = null;
+    S.staff.forEach(function (m) { if (m.id === r.sid) hit = m; });
+    var grps = Array.isArray(r.grps) ? r.grps : (r.grps ? [String(r.grps)] : []);
+    if (hit) {
+      var ch = hit.name !== r.name ||
+               (r.tel && hit.tel !== r.tel) ||
+               (grps.length && JSON.stringify(hit.grps || []) !== JSON.stringify(grps));
+      if (!ch) return false;
+      hit.name = r.name;
+      if (r.tel) hit.tel = r.tel;
+      if (grps.length) hit.grps = grps;
+    } else {
+      S.staff.push({ id: r.sid, name: r.name, tel: r.tel || '', grps: grps });
+    }
+    return true;
+  }
+  function mergeIssue(r) {
+    if (!r || !r.iid) return false;
+    var hit = null;
+    S.issue.forEach(function (g) { if (g.id === r.iid) hit = g; });
+    var cnt = (r.cnt === 0 || r.cnt) ? (Number(r.cnt) || 0) : 0;
+    var nu = { date: r.date || '', loc: r.loc || '', cat: r.cat || '', size: r.size || '',
+               kind: r.kind || '', cnt: cnt, co: r.co || '' };
+    if (hit) {
+      var ch = hit.date !== nu.date || hit.loc !== nu.loc || hit.cat !== nu.cat ||
+               hit.size !== nu.size || hit.kind !== nu.kind || hit.cnt !== nu.cnt ||
+               hit.co !== nu.co;
+      if (!ch) return false;
+      hit.date = nu.date; hit.loc = nu.loc; hit.cat = nu.cat; hit.size = nu.size;
+      hit.kind = nu.kind; hit.cnt = nu.cnt; hit.co = nu.co;
+    } else {
+      nu.id = r.iid; S.issue.push(nu);
+    }
+    return true;
+  }
+  function mergeAlias(r) {
+    if (!r || !r.k || !r.code) return false;
+    S.alias = S.alias || {};
+    if (S.alias[r.k] === r.code) return false;
+    S.alias[r.k] = r.code;
+    return true;
+  }
+  function mergeAlias2(r) {
+    if (!r || !r.k || !r.code) return false;
+    S.alias2 = S.alias2 || {};
+    var prev = S.alias2[r.k];
+    /* learnAlias와 같은 규칙 — 처음 보면 채우고, 다른 코드면 '*'(갈린 것) */
+    var nv = (prev === undefined) ? r.code : (prev === r.code ? r.code : '*');
+    if (prev === nv) return false;
+    S.alias2[r.k] = nv;
+    return true;
+  }
+  function mergeStock(r) {
+    if (!r || !r.lk || !r.mid) return false;
+    S.stock = S.stock || {};
+    S.stock[r.lk] = S.stock[r.lk] || {};
+    var qty = Number(r.qty) || 0;
+    if (S.stock[r.lk][r.mid] === qty) return false;
+    S.stock[r.lk][r.mid] = qty;
+    return true;
+  }
+  function mergeMt(r) {
+    if (!r || !r.mid) return false;
+    S.mt = S.mt || {};
+    var m = S.mt[r.mid] = S.mt[r.mid] || {};
+    var ch = false;
+    if (r.step && m.step !== r.step) {
+      m.step = r.step;
+      m.req = (r.step !== 'done');   /* 옛 필드 유지 — core.mtSet과 같은 규칙 */
+      ch = true;
+    }
+    if (r.why != null && r.why !== '' && m.why !== r.why) { m.why = r.why; ch = true; }
+    if (r.reqAt && m.reqAt !== r.reqAt) { m.reqAt = r.reqAt; ch = true; }
+    if (r.doneAt && m.doneAt !== r.doneAt) { m.doneAt = r.doneAt; ch = true; }
+    return ch;
+  }
+  A._mergeStaff = mergeStaff; A._mergeIssue = mergeIssue;
+  A._mergeAlias = mergeAlias; A._mergeAlias2 = mergeAlias2;
+  A._mergeStock = mergeStock; A._mergeMt = mergeMt;
+
   /* ★설계량 서버 전송 (v2.18.4 사용자 지적).
      종전에는 브라우저 localStorage에만 있었다. 다른 PC에서 열면 안 보이고
      브라우저를 정리하면 사라졌다 — 힘들게 올린 자료가 없어지는 자리다.
@@ -639,6 +798,7 @@
     if (!api || syncing) return;
     syncing = true;
     paintSync();
+    txCfgAll();   /* ★내가 등록·업로드한 설정·명부를 서버로 밀어 올린다 — 서명이 바뀐 것만 (v2.46.0) */
     if (force) { api.last = ''; S.rxLast = ''; }
     else if (!api.last && S.rxLast) api.last = S.rxLast;   /* 새로 고쳐도 이어 받는다 */
 
@@ -696,6 +856,13 @@
         }
         /* ★협력업체 명부 (v2.45.1) — code로 upsert. 링크(key)는 기존 것을 지킨다. */
         if (r.type === 'vend') { if (mergeVend(r)) add++; return; }
+        /* ★설정·명부 나머지 (v2.46.0) — 종류별 additive upsert. 빈 수신이 로컬을 안 지운다. */
+        if (r.type === 'staff')  { if (mergeStaff(r))  add++; return; }
+        if (r.type === 'issue')  { if (mergeIssue(r))  add++; return; }
+        if (r.type === 'alias')  { if (mergeAlias(r))  add++; return; }
+        if (r.type === 'alias2') { if (mergeAlias2(r)) add++; return; }
+        if (r.type === 'stock')  { if (mergeStock(r))  add++; return; }
+        if (r.type === 'mt')     { if (mergeMt(r))     add++; return; }
         /* ★중단 기록은 상태(st)가 아니라 **재개일(to)**이 바뀐다 (v2.38.0).
            한쪽에서 재개하면 to가 찍혀 되돌아온다 — 그것만 반영한다.
            빈 to가 채워진 to를 덮지 않게, 채워진 쪽만 받는다. */
@@ -1227,6 +1394,7 @@
       var r = stEdit ? A.staffUpd(stEdit, { name: nm, tel: tel, grps: gs })
                      : A.staffAdd({ name: nm, tel: tel, grps: gs });
       if (!r) { alert(T('st_need')); return; }   /* ★이름이 없으면 안 만든다 */
+      txCfgAll();                                 /* ★담당자도 서버로 — 다른 기기도 받는다 (v2.46.0) */
       stEdit = null; A.render();
     };
     if ($('#stCancel')) $('#stCancel').onclick = function () { stEdit = null; A.render(); };
@@ -1237,7 +1405,7 @@
       b.onclick = function () {
         var m = A.staffById(b.dataset.stdel); if (!m) return;
         if (!confirm(T('st_del_c').replace('{n}', m.name))) return;
-        A.staffDel(b.dataset.stdel); stEdit = null; A.render();
+        A.staffDel(b.dataset.stdel); txCfgAll(); stEdit = null; A.render();
       };
     });
 
@@ -1782,10 +1950,10 @@
       setTimeout(function () { say('#eqMsg', T('eq_added'), true); }, 30);
     };
     $$('[data-mtstep]').forEach(function (el) {
-      el.onchange = function () { A.mtSet(el.dataset.mtstep, el.value, null); A.render(); };
+      el.onchange = function () { A.mtSet(el.dataset.mtstep, el.value, null); txCfgAll(); A.render(); };
     });
     $$('[data-mtwhy]').forEach(function (el) {
-      el.onchange = function () { A.mtSet(el.dataset.mtwhy, null, el.value); };
+      el.onchange = function () { A.mtSet(el.dataset.mtwhy, null, el.value); txCfgAll(); };
     });
   }
 
@@ -2938,6 +3106,7 @@
       });
       boqNeed = rest;
       if (boqLoc) txPlanAll(boqLoc);     /* ★공종을 붙인 것도 서버로 */
+      txCfgAll();                        /* ★방금 배운 내역서 별칭(alias)도 서버로 (v2.46.0) */
       boqStore();
       A.render();
       setTimeout(function () {
@@ -4247,6 +4416,7 @@
          그러면 P3-1 줄에 넣은 재고가 필터 위치에 들어간다. 그 줄의 위치에 넣는다. */
       el.onchange = function () {
         A.setStock(A.keyLoc(el.dataset.mstl) || flt, el.dataset.mst, el.value);
+        txCfgAll();                        /* ★재고도 서버로 (v2.46.0) */
         A.render();
       };
     });
@@ -4381,13 +4551,13 @@
     bindDetail();
     if ($('#lgOut')) $('#lgOut').onclick = function () { A.setRole(''); A.render(); };
     $$('[data-mtstep]').forEach(function (el) {
-      el.onchange = function () { A.mtSet(el.dataset.mtstep, el.value, null); A.render(); };
+      el.onchange = function () { A.mtSet(el.dataset.mtstep, el.value, null); txCfgAll(); A.render(); };
     });
     $$('[data-eqo]').forEach(function (el) {
       el.onclick = function () { eqOpen[el.dataset.eqo] = !eqOpen[el.dataset.eqo]; A.render(); };
     });
     $$('[data-mtwhy]').forEach(function (el) {
-      el.onchange = function () { A.mtSet(el.dataset.mtwhy, null, el.value); };
+      el.onchange = function () { A.mtSet(el.dataset.mtwhy, null, el.value); txCfgAll(); };
     });
     $$('[data-rc]').forEach(function (b) {
       b.onclick = function () {
@@ -4505,6 +4675,7 @@
         if (r.near && r.near.length) m += ' · ' + T('r_near') + ' ' + r.near.length + T('u_ea') +
           ' (' + r.near.slice(0, 2).join(' / ') + ')';
         if (r.miss.length) m += ' · ' + T('r_noeq') + ' ' + r.miss.length + T('u_ea') + ' (' + r.miss.slice(0, 3).join(', ') + ')';
+        txCfgAll();                      /* ★지급장비 대장도 서버로 (v2.46.0) */
         A.render(); setTimeout(function () { say('#isMsg', m, r.ok > 0); }, 30);
       }, '#isMsg');
     };
