@@ -969,7 +969,11 @@ console.log('\n[94] 진행 중 작업 — 인력만 올린 것을 잡고, 수량
   /* 관리자 화면에 카드가 뜬다 */
   A.setFlt(LT); A.go(1);
   const hv = bag.view.innerHTML;
-  ok(hv.indexOf(A.T('ot_t')) > 0, '★진행 중 작업 카드가 화면에 뜬다');
+  /* ★v2.49.1 — 「진행 중 작업」이라는 **제목을 없앴다**(사용자 지시 「그냥 내용 중에
+     중단이라고만 하면 되지」). 이제 3번 카드 안 표에 줄로 뜬다. 통과시키려고 고친
+     것이 아니라 화면 구성이 바뀌어 검사도 바뀐 것이다. */
+  ok(hv.indexOf(A.T('pn_work_ct')) > 0, '★작업현황 카드에 진행 중인 것이 실린다');
+  ok(hv.indexOf(A.T('ot_t')) < 0, '★「진행 중 작업」이라는 제목은 더는 없다');
   ok(hv.indexOf(A.T('u_sec') + ' 1') > 0, '구조물이 개소 라벨로 표시된다(아직 진행 중)');
 
   S.crew.length = 0; keepCrew.forEach(function (c) { S.crew.push(c); });
@@ -1013,7 +1017,9 @@ console.log('\n[95] 작업 중단 — 세우고(사유·중단일) 다시 잇는
 
   /* 관리자 화면 — 중단 묶음이 뜬다 */
   A.setFlt(LT); A.go(1);
-  ok(bag.view.innerHTML.indexOf(A.T('ot_stopped')) > 0, '★중단 묶음이 관리자 화면에 뜬다');
+  /* ★v2.49.1 — 「중단됨 N」 머리를 없애고 **상태 칸의 배지**로만 보인다 */
+  ok(bag.view.innerHTML.indexOf(A.T('ot_stop')) > 0, '★중단이 상태 배지로 관리자 화면에 뜬다');
+  ok(bag.view.innerHTML.indexOf(A.T('ot_stopped')) < 0, '★「중단됨」 별도 머리는 없다');
 
   /* 재개 — 오늘 다시 잇는다. 과거 중단일수는 그대로 방치에서 빠진 채다 */
   const rs = A.resumeStop(TK, tt);
@@ -1594,7 +1600,7 @@ console.log('\n[85] 작업현황 구성 — 순서 · 인원+장비 통합 · �
   const kRole = A.role();
   A.setRole('admin');
   /* 업체·인원·장비가 있어야 표가 선다 */
-  const kVend7 = S.vend.slice(), kCrew7 = S.crew.slice(), kWork7 = S.work.slice();
+  const kVend7 = S.vend.slice(), kCrew7 = S.crew.slice(), kWork7 = S.work.slice(), kDir7 = S.direct.slice();
   const kFlt7 = A.flt ? A.flt() : null, kCoFlt = A.coFlt;
   /* [92]와 같은 꼴로 자리를 만든다 — 위치를 정하고 그 위치에 오늘 자 자료를 둔다 */
   S.vend.length = 0; S.crew.length = 0; S.work.length = 0;
@@ -1608,6 +1614,13 @@ console.log('\n[85] 작업현황 구성 — 순서 · 인원+장비 통합 · �
          { cat: 'Excavator (crawler)', size: '0.8m3', run: 2, brk: 0, rep: 0 }] });
   S.work.push({ id: 'ce2', date: td, loc: LC, key: 'T-01', qty: 100,
     co: '한빛건설', by: '김담당', st: 'ok' });
+  /* 진행 중 작업 한 줄 — 인력만 올리고 수량은 없다(그래야 「진행 중」이 된다).
+     이것이 있어야 협력업체 구획에 표와 머리글이 선다. */
+  S.crew.push({ id: 'ce3', date: td, loc: LC, key: 'T-02', st: 'ok', teams: 1,
+    ppl: { eng: 0, fmn: 1, wkr: 5 }, eq: [], co: '한빛건설', by: '김담당' });
+  /* 직영 기록 한 줄 — 있어야 표와 머리글이 선다 */
+  S.direct.push({ id: 'cd1', date: td, loc: LC, task: '폐기물 정리', teams: 1,
+    ppl: { eng: 0, fmn: 1, wkr: 9 }, eq: [], by: '김담당', st: 'sub' });
   A.go(1);
   const h = bag.view.innerHTML;
   const at = k => h.indexOf(A.T(k));
@@ -1650,18 +1663,62 @@ console.log('\n[85] 작업현황 구성 — 순서 · 인원+장비 통합 · �
   ok(gbTxt !== A.T('t_bywork'), '★장비 토글에 「공종별」이라 안 쓴다');
 
   /* ⑥ 진행 중 작업은 3번 카드 안 — 맨 위가 아니다 */
-  const w1 = at('pn_work_ct');
-  if (A.openTasks(A.flt ? A.flt() : {}).length) {
-    ok(h.indexOf(A.T('ot_t')) > w1, '★진행 중 작업이 3번 카드 안으로 들어갔다');
-  } else {
-    ok(w1 > 0, '진행 중 작업이 없어도 3번 카드는 선다');
-  }
+  /* ★「진행 중 작업」이라는 **제목은 없앴다** — 3번 카드의 협력업체 구획에 줄로 들어간다
+     (사용자 지시 「그냥 내용 중에 중단이라고만 하면 되지」). 제목이 아니라 **줄**이
+     들어갔는지를 본다. */
+  ok(h.indexOf(A.T('ot_t')) < 0, '★「진행 중 작업」 제목이 화면 어디에도 없다');
   /* ⑦ 협력업체와 직영이 서로 갈라져 있다 */
   ok(/wc__s/.test(h), '★협력업체와 직영 내용이 서로 분리돼 표시된다');
+
+  /* ⑧ ★제목은 하나, 소제목도 한 겹 (v2.49.1 사용자 지적 「제목이 몇 개야」) */
+  ok(h.indexOf(A.T('pn_work_ct')) > 0 && A.T('pn_work_ct').indexOf('작업현황') > 0,
+     '★카드 제목이 「협력업체, 직영 작업현황」이다');
+  /* ★3번 카드만 잘라 본다 — 바로 뒤에 장비 카드가 붙어 있어, 거기까지 넣으면
+     장비 토글의 「업체별」과 그 카드 머리를 3번 것으로 잘못 읽는다(첫 판이 그랬다). */
+  /* ★3번 카드의 **속(wc 블록)만** 잘라 본다 — 제목 위치로만 자르면 바로 뒤 장비
+     카드의 여는 표시까지 딸려 와, 그 카드 머리를 3번 것으로 잘못 읽는다. */
+  const w3 = h.indexOf(A.T('pn_work_ct'));
+  const wcS = h.indexOf('<div class="wc">', w3);
+  /* ★끝을 **다음 구획(장비 카드)의 표식**으로 잡는다. 「다음 <div class=card>」로
+     자르면, 안쪽에 카드가 생기는 순간 거기서 잘려 나가 **그 카드를 못 보게 된다** —
+     되돌리기 검사가 통과해 버렸다(첫 판이 그랬다). */
+  const eqAnchor = h.indexOf('id="cdEq"', wcS);
+  const fallback = h.indexOf(A.T('ro_out'), wcS);
+  const cut = eqAnchor > wcS ? eqAnchor : (fallback > wcS ? fallback : h.length);
+  const seg3 = h.slice(w3, cut);
+  ok((seg3.match(/wc__t/g) || []).length === 2, '★소제목이 정확히 둘이다(협력업체·직영)');
+  /* ★두 구획을 따로 갈라 본다 — 통째로 보면 카드 제목(「협력업체, 직영 작업현황」)에
+     들어 있는 「협력업체」를 소제목으로 잘못 읽는다(첫 판이 그랬다). */
+  const parts = seg3.split('<div class="wc__s">').slice(1);
+  ok(parts.length === 2, '구획이 둘로 갈린다(협력업체·직영)');
+  ok(parts[0] && parts[0].indexOf('>' + A.T('t_co') + '<') > 0,
+     '★첫 소제목이 「협력업체」다');
+  ok(parts[1] && parts[1].indexOf('>' + A.T('res_dir') + '<') > 0,
+     '★둘째 소제목이 「직영」이다');
+  ok(/data-stop=/.test(parts[0] || ''), '★진행 중인 것이 협력업체 구획 안에 줄로 들어간다');
+  ok(parts[0] && /<thead>/.test(parts[0]), '★협력업체 표에 머리글이 있다');
+  ok(parts[1] && /<thead>/.test(parts[1]), '★직영 표에 머리글이 있다');
+  ok(seg3.indexOf(A.T('t_byco')) < 0, '★「업체별」이라 쓰지 않는다(축 토글 라벨이었다)');
+  /* 안쪽 카드 제목이 없다 — 이것이 네 겹이던 원인이었다 */
+  ok(seg3.indexOf(A.T('ot_t')) < 0, '★안쪽 「진행 중 작업」 제목이 없다');
+  ok(seg3.indexOf(A.T('d_list')) < 0, '★안쪽 「직영작업현황」 제목이 없다');
+  ok(!/card__h/.test(seg3), '★구획 안에 또 다른 카드 머리가 없다');
+  /* 표에 머리글이 있고, 기간 단추는 살아 있다 */
+  ok(/<thead>/.test(seg3), '★표에 머리글이 있다(칸이 무슨 뜻인지 보인다)');
+  ok(/data-rng="dir"|data-rg="dir"|rng/.test(seg3), '★직영 기간 단추가 살아 있다');
+
+  /* ⑨ 탭7(스탭 화면)은 종전대로 카드와 입력 폼이 있다 — 맨몸 갈래가 거기까지
+     벗겨 버리면 스탭이 직영을 입력할 수 없게 된다 */
+  A.setRole('staff'); A.go(7);
+  const h7 = bag.view.innerHTML;
+  ok(h7.indexOf(A.T('d_list')) > 0, '★탭7에는 「직영작업현황」 카드가 그대로 있다');
+  ok(/id="dTask"|id="dBy"|id="dDate"/.test(h7), '★탭7 입력 폼이 그대로 있다');
+  A.setRole('admin'); A.go(1);
 
   S.vend.length = 0; kVend7.forEach(x => S.vend.push(x)); A.coDirty && A.coDirty();
   S.crew.length = 0; kCrew7.forEach(x => S.crew.push(x));
   S.work.length = 0; kWork7.forEach(x => S.work.push(x));
+  S.direct.length = 0; kDir7.forEach(x => S.direct.push(x));
   A.coFlt = kCoFlt; if (kFlt7) A.setFlt(kFlt7);
   A.setRole(kRole); A.go(1);
 }

@@ -936,10 +936,15 @@ tr[data-sloc]{cursor:pointer}
 .ce__h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding:0 16px 6px}
 .ce__h .nm{font-size:14px;font-weight:700}
 .ce__b{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 16px}
-.ce__t{font-size:11px;font-weight:600;color:var(--mute);margin-bottom:4px}
+.ce__t{font-size:12px;font-weight:700;color:var(--ink);margin-bottom:5px}
 .ce__z{padding:8px 0}
 @media (max-width:860px){.ce__b{grid-template-columns:1fr}}
 /* ★협력업체·직영 작업내용 — 한 카드 안에서 서로 갈라 둔다 (v2.49.0) */
-.wc__s{padding:10px 0;border-top:1px solid var(--line-2)}
-.wc__s:first-child{border-top:0;padding-top:0}
-.wc__t{font-size:11px;font-weight:600;color:var(--mute);padding:0 16px 4px}
+/* ★소제목은 **한 겹**이다 (v2.49.1). 카드 제목(13px/700) 밑에서 층이 읽히도록
+   같은 크기·굵기에 왼쪽 강조선을 둔다 — 흐린 11px는 너무 작아 안 읽혔다. */
+.wc__s{padding:14px 0;border-top:1px solid var(--line)}
+.wc__s:first-child{border-top:0;padding-top:2px}
+.wc__t{display:flex;align-items:center;gap:8px;margin:0 16px 8px;
+  padding-left:9px;border-left:3px solid var(--orange);
+  font-size:13px;font-weight:700;color:var(--ink);line-height:1.3}
+.wc__a{margin-left:auto;font-weight:400}

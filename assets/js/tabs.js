@@ -53,41 +53,62 @@
      ★중단(v2.38.0)된 작업은 방치로 몰지 않고 따로 「중단」으로 묶는다.
        스탭·관리자는 사유를 골라 세우고(중단), 버튼으로 다시 잇는다(재개). */
   function stopCanEdit() { var r = A.role(); return r === 'admin' || r === 'staff'; }
+  /* 중단 사유 고르는 칸 — 칸(td)까지 만든 꼴 */
   function stopSelCell(idx) {
     if (!stopCanEdit()) return '';
-    return '<td class="r"><select class="in in--sm" data-stop="' + idx + '">' +
+    return '<td class="r">' + stopSelBare(idx) + '</td>';
+  }
+  /* ★칸 없이 고르개만 (v2.49.1) — 한 표로 합치면서 칸은 부르는 쪽이 만든다 */
+  function stopSelBare(idx) {
+    if (!stopCanEdit()) return '';
+    return '<select class="in in--sm" data-stop="' + idx + '">' +
       '<option value="">' + T('ot_stop') + '…</option>' +
       A.STOP_WHY.map(function (x) {
         return '<option value="' + esc(x.id) + '">' + esc(x[S.lang] || x.en) + '</option>';
-      }).join('') + '</select></td>';
+      }).join('') + '</select>';
   }
-  function openTaskHTML() {
+  /* ★bare면 **카드 껍데기 없이 표 하나만** 돌려준다 (v2.49.1 사용자 지적
+     「제목이 몇 개야 · 소제목은 하나만」). 3번 카드 안에 넣을 때 쓴다 —
+     종전에는 이 함수가 제 카드(제목 「진행 중 작업」)를 만들어 돌려줘서,
+     구획 소제목 밑에 카드 제목이 또 붙어 제목이 네 겹이 됐다.
+     ★진행 중과 중단을 **한 표**로 합친다. 중단은 따로 머리(「중단됨 5」)를 세우지
+       않고 **상태 칸에 「중단 · 사유」로만** 보인다(사용자 지시).
+     ★머리글(thead)을 붙인다 — 없으니 무슨 칸인지 안 보였다. */
+  function openTaskRows() {
     var list = A.openTasks(flt);
-    if (!list.length) return '';
-    var ong = [], stp = [], aged = 0;
-    list.forEach(function (t, i) { t._i = i; (t.stopped ? stp : ong).push(t); });
-    var oh = ong.length ? '<div class="tw"><table><tbody>' + ong.map(function (t) {
-      var old = t.age >= OT_AGE_WARN; if (old) aged++;
+    if (!list.length) return { html: '', n: 0, stop: 0, aged: 0 };
+    var aged = 0, stop = 0, ong = 0;
+    list.forEach(function (t, i) { t._i = i; });
+    var body = list.map(function (t) {
+      var old = !t.stopped && t.age >= OT_AGE_WARN;
+      if (old) aged++;
+      if (t.stopped) stop++; else ong++;
+      var stCell = t.stopped
+        ? '<span class="bd bd--d">' + T('ot_stop') + '</span> ' +
+          '<span class="sp">' + esc(A.stopWhyText(t.stopWhy, S.lang) || '') + '</span>'
+        : (old ? '<span class="bd bd--d">' + T('ot_aged') + '</span>'
+               : (t.isNew ? '<span class="bd bd--o">NEW</span>' : '<span class="sp">·</span>'));
+      var age = t.stopped
+        ? esc(t.stopFrom) + ' · ' + T('ot_stopdays').replace('{n}', nf(t.stopDays))
+        : T('ot_since').replace('{n}', nf(t.age));
       return '<tr' + (old ? ' class="gr"' : '') + '><td>' + itemLine(t.key) +
         ' <span class="sp">' + esc(segLabel(t)) + '</span></td>' +
-        '<td class="c">' + (t.isNew ? '<span class="bd bd--o">NEW</span>' : '') + '</td>' +
-        '<td class="r sp">' + T('ot_since').replace('{n}', nf(t.age)) + '</td>' +
-        '<td class="r">' + (old ? '<span class="bd bd--d">' + T('ot_aged') + '</span>' : '') + '</td>' +
-        stopSelCell(t._i) + '</tr>';
-    }).join('') + '</tbody></table></div>' : '';
-    var sh = stp.length ? '<div class="ot-stop"><div class="ot-stop__h">' +
-      T('ot_stopped') + ' <b>' + nf(stp.length) + '</b></div><div class="tw"><table><tbody>' +
-      stp.map(function (t) {
-        return '<tr><td>' + itemLine(t.key) + ' <span class="sp">' + esc(segLabel(t)) + '</span></td>' +
-          '<td class="sp">' + esc(A.stopWhyText(t.stopWhy, S.lang) || '—') + '</td>' +
-          '<td class="r sp">' + esc(t.stopFrom) + ' · ' + T('ot_stopdays').replace('{n}', nf(t.stopDays)) + '</td>' +
-          (stopCanEdit() ? '<td class="r"><button class="btn btn--g btn--sm" data-resume="' + t._i + '">' +
-            T('ot_resume') + '</button></td>' : '') + '</tr>';
-      }).join('') + '</tbody></table></div></div>' : '';
-    var sub = T('ot_n').replace('{n}', nf(ong.length)) +
-      (aged ? ' · ' + nf(aged) + ' ' + T('ot_aged') : '') +
-      (stp.length ? ' · ' + nf(stp.length) + ' ' + T('ot_stopped') : '');
-    return '<div style="margin-bottom:16px">' + card(T('ot_t'), sub, oh + sh, 'flush') + '</div>';
+        '<td>' + stCell + '</td>' +
+        '<td class="r sp">' + age + '</td>' +
+        (t.stopped
+          ? (stopCanEdit()
+              ? '<td class="c noprint"><button class="btn btn--g btn--sm" data-resume="' + t._i + '">' +
+                T('ot_resume') + '</button></td>'
+              : '<td class="c noprint"></td>')
+          : '<td class="c noprint">' + stopSelBare(t._i) + '</td>') + '</tr>';
+    }).join('');
+    return {
+      html: '<div class="tw"><table><thead><tr>' +
+        '<th>' + T('work') + '</th><th>' + T('status') + '</th>' +
+        '<th class="r">' + T('date') + '</th><th class="noprint"></th>' +
+        '</tr></thead><tbody>' + body + '</tbody></table></div>',
+      n: ong, stop: stop, aged: aged
+    };
   }
   function opts(list, sel, v, l) {
     return list.map(function (x) {
@@ -2411,14 +2432,20 @@
     h += '<div style="margin-bottom:16px">' + card(T('pn_dir_ce'), '',
       withRng('ppl', function () { return crewEqHTML('dir'); }), 'flush', '', 'cdDir') + '</div>';
 
-    /* ── ③ 협력업체·직영 작업내용 — 한 카드 안에서 **서로 갈라** 보인다 ── */
-    var otH = openTaskHTML();
+    /* ── ③ 협력업체, 직영 작업현황 ──────────────────────────
+       ★제목은 **하나**, 소제목도 **한 겹**이다 (v2.49.1 사용자 지적 「제목이 몇 개야」).
+         안쪽 카드(진행 중 작업·직영작업현황)를 벗기고 표만 넣는다.
+       ★직영 기간 단추는 소제목 줄 오른쪽에 둔다 — 카드를 벗기며 잃으면 안 된다.
+       ★관리자가 [수정]을 누르면 dEdit가 서므로 그때는 고칠 폼도 함께 낸다. */
+    var otR = openTaskRows();
     h += '<div style="margin-bottom:16px">' + card(T('pn_work_ct'), '',
-      '<div class="wc"><div class="wc__s"><div class="wc__t">' + T('t_byco') + '</div>' +
-        (otH || '<div class="ce__z sp">' + T('z_none') + '</div>') + '</div>' +
-      '<div class="wc__s"><div class="wc__t">' + T('res_dir') + '</div>' +
-        (A.role() === 'admin' ? v7() : '<div class="ce__z sp">' + T('z_none') + '</div>') +
-      '</div></div>', 'flush') + '</div>';
+      '<div class="wc">' +
+        '<div class="wc__s"><div class="wc__t"><span>' + T('t_co') + '</span></div>' +
+          (otR.html || '<div class="ce__z sp">' + T('z_none') + '</div>') + '</div>' +
+        '<div class="wc__s"><div class="wc__t"><span>' + T('res_dir') + '</span>' +
+          '<span class="wc__a noprint">' + rngBtn('dir') + '</span></div>' +
+          (dEdit ? directFormHTML() : '') + directListHTML() + '</div>' +
+      '</div>', 'flush') + '</div>';
 
     /* 장비 표(장비종류·규격·정비)는 준비 위쪽에 그대로 둔다 — 지급대조가 여기 붙어 있다 */
     h += eqTableHTML();
@@ -4169,18 +4196,10 @@
   var dEq = [];
   var dCat = '', dSize = '';
 
-  function v7() {
-    var h = '';
-
-    /* ★상단 집계 카드(직영투입집계·조 수·장비)와 인원 그래프는 삭제했다
-       (사용자 지시). 같은 숫자가 아래 기록 표와 오른쪽 현황판에 이미 있었고,
-       그래프는 직군 셋을 막대로 늘여 놓은 것이라 읽을 것이 없었다. */
-
-    /* ★입력은 스탭, 관리자는 확인·수정만 (v2.16.9 — 사용자 지시).
-       ★관리자도 [수정]을 누르면 폼이 열린다. 안 그러면 「수정 기능만」이라는
-         지시가 성립하지 않는다 — 고칠 폼이 없으면 고칠 수가 없다.
-       ★A.can('direct')를 새로 만들지 않고 역할을 직접 본다.
-         권한 표(can)는 관리자 ⊇ 스탭 구조라, 「스탭만」은 그 표로 표현이 안 된다. */
+  /* ★직영 입력·수정 폼만 (v2.49.1) — v7에서 떼어냈다. 3번 카드에서 관리자가
+     [수정]을 눌렀을 때도 고칠 폼이 있어야 한다(없으면 고칠 수가 없다). */
+  function directFormHTML() {
+    var form = '';
     var canAdd = (A.role() !== 'admin');
     if (canAdd || dEdit) {
     var pk = dEdit ? T('d_save') : T('d_add');
@@ -4195,7 +4214,7 @@
             return '<option value="' + esc(n) + '"' + (n === dF.by ? ' selected' : '') + '>' + esc(n) + '</option>';
           }).join('') + '</select>'
       : '<input class="in" id="dBy" value="' + esc(dF.by) + '">';
-    h += '<div style="margin-bottom:16px">' + card(dEdit ? T('d_edit') : T('d_open'), '',
+    form += '<div style="margin-bottom:16px">' + card(dEdit ? T('d_edit') : T('d_open'), '',
       pkHTML('d', true) +
       '<div class="f-row" style="margin-top:12px">' +
         /* ★조 수(팀 수) 입력을 없앴다(사용자 지시 — 무슨 뜻인지도 모호했다).
@@ -4213,6 +4232,22 @@
       (dEdit ? ' <button class="btn btn--g" id="dCancel">' + T('d_cancel') + '</button>' : '') +
       ' <span class="vmsg" id="dMsg"></span>') + '</div>';
     }
+    return form;
+  }
+
+  function v7() {
+    var h = '';
+
+    /* ★상단 집계 카드(직영투입집계·조 수·장비)와 인원 그래프는 삭제했다
+       (사용자 지시). 같은 숫자가 아래 기록 표와 오른쪽 현황판에 이미 있었고,
+       그래프는 직군 셋을 막대로 늘여 놓은 것이라 읽을 것이 없었다. */
+
+    /* ★입력은 스탭, 관리자는 확인·수정만 (v2.16.9 — 사용자 지시).
+       ★관리자도 [수정]을 누르면 폼이 열린다. 안 그러면 「수정 기능만」이라는
+         지시가 성립하지 않는다 — 고칠 폼이 없으면 고칠 수가 없다.
+       ★A.can('direct')를 새로 만들지 않고 역할을 직접 본다.
+         권한 표(can)는 관리자 ⊇ 스탭 구조라, 「스탭만」은 그 표로 표현이 안 된다. */
+    h += directFormHTML();
 
     /* ── 기록 ── */
     /* ★기간 단추를 달았다 (v2.19.11 사용자 지시). 기본은 오늘.
@@ -4220,7 +4255,15 @@
     /* ★아래 여백 (v2.19.15 사용자 지적) — 이 카드만 감싸는 div가 없어
        바로 밑 작업량 카드와 선이 맞붙어 한 카드처럼 보였다. */
     h += '<div style="margin-bottom:16px">' + card(T('d_list'), esc(fltLabel()),
-      withRng('dir', function () {
+      directListHTML(), 'flush', rngBtn('dir')) + '</div>';
+    return h;
+  }
+  /* ★직영 기록 표만 (v2.49.1) — 카드 껍데기 없이. 3번 카드가 이것만 쓴다.
+     종전에는 v7()이 제 카드(제목 「직영작업현황」)를 만들어 돌려줘서, 구획
+     소제목 밑에 카드 제목이 또 붙었다(사용자 지적 「제목이 몇 개야」).
+     ★탭7(스탭 화면)은 위에서 이 함수를 카드로 감싸 쓰므로 종전 그대로다. */
+  function directListHTML() {
+    return withRng('dir', function () {
       var rows = A.directRows(flt);
       return rows.length
         /* ★.tw로 감싼다 (v2.16.2 — 사용자 지적).
@@ -4243,9 +4286,7 @@
               '<button class="btn btn--g btn--sm" data-ddel="' + x.id + '">' + T('d_del') + '</button></td></tr>';
           }).join('') + '</tbody></table></div>'
         : empty(T('d_none'), T('t7d'));
-      }),
-      'flush', rngBtn('dir')) + '</div>';
-    return h;
+    });
   }
 
   function dDial() {
