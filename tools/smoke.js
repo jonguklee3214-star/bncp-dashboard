@@ -1813,6 +1813,57 @@ console.log('\n[84] 작업량 위치별 · 진행률 선택 · 공구는 설계�
   A.setRole(kRole); A.go(1);
 }
 
+/* ★[29] 앞 — 처리시간 표시 (v2.51.0 사용자 요청) */
+console.log('\n[83] 처리시간 — 올린 뒤 처리까지 걸린 시간');
+{
+  const H = 3600000;
+  const sub = '2026-08-30T00:00:00.000Z';
+  /* ① 확인 전 — 지금까지 밀린 시간 */
+  ok(A.procH({ subAt: sub }, '2026-08-30T05:00:00.000Z') === 5, '★확인 전이면 지금까지 밀린 시간');
+  /* ② 확인 뒤 — 걸린 시간 (지금과 무관) */
+  ok(A.procH({ subAt: sub, ckAt: '2026-08-30T07:30:00.000Z' }, '2026-09-05T00:00:00.000Z') === 7.5,
+     '★확인 뒤에는 걸린 시간으로 굳는다(지금 시각과 무관)');
+  /* ③ 옛 줄 — subAt이 없으면 지어내지 않는다 */
+  ok(A.procH({ ckAt: sub }) === null, '★subAt이 없는 옛 줄은 값을 지어내지 않는다');
+  /* ④ 옛 ckAt(날짜만)도 견딘다 */
+  ok(A.procH({ subAt: sub, ckAt: '2026-08-31' }) === 24, '옛 ckAt(날짜뿐)도 대략값을 낸다');
+  /* ⑤ 음수가 안 나온다 (시계가 어긋나도) */
+  ok(A.procH({ subAt: '2026-08-30T10:00:00.000Z', ckAt: '2026-08-30T09:00:00.000Z' }) === 0,
+     '★시계가 어긋나도 음수를 내지 않는다');
+  /* ⑥ 읽기 좋은 글 — 하루가 넘으면 「n일 m시간」 */
+  ok(A.procText({ subAt: sub, ckAt: '2026-08-30T05:00:00.000Z' }) === A.T('pt_h').replace('{n}', '5'),
+     '하루 안이면 시간으로 적는다');
+  ok(A.procText({ subAt: sub, ckAt: '2026-09-01T03:00:00.000Z' }).indexOf('2') >= 0,
+     '★하루를 넘으면 일·시간으로 적는다');
+
+  /* ⑦ ★확인 시각을 **시각까지** 찍는다 — 날짜뿐이면 처리시간이 하루로 뭉개진다 */
+  const stamp = A.ckStamp();
+  ok(stamp.length > 10 && stamp.indexOf('T') > 0,
+     '★확인 시각을 시각까지 찍는다(날짜만 찍으면 처리시간이 뭉개진다)');
+  ok(A.procH({ subAt: new Date(Date.now() - 2 * H).toISOString(), ckAt: stamp }) === 2,
+     '★그 시각으로 재면 2시간이 나온다');
+
+  /* ⑧ 화면 — 확인 대기 표에 처리시간 칸이 있다 */
+  const kRole = A.role(), kWork = S.work.slice(), kFlt = A.flt ? A.flt() : null;
+  A.setRole('admin');
+  const LP = { s: 'civil', p: 1, c: 1 };
+  A.setFlt(LP);
+  const key = (A.LIST.filter(e => e.kind === 'C' && e.site === 'civil')[0] || A.LIST[0]).key;
+  S.work.length = 0;
+  /* 오래 밀린 줄 하나 — 이틀 전에 올렸는데 아직 확인 전 */
+  const old2d = new Date(Date.now() - 48 * H).toISOString();
+  S.work.push({ id: 'pt1', date: A.today(), loc: LP, key: key, qty: 10, st: 'sub',
+                by: '가', subAt: old2d });
+  A.go(1);
+  const hp = bag.view.innerHTML;
+  ok(hp.indexOf(A.T('pt_t')) > 0, '★확인 대기 표에 처리시간 칸이 있다');
+  ok(/2일|2d/.test(hp), '★이틀 밀린 것이 「2일…」로 보인다');
+
+  S.work.length = 0; kWork.forEach(x => S.work.push(x));
+  if (kFlt) A.setFlt(kFlt);
+  A.setRole(kRole); A.go(1);
+}
+
 /* ── 29 내역서 원본 인식 (v2.14.0) ────────────────────── */
 console.log('\n[29] 내역서 원본 인식 — 실제 P3-1 파일로 검사');
 {

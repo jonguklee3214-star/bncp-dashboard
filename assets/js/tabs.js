@@ -326,6 +326,17 @@
     return hit || keys[0];
   }
 
+  /* ★올린 뒤 얼마나 기다렸나 한 칸 (v2.51.0). 확인 전이면 지금까지, 확인 뒤면
+     걸린 시간이다. 옛 줄(subAt 없음)은 '—' — 없는 것을 지어내지 않는다.
+     ★하루를 넘겨 밀린 것은 붉게 — 밀린 것이 눈에 걸려야 처리가 된다. */
+  var WAIT_WARN_H = 24;
+  function waitCell(x) {
+    var h = A.procH(x);
+    if (h == null) return '<td class="r sp">—</td>';
+    var t = A.procText(x);
+    return '<td class="r' + (h >= WAIT_WARN_H ? ' em' : ' sp') + '">' + esc(t) + '</td>';
+  }
+
   function planBadge() {
     var n = A.hasPlan(flt);
     return '<span class="pbg' + (n ? ' pbg--y' : '') + '">' +
@@ -2432,12 +2443,15 @@
     if (pw.length || pc.length) h += '<div style="margin-bottom:16px">' +
       card(T('pend'), nf(pw.length + pc.length) + T('u_case'),
         '<div class="tw"><table><thead><tr><th>' + T('th_kind') + '</th><th>' + T('date') + '</th><th>' + T('loc') + '</th>' +
-        '<th>' + T('work') + '</th><th class="r">' + T('th_body') + '</th><th>' + T('by') + '</th><th class="noprint"></th></tr></thead><tbody>' +
+        '<th>' + T('work') + '</th><th class="r">' + T('th_body') + '</th><th>' + T('by') + '</th>' +
+        /* ★올린 뒤 얼마나 기다렸나 (v2.51.0 사용자 요청 「처리시간 표시」) —
+           확인 전이므로 지금까지 밀린 시간이다. 오래 밀린 것은 붉게 보인다. */
+        '<th class="r">' + T('pt_t') + '</th><th class="noprint"></th></tr></thead><tbody>' +
         pw.map(function (x) {
           return '<tr><td><span class="bd bd--k">' + T('blk_work') + '</span></td><td class="sp">' + esc(x.date) + '</td>' +
             '<td class="code">' + esc(A.locLabel(x.loc)) + '</td><td>' + itemLine(x.key, x.spot) + '</td>' +
             '<td class="r">' + nf(x.qty, 2) + ' <span class="sp">' + esc(A.trU((A.item(x.key) || {}).unit || '')) + '</span></td>' +
-            '<td class="sp">' + esc(x.by || '') + '</td>' +
+            '<td class="sp">' + esc(x.by || '') + '</td>' + waitCell(x) +
             '<td class="c noprint"><button class="btn btn--o btn--sm" data-ok="w" data-id="' + esc(x.id) + '">' + T('confirm') + '</button> ' +
             '<button class="btn btn--g btn--sm" data-rc="' + esc(x.id) + '">' + T('rc_ask') + '</button> ' +
             '<button class="btn btn--g btn--sm" data-del="w" data-id="' + esc(x.id) + '">' + T('del') + '</button></td></tr>';
@@ -2446,7 +2460,7 @@
           return '<tr><td><span class="bd bd--o">' + T('blk_crew') + '</span></td><td class="sp">' + esc(x.date) + '</td>' +
             '<td class="code">' + esc(A.locLabel(x.loc)) + '</td><td>' + itemLine(x.key, x.spot) + '</td>' +
             '<td class="r sp">' + nf(x.teams) + T('u_crew') + ' · ' + nf(A.pplSum(x.ppl)) + T('u_pax') + ' · ' + T('equip') + ' ' + nf(A.eqSum(x.eq, 'run')) + T('u_unitq') + '</td>' +
-            '<td class="sp">' + esc(x.by || '') + '</td>' +
+            '<td class="sp">' + esc(x.by || '') + '</td>' + waitCell(x) +
             '<td class="c noprint"><button class="btn btn--o btn--sm" data-ok="c" data-id="' + esc(x.id) + '">' + T('confirm') + '</button> ' +
             '<button class="btn btn--g btn--sm" data-del="c" data-id="' + esc(x.id) + '">' + T('del') + '</button></td></tr>';
         }).join('') + '</tbody></table></div>', 'flush') + '</div>';
@@ -4602,7 +4616,10 @@
         var arr = kind === 'work' ? S.work : S.crew;
         arr.forEach(function (x) {
           if (x.id === b.dataset.id) {
-            x.st = 'ok'; x.ckAt = A.today();
+            /* ★확인 시각을 **시각까지** 찍는다 (v2.51.0) — 종전에는 날짜뿐이라
+               「올린 뒤 처리까지 걸린 시간」을 낼 수 없었다. subAt과 같은 꼴(UTC ISO).
+               ckAt은 읽는 데가 없던 칸이라 꼴을 바꿔도 깨질 것이 없다. */
+            x.st = 'ok'; x.ckAt = A.ckStamp();
             txBack(kind, x);              /* ★확인한 사실을 서버에도 남긴다 */
           }
         });

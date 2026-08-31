@@ -60,6 +60,39 @@
     if (isNaN(d.getTime())) return null;
     return (d.getUTCHours() + A.TZ_OFF) % 24;
   };
+  /** ★올린 뒤 처리까지 걸린 시간 — 시간 단위 (v2.51.0 사용자 요청 「처리시간 표시」).
+      ★subAt(제출 시각)은 UTC ISO다. ckAt(확인 시각)도 v2.51.0부터 같은 꼴로 찍는다.
+        옛 자료의 ckAt은 날짜뿐이라 그 경우 시각을 0시로 본다(대략값이라도 준다).
+      ★아직 확인 전이면 **지금까지 기다린 시간**을 준다 — 얼마나 밀렸는지가 요점이다.
+      ★subAt이 없는 옛 줄은 null. 없는 것을 지어내지 않는다. */
+  A.procH = function (row, now) {
+    if (!row || !row.subAt) return null;
+    var a = new Date(row.subAt);
+    if (isNaN(a.getTime())) return null;
+    var b;
+    if (row.ckAt) {
+      b = new Date(row.ckAt.length <= 10 ? row.ckAt + 'T00:00:00Z' : row.ckAt);
+      if (isNaN(b.getTime())) return null;
+    } else {
+      b = now ? new Date(now) : new Date();
+    }
+    var h = (b.getTime() - a.getTime()) / 3600000;
+    return h < 0 ? 0 : Math.round(h * 10) / 10;
+  };
+  /** ★확인 시각을 찍는 꼴 — **시각까지** 남긴다 (v2.51.0).
+      종전에는 날짜뿐(A.today())이라 「올린 뒤 처리까지 걸린 시간」을 낼 수 없었다.
+      여기 한 곳이 꼴을 정한다 — 날짜로 되돌리면 처리시간이 하루 단위로 뭉개진다. */
+  A.ckStamp = function () { return new Date().toISOString(); };
+
+  /** 처리시간을 읽기 좋게 — 24시간이 넘으면 「n일 m시간」 */
+  A.procText = function (row, now) {
+    var h = A.procH(row, now);
+    if (h == null) return '';
+    if (h < 24) return A.T('pt_h').replace('{n}', String(h));
+    var d = Math.floor(h / 24), r = Math.round(h - d * 24);
+    return A.T('pt_d').replace('{d}', String(d)).replace('{h}', String(r));
+  };
+
   /** 오전 마무리 예외인가 — 아직 관리자가 확인 안 한 것만 참 */
   A.isMorningExc = function (w) {
     if (!w || w.admOK) return false;          /* 관리자가 확인하면 예외가 풀린다 */
