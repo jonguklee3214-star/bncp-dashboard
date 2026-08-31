@@ -229,26 +229,46 @@
     /* ★공구(Section)는 없앨 수 없다 — 설계수량·실적·인원·장비가 전부
        Phase+공구 단위로 저장된다(locKey). 없애면 3-1과 3-2 물량이 섞여
        진행률이 뜻을 잃는다. 대신 드롭다운 2개를 1개로 합쳤다(v2.15.0). */
-    var pc = [];
-    A.PHASES.forEach(function (p) {
-      A.SECTORS.forEach(function (c) { pc.push({ v: p + '-' + c, t: 'Phase ' + p + '-' + c }); });
-    });
+    /* ★설계수량이 올라온 공구만 남긴다 (v2.50.0 사용자 지시 「매번 고르기 불편하고
+       누락된다 — 설계수량 있는 곳만」). 없는 곳은 애초에 작업 대상이 아니다.
+       ★하나도 없으면 목록 대신 **먼저 올리라고 알린다** — 빈 드롭다운만 두면
+         왜 못 고르는지 알 수 없다. */
+    var pls = planLocs(flt.s);
+    if (!pls.length) {
+      return '<select class="in" id="fSite" style="width:auto">' +
+        opts(A.SITES, flt.s, function (x) { return x.id; }, function (x) { return x[L()]; }) +
+        '</select><span class="pbg">' + T('z_noplan_t') + '</span>';
+    }
     return '<select class="in" id="fSite" style="width:auto">' +
       opts(A.SITES, flt.s, function (x) { return x.id; }, function (x) { return x[L()]; }) + '</select>' +
       (civil
         ? '<select class="in" id="fPC" style="width:auto"><option value="">All Phase</option>' +
-          pc.map(function (o) {
-            var v = o.v.split('-');
-            /* ★올린 구간은 이름 옆에 ● — 고르기 전에 어디에 있는지 보인다 */
-            var has = A.hasPlan({ s: 'civil', p: +v[0], c: +v[1], t: '', b: 0 });
-            return '<option value="' + o.v + '"' +
-              (flt.p + '-' + flt.c === o.v ? ' selected' : '') + '>' +
-              o.t + (has ? ' ●' : '') + '</option>';
+          pls.map(function (l) {
+            var v = l.p + '-' + l.c;
+            return '<option value="' + v + '"' +
+              (flt.p + '-' + flt.c === v ? ' selected' : '') + '>Phase ' + v + '</option>';
           }).join('') + '</select>' + planBadge()
         : '<select class="in" id="fT" style="width:auto"><option value="">All Town</option>' +
-          opts(A.TOWNS, flt.t, function (x) { return x.t; }, function (x) { return 'Town ' + x.t; }) + '</select>' +
+          opts(uniq(pls.map(function (l) { return l.t; })), flt.t, null,
+               function (x) { return 'Town ' + x; }) + '</select>' +
           '<select class="in" id="fB" style="width:auto"><option value="0">All Block</option>' +
-          opts(flt.t ? A.townBlocks(flt.t) : [], flt.b, null, function (x) { return 'Block ' + x; }) + '</select>' + planBadge());
+          opts(pls.filter(function (l) { return !flt.t || l.t === flt.t; })
+                 .map(function (l) { return l.b; }), flt.b, null,
+               function (x) { return 'Block ' + x; }) + '</select>' + planBadge());
+  }
+  function uniq(a) {
+    var seen = {}, o = [];
+    a.forEach(function (x) { if (!seen[x]) { seen[x] = 1; o.push(x); } });
+    return o;
+  }
+  /* ★설계수량이 있는 곳이 하나뿐이면 그곳으로 자동으로 맞춘다 (v2.50.0) —
+     매번 고르지 않아도 되고 누락도 없다. 여럿이면 사람이 고른다. */
+  function fltAuto() {
+    var pls = planLocs(flt.s);
+    if (pls.length !== 1) return;
+    var l = pls[0];
+    if (l.s === 'civil') { if (flt.p === l.p && flt.c === l.c) return; flt.p = l.p; flt.c = l.c; }
+    else { if (flt.t === l.t && flt.b === l.b) return; flt.t = l.t; flt.b = l.b; }
   }
 
   /* ★설계수량이 올라온 구간인지 위치 선택 옆에서 바로 보인다 (v2.17.2 사용자 지시).
@@ -272,6 +292,38 @@
         return '<button data-gb="' + which + '|' + x[0] +
           '" aria-pressed="' + (grpBy[which] === x[0]) + '">' + T(x[1]) + '</button>';
       }).join('') + '</span>';
+  }
+
+  /* ★설계수량이 올라온 위치만 (v2.50.0). 셋(상단 공구·진행률 선택·업체 입력)이
+     같은 기준을 쓰도록 **여기 한 곳**에서 낸다. */
+  function planLocs(site) {
+    return A.allLocs(site).filter(function (l) { return A.hasPlan(l) > 0; });
+  }
+  /* ★공정별 진행률의 위치 선택 (v2.50.0 사용자 지시).
+     부지토목 → Phase-공구 / 부대토목 → 타운-블록. **설계수량이 올라온 곳만** 나온다.
+     ★고른 한 곳만 계산한다 — 부지토목·부대토목이 갈리고 페이즈·블록마다 따로 난다.
+       그래서 **합계 공정률은 없다**(사용자 지시). */
+  function progPickHTML() {
+    var ls = planLocs();
+    if (!ls.length) return '';
+    var cur = progLocKey();
+    return '<select class="in in--sm noprint" id="pgLoc" style="width:auto">' +
+      ls.map(function (l) {
+        var k = A.locKey(l);
+        return '<option value="' + esc(k) + '"' + (k === cur ? ' selected' : '') + '>' +
+          esc(A.locLabel(l)) + '</option>';
+      }).join('') + '</select>';
+  }
+  /* 고른 위치의 열쇠 — 없거나 설계수량이 사라졌으면 있는 첫 곳으로 */
+  function progLocKey() {
+    var ls = planLocs();
+    if (!ls.length) return '';
+    var keys = ls.map(function (l) { return A.locKey(l); });
+    if (progLoc && keys.indexOf(progLoc) >= 0) return progLoc;
+    /* 상단 필터가 가리키는 곳에 설계수량이 있으면 그곳부터 */
+    var hit = '';
+    ls.forEach(function (l) { if (!hit && A.locMatch({ loc: l }, flt)) hit = A.locKey(l); });
+    return hit || keys[0];
   }
 
   function planBadge() {
@@ -2202,6 +2254,9 @@
   /* ★장비는 **업체별이 기본**이다 (v2.49.0 사용자 지시 「장비현황 기본은 업체별이야」).
      장비의 다른 축은 'cat'(장비종류)다 — 'work'(공종)가 아니다. */
   var grpBy = { ppl: 'work', eq: 'co' };
+  var progLoc = '';        /* ★진행률만의 위치 선택 — 상단 필터와 따로 논다(v2.50.0) */
+  /* 검사에서 진행률 위치를 고르는 통로 — 단추 처리기는 브라우저에만 붙는다 */
+  A._pgLoc = function (k) { if (k !== undefined) progLoc = k; return progLoc; };
   A._grpBy = function (which, v) {
     if (typeof which === 'string' && v === undefined && (which === 'work' || which === 'co')) {
       grpBy.ppl = which;
@@ -2345,7 +2400,10 @@
   }
 
   function v1() {
-    var w = A.warn(flt), rows = A.progressRows(flt);
+    var w = A.warn(flt), rows = A.progressRows(flt);   /* 현황판(오른쪽 띠)은 상단 필터를 따른다 */
+    /* ★진행률 카드만 **진행률 선택**을 따른다 (v2.50.0) — 고른 한 곳만 계산한다 */
+    var pgLoc = progLocKey();
+    var pgRows = pgLoc ? A.progressRows(A.keyLoc(pgLoc)) : [];
     var h = '';
     if (w.noPlan) h += '<div class="alert alert--o"><b>' + T('plan_none') + '</b>' +
       '<span class="sp">' + T('h_noplan') + '</span></div>';
@@ -2453,7 +2511,7 @@
     /* ── ④ 작업량 ── */
     if (ru.length) {
       h += '<div style="margin-bottom:16px">' + card(T('ro_out'), '',
-        withRng('out', function () { return rollOut(A.rollup(flt)); }), 'flush',
+        withRng('out', function () { return rollOutByLoc(); }), 'flush',
         rngBtn('out') + '<button class="btn btn--g btn--sm noprint" id="ruCsv">' + T('csv') + '</button>') + '</div>';
 
       /* ── ④-2 작업위치 — 작업량 바로 밑 (v2.17.9 사용자 지시) ── */
@@ -2469,9 +2527,15 @@
          안 올렸으면 붉게 먼저 보인다 — 진행률이 비는 이유가 그것이기 때문이다. */
       /* ★설계수량 뱃지는 위치 필터 옆(planBadge)에 이미 있다 — 여기서 또
          보이면 같은 정보가 두 번이다. 위치명만 남긴다. */
-      card(T('progress'), esc(fltLabel()),
-        rows.length ? progTable(rows) : empty(T('z_norate'), T('z_norate_n')),
-        'flush', rngBtn('prog') + '<button class="btn btn--g btn--sm noprint" id="pgCsv">' + T('csv') + '</button>') +
+      /* ★진행률은 **고른 한 곳만** 계산한다 (v2.50.0 사용자 지시) — 부지토목·부대토목이
+         갈리고 페이즈·블록마다 따로 난다. 그래서 합계 공정률은 내지 않는다.
+         설계수량이 올라온 곳이 없으면 먼저 올리라고만 알린다. */
+      card(T('progress'), esc(pgLoc ? A.locLabel(A.keyLoc(pgLoc)) : ''),
+        pgLoc
+          ? (pgRows.length ? progTable(pgRows) : empty(T('z_norate'), T('z_norate_n')))
+          : empty(T('z_noplan_t'), T('z_noplan_n')),
+        'flush', progPickHTML() + rngBtn('prog') +
+        '<button class="btn btn--g btn--sm noprint" id="pgCsv">' + T('csv') + '</button>') +
       '</div>';
 
     /* 실측 생산성 — 현황판에 자리를 내주고 아래로 내렸다 (v2.16.0) */
@@ -2847,12 +2911,10 @@
       seen[g].rows.push(r);
     });
 
-    var hasPlan = 0, done = 0, sum = 0;
+    var hasPlan = 0;
     rows.forEach(function (r) {
       if (r.plan) hasPlan++;
-      if (r.rate != null) { sum += r.rate; done++; }
     });
-    var avg = done ? sum / done : null;
 
     var body = '';
     gs.forEach(function (G) {
@@ -2891,8 +2953,10 @@
       ' <span class="sp">' + T('u_nwork').replace('{n}', nf(rows.length)) + ' · ' + T('tot_n') + '</span></td>' +
       '<td class="r sp">' + nf(hasPlan) + T('u_ea') + '</td>' +
       '<td class="r sp">—</td><td class="r sp">—</td>' +
-      '<td class="r">' + (avg == null ? '—' : '<span class="em">' + pf(avg) + '</span>') +
-      '</td></tr></tfoot></table></div>';
+      /* ★합계 진행률을 내지 않는다 (v2.50.0 사용자 지시 「각각 표시하는 것이므로
+         합계 공정률 계산은 없음」). 단위가 다른 공종의 진행률을 평균 내면 뜻이
+         없기도 하다 — 곳마다 따로 본다. */
+      '<td class="r sp">—</td></tr></tfoot></table></div>';
   }
 
   /* ── 공종 상세 — 행을 누르면 뜨고, 마우스를 움직이면 사라진다 ── */
@@ -2990,12 +3054,15 @@
   }
 
   /* ── 작업량 ── 단위가 달라 합계를 낼 수 없다. 진행률로만 견준다 */
-  function rollOut(ru) {
+  /* ★f(위치 필터)를 인자로 받는다 (v2.50.0) — 위치마다 따로 부르려면 설계량도 그
+     위치 것을 봐야 한다. 안 주면 종전대로 화면 필터를 쓴다. */
+  function rollOut(ru, f) {
+    f = f || flt;
     var gs = byGrp(ru), body = '';
     gs.forEach(function (G) {
       var done = 0, cnt = 0;
       G.rows.forEach(function (x) {
-        var pl = A.planQty(x.e.key, flt);
+        var pl = A.planQty(x.e.key, f);
         if (pl) { done += Math.min(100, x.qty / pl * 100); cnt++; }
       });
       var avg = cnt ? done / cnt : null;
@@ -3004,7 +3071,7 @@
         '<td class="r">' + (avg == null ? '—' : '<span class="em">' + pf(avg) + '</span>') + '</td>');
       if (!roIsOpen('out', G.grp)) return;
       G.rows.slice().sort(function (a, b) { return b.qty - a.qty; }).forEach(function (x) {
-        var plan = A.planQty(x.e.key, flt);
+        var plan = A.planQty(x.e.key, f);
         var rt = plan ? x.qty / plan * 100 : null;
         body += '<tr class="prow sub" data-detail="' + esc(x.e.key) + '">' +
           '<td class="ind">' + itemLine(x.e.key) + '</td>' +
@@ -3017,6 +3084,26 @@
     return '<div class="tw"><table><thead><tr><th>' + T('work') + '</th>' +
       '<th class="r">' + T('th_out') + '</th><th class="r">' + T('target') + '</th>' +
       '<th class="r">' + T('rate') + '</th></tr></thead><tbody>' + body + '</tbody></table></div>';
+  }
+
+  /* ★작업량을 **위치별로 갈라** 낸다 (v2.50.0 사용자 지시 「Phase별 1,2 / 타운
+     Block별로 구분하여 표시」). 입력이 이미 그 단위(locKey)로 저장돼 있으므로
+     그 자료를 그대로 쓴다 — 위치마다 A.rollup(loc)을 부를 뿐이다.
+     ★위치가 하나뿐이면 제목 없이 표 하나만 낸다(군더더기 방지). */
+  function rollOutByLoc() {
+    var locs = A.allLocs(flt.s).filter(function (l) { return A.locMatch({ loc: l }, flt); });
+    var out = [];
+    locs.forEach(function (l) {
+      var ru = A.rollup(l);
+      if (!ru.length) return;                 /* 자료 없는 위치는 건너뛴다 */
+      out.push({ loc: l, ru: ru });
+    });
+    if (!out.length) return empty(T('z_noconf'), '');
+    if (out.length === 1) return rollOut(out[0].ru, out[0].loc);
+    return out.map(function (o) {
+      return '<div class="lc"><div class="lc__t">' + esc(A.locLabel(o.loc)) + '</div>' +
+        rollOut(o.ru, o.loc) + '</div>';
+    }).join('');
   }
 
   /* ★작업위치 — 작업량 표에 칸으로 끼워 넣던 것을 표 하나로 떼어냈다
@@ -4345,6 +4432,7 @@
     var _rl = $('#roleBox');
     if (_rl) _rl.innerHTML = '<span class="rolebd">' + T(A.isAdmin() ? 'lg_admin' : (A.isSurv() ? 'lg_surv' : 'lg_staff')) + '</span>' +
       '<button class="btn btn--g btn--sm" id="lgOut">' + T('lg_out') + '</button>';
+    fltAuto();                      /* ★한 곳뿐이면 자동으로 맞춘다 (v2.50.0) */
     $('#fltBox').innerHTML = fltHTML();
     $('#hmeta').innerHTML = '<b>' + esc(fltLabel()) + '</b><br>' +
       nf(A.hasPlan(flt)) + ' items planned · ' + nf(S.work.length) + ' records';
@@ -4928,6 +5016,7 @@
       if (confirm(T('p_clrgiven'))) { S.issue = []; A.save(); A.render(); }
     };
 
+    if ($('#pgLoc')) $('#pgLoc').onchange = function () { progLoc = this.value; A.render(); };
     if ($('#pgCsv')) $('#pgCsv').onclick = function () {
       A.dl(T('f_rate') + '.csv', A.toCSV([T('c_code'), T('c_grp'), T('work'), T('c_spec'), T('c_unit'), T('c_target'), T('c_act'), T('c_left'), T('c_rate')],
         A.progressRows(flt).map(function (r) {

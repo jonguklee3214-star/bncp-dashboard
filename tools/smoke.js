@@ -598,7 +598,10 @@ console.log('\n[26] 탭 분리 · 합계 · 공종 상세');
   const pt = tsrc.slice(tsrc.indexOf('function progTable'), tsrc.indexOf('function detailHTML'));
   const foot = pt.slice(pt.indexOf('<tfoot>'));
   ok(!/nf\(sumPlan|nf\(sumAct/.test(foot), '합계 행에 수량 합계를 넣지 않는다(단위 상이)');
-  ok(/hasPlan/.test(foot) && /pf\(avg\)/.test(foot), '항목 수와 진행률 평균만 낸다');
+  /* ★v2.50.0 — 합계 **공정률**을 없앴다(사용자 지시 「각각 표시하는 것이므로 합계
+     공정률 계산은 없음」). 합계 줄은 항목 수만 센다. */
+  ok(/hasPlan/.test(foot), '합계 줄은 항목 수를 센다');
+  ok(!/pf\(avg\)/.test(foot), '★합계 줄에 진행률 평균이 없다');
   ok(/T\('done'\)/.test(tsrc), '실적 열은 그대로 있다');
 
   // 장비 상태 2단계
@@ -1720,6 +1723,93 @@ console.log('\n[85] 작업현황 구성 — 순서 · 인원+장비 통합 · �
   S.work.length = 0; kWork7.forEach(x => S.work.push(x));
   S.direct.length = 0; kDir7.forEach(x => S.direct.push(x));
   A.coFlt = kCoFlt; if (kFlt7) A.setFlt(kFlt7);
+  A.setRole(kRole); A.go(1);
+}
+
+/* ★[29] 앞 — 작업량 위치별 · 진행률 위치 선택 · 상단 공구 거르기 (v2.50.0) */
+console.log('\n[84] 작업량 위치별 · 진행률 선택 · 공구는 설계수량 있는 곳만');
+{
+  const kRole = A.role(), kFlt = A.flt ? A.flt() : null;
+  const kPlan = JSON.stringify(S.plan), kWork = S.work.slice(), kCrew = S.crew.slice();
+  const kVend = S.vend.slice(), kCo = A.coFlt;
+  A.setRole('admin'); A.coFlt = '';
+  S.work.length = 0; S.crew.length = 0; S.vend.length = 0;
+  S.plan = {};
+
+  const key = (A.LIST.filter(function (e) { return e.kind === 'C' && e.site === 'civil'; })[0] || A.LIST[0]).key;
+  const td = A.today();
+  const L11 = { s: 'civil', p: 1, c: 1 }, L12 = { s: 'civil', p: 1, c: 2 };
+  /* 두 곳에 설계수량과 실적을 넣는다 — 수치가 위치마다 달라야 갈린 것이 보인다 */
+  S.plan[A.locKey(L11)] = {}; S.plan[A.locKey(L11)][key] = 1000;
+  S.plan[A.locKey(L12)] = {}; S.plan[A.locKey(L12)][key] = 2000;
+  S.work.push({ id: 'q1', date: td, loc: L11, key: key, qty: 100, st: 'ok', by: '가' });
+  S.work.push({ id: 'q2', date: td, loc: L12, key: key, qty: 700, st: 'ok', by: '가' });
+  A.setFlt({ s: 'civil', p: 0, c: 0 });        /* 전 구간 */
+  A.go(1);
+  const h = bag.view.innerHTML;
+
+  /* ① 작업량이 위치별로 갈린다 */
+  /* ★작업량 카드 **안의 위치 제목**으로 본다 — 'Phase 1-1'은 상단 필터·진행률
+     선택에도 나오므로, 화면 전체에서 찾으면 안 갈라도 통과한다(첫 판이 그랬다). */
+  const lcT = [...h.matchAll(/class="lc__t">([^<]*)</g)].map(m => m[1]);
+  ok(lcT.length === 2, '★작업량이 위치마다 갈린다(구획 2개)');
+  ok(lcT.indexOf('Phase 1-1') >= 0 && lcT.indexOf('Phase 1-2') >= 0,
+     '★구획 제목이 Phase 1-1 · 1-2다');
+  /* 수치도 그 위치 것이다 — 1-1은 100/1000, 1-2는 700/2000 */
+  const i11 = h.indexOf('class="lc__t">Phase 1-1'), i12 = h.indexOf('class="lc__t">Phase 1-2');
+  ok(i11 > 0 && i12 > i11, '두 위치가 차례로 온다');
+  /* ★대분류 줄은 접혀 있어 수량이 아니라 **진행률**이 보인다. 그 값이 위치마다
+     달라야 위치별로 계산한 것이다 — 1-1은 100/1000=10.0%, 1-2는 700/2000=35.0%. */
+  ok(h.slice(i11, i12).indexOf('10.0%') > 0, '★1-1 칸은 1-1 자료로 계산한다(100/1000)');
+  ok(h.slice(i12).indexOf('35.0%') > 0, '★1-2 칸은 1-2 자료로 계산한다(700/2000)');
+
+  /* ② 진행률 — 설계수량 있는 곳만 선택지에 나온다 */
+  ok(/id="pgLoc"/.test(h), '★진행률에 위치 선택이 붙는다');
+  const pgSel = (h.match(/id="pgLoc"[\s\S]*?<\/select>/) || [''])[0];
+  ok(pgSel.indexOf('Phase 1-1') > 0 && pgSel.indexOf('Phase 1-2') > 0,
+     '설계수량이 올라온 두 곳이 선택지에 있다');
+  ok(pgSel.indexOf('Phase 2-1') < 0, '★설계수량 없는 곳은 선택지에 없다');
+  /* 고르면 그 곳만 계산한다 — 합계 행은 없다 */
+  A._pgLoc(A.locKey(L12)); A.go(1);
+  const h2 = bag.view.innerHTML;
+  const pgSel2 = (h2.match(/id="pgLoc"[\s\S]*?<\/select>/) || [''])[0];
+  ok(/value="C\|1\|2"[^>]*selected/.test(pgSel2), '★고른 곳이 선택된 채로 남는다');
+  /* 진행률 카드만 잘라 본다 — 고른 곳(1-2)의 설계수량 2,000으로 계산해야 한다 */
+  const pgS = h2.indexOf(A.T('progress'));
+  const pgCard = pgS > 0 ? h2.slice(pgS, pgS + 2000) : '';
+  /* 대분류 줄은 접혀 있어 수량이 아니라 진행률이 보인다. 1-2의 설계 2,000으로
+     계산해야 700/2000=35.0%다(1-1의 1,000이면 70%가 된다). */
+  ok(pgCard.indexOf('35.0%') > 0, '★고른 곳(1-2)의 설계수량으로 계산한다(700/2000)');
+  ok(pgCard.indexOf('Phase 1-2') > 0, '카드 제목이 고른 곳을 가리킨다');
+  /* ★합계 **공정률**을 안 낸다(사용자 지시). 합계 줄 자체는 항목 수를 세어 주므로
+     남기되, 그 줄의 진행률 칸에는 퍼센트가 없어야 한다. */
+  const tf = (pgCard.match(/<tfoot>[\s\S]*?<\/tfoot>/) || [''])[0];
+  ok(tf.length > 0, '합계 줄은 있다(항목 수를 센다)');
+  ok(tf.indexOf('%') < 0, '★합계 줄에 공정률(%)이 없다 — 곳마다 따로 낸다');
+
+  /* ③ 상단 공구 — 설계수량 있는 곳만 */
+  const fh = bag.fltBox ? bag.fltBox.innerHTML : '';
+  ok(fh.indexOf('Phase 1-1') > 0, '★설계수량 있는 공구는 목록에 있다');
+  ok(fh.indexOf('Phase 2-1') < 0, '★설계수량 없는 공구는 목록에 없다');
+
+  /* ④ 하나뿐이면 자동으로 잡힌다 */
+  delete S.plan[A.locKey(L12)];
+  A.setFlt({ s: 'civil', p: 0, c: 0 });
+  A.go(1);
+  ok(A.flt().p === 1 && A.flt().c === 1, '★설계수량이 한 곳뿐이면 자동으로 그곳이 잡힌다');
+
+  /* ⑤ 하나도 없으면 목록 대신 먼저 올리라고 알린다 */
+  S.plan = {};
+  A.go(1);
+  const fh0 = bag.fltBox ? bag.fltBox.innerHTML : '';
+  ok(fh0.indexOf(A.T('z_noplan_t')) >= 0, '★하나도 없으면 「먼저 올리세요」라고 알린다');
+  ok(fh0.indexOf('Phase 1-1') < 0, '★없는 것을 목록에 늘어놓지 않는다');
+
+  S.plan = JSON.parse(kPlan);
+  S.work.length = 0; kWork.forEach(x => S.work.push(x));
+  S.crew.length = 0; kCrew.forEach(x => S.crew.push(x));
+  S.vend.length = 0; kVend.forEach(x => S.vend.push(x)); A.coDirty && A.coDirty();
+  A.coFlt = kCo; A._pgLoc(''); if (kFlt) A.setFlt(kFlt);
   A.setRole(kRole); A.go(1);
 }
 

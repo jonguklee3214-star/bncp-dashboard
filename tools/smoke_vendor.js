@@ -43,6 +43,21 @@ const A = sb.APP, S = A.S, V = sb.VENDOR;
 let fail = 0;
 const ok = (c,m)=>{ console.log((c?'  ok   ':'  FAIL ')+m); if(!c) fail++; };
 
+/* ★v2.50.0 — 협력업체는 **설계수량이 확인된 곳만** 올릴 수 있다(사용자 확정).
+   그래서 아래 검사들이 돌려면 설계수량이 있어야 한다. 화면이 막히는 것 자체는
+   [V-P]에서 따로 확인한다. */
+function seedPlan() {
+  /* 검사들이 여러 위치(부지 P3-1·부대 B-6 등)를 오가므로 **전 위치**에 넣는다.
+     그래야 위치 제한이 엉뚱한 검사를 흔들지 않는다. 막히는 것 자체는 [V-P]에서 본다. */
+  const key = (A.LIST && A.LIST[0] && A.LIST[0].key) || 'T-01';
+  A.allLocs().forEach(function (l) {
+    const k = A.locKey(l);
+    S.plan[k] = S.plan[k] || {};
+    S.plan[k][key] = 1000;
+  });
+}
+seedPlan();
+
 console.log('\n[V1] 협력업체 화면 렌더');
 const TABS = ['work','crew','insp','surv','mat'];
 TABS.forEach(t => {
@@ -705,6 +720,60 @@ console.log('\n[V17] 모바일/네트워크 복귀 시 안 올라간 것 자동 
 
   S.work = save.work; S.crew = save.crew; S.insp = save.insp; S.surv = save.surv; S.mreq = save.mreq;
   API.send = savedSend; API.on = savedOn; sb.document.hidden = false;
+}
+
+/* ══ V-P 설계수량이 확인된 곳만 (v2.50.0 사용자 확정) ═══ */
+console.log('\n[V-P] 협력업체는 설계수량이 확인된 곳만 올릴 수 있다');
+{
+  const VS = V.state;
+  const keepPlan = JSON.stringify(S.plan);
+  const keepS = VS.s, keepP = VS.p, keepC = VS.c;
+  /* ★업체 링크 관문(vendGate)이 먼저 막으면 위치 화면까지 못 간다.
+     여기서 볼 것은 **설계수량 제한**이므로 명부를 비워 관문을 연다(명부가 없으면 통과). */
+  const keepVend = S.vend.slice();
+  S.vend.length = 0;
+
+  /* ① 설계수량이 있는 곳만 목록에 뜬다 */
+  S.plan = {};
+  const key = (A.LIST && A.LIST[0] && A.LIST[0].key) || 'T-01';
+  S.plan['C|3|1'] = {}; S.plan['C|3|1'][key] = 500;   /* P3-1만 올렸다 */
+  VS.s = 'civil'; VS.p = 3; VS.c = 1;
+  V.render();
+  const hp = bag.vLoc.innerHTML;
+  ok(hp.indexOf('Phase 3') >= 0, '★설계수량이 올라온 공구는 고를 수 있다');
+  ok(hp.indexOf('Phase 1<') < 0 && hp.indexOf('>Phase 1-') < 0,
+     '★설계수량이 없는 공구는 목록에 없다');
+
+  /* ② 없는 곳을 고르고 있었으면 있는 곳으로 옮겨진다 */
+  VS.p = 1; VS.c = 2;                      /* 설계수량 없는 자리 */
+  V.render();
+  ok(VS.p === 3 && VS.c === 1, '★없는 곳에 서 있으면 있는 곳으로 옮겨진다');
+
+  /* ③ ★한 곳도 없으면 입력이 막히고 **이유가 글로 뜬다** */
+  S.plan = {};
+  V.render();
+  ok(bag.vBody.innerHTML.indexOf(A.T('v_noplan_t')) >= 0,
+     '★설계수량이 하나도 없으면 왜 못 올리는지 알린다');
+  ok(bag.vBody.innerHTML.indexOf(A.T('v_noplan_n')) >= 0, '무엇을 해야 하는지도 알린다');
+  ok(bag.vTabs.innerHTML === '', '★입력 탭이 아예 안 그려진다(올릴 수 없다)');
+
+  /* ④ ★받기는 **설계수량만** 부른다 — 무type 조회는 남의 실적까지 내려받는다 */
+  const API = sb.BNCP_API;
+  const savedRows = API.rows, savedChanged = API.changed, savedOn = API.on;
+  const called = [];
+  API.on = true;
+  API.rows = function (type) { called.push(type); return Promise.resolve([]); };
+  API.changed = function () { called.push('(무type)'); return Promise.resolve([]); };
+  sb.__vPlanPull();
+  ok(called.indexOf('plan') >= 0, '★설계수량(plan)을 받는다');
+  ok(called.indexOf('(무type)') < 0,
+     '★무type 전체 조회를 하지 않는다(남의 업체 실적을 안 내려받는다)');
+  API.rows = savedRows; API.changed = savedChanged; API.on = savedOn;
+
+  S.plan = JSON.parse(keepPlan);
+  VS.s = keepS; VS.p = keepP; VS.c = keepC;
+  S.vend.length = 0; keepVend.forEach(function (x) { S.vend.push(x); });
+  V.render();
 }
 
 console.log(fail ? `\n✗ 실패 ${fail}건\n` : '\n✓ 전부 통과\n');

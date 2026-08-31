@@ -948,3 +948,9 @@ tr[data-sloc]{cursor:pointer}
   padding-left:9px;border-left:3px solid var(--orange);
   font-size:13px;font-weight:700;color:var(--ink);line-height:1.3}
 .wc__a{margin-left:auto;font-weight:400}
+
+/* ★작업량 위치별 구획 (v2.50.0) — Phase 1-1 / Town A · Block 3 처럼 위치마다 갈라 낸다 */
+.lc{margin-top:14px}
+.lc:first-child{margin-top:0}
+.lc__t{font-size:13px;font-weight:700;color:var(--ink);line-height:1.3;
+  margin:0 16px 6px;padding-left:9px;border-left:3px solid var(--orange)}

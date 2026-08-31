@@ -96,16 +96,85 @@
     return t;
   }
 
+  /* ★설계수량을 받아 온다 (v2.50.0 사용자 지시 「협력업체도 설계수량이 확인된 곳만
+     올릴 수 있어」).
+     ★**전체 동기화를 켜지 않는다** — 무type 조회(api.changed)를 부르면 다른 업체의
+       실적까지 내려받는다. 설계수량 시트만 콕 집어 받는다(type='plan').
+     ★한 번 받으면 localStorage에 남으므로 다음부터는 오프라인에서도 그대로 쓴다. */
+  var planWait = false;
+  function planPull() {
+    var api = window.BNCP_API;
+    if (!api || !api.on || typeof api.rows !== 'function') return;
+    planWait = true;
+    try {
+      api.rows('plan', '').then(function (rows) {
+        planWait = false;
+        if (!rows || !rows.length) { render(); return; }
+        var n = 0;
+        rows.forEach(function (r) {
+          if (!r || !r.key) return;
+          var l = (r.s === 'civil') ? { s: 'civil', p: +r.p, c: +r.c }
+                : (r.s === 'anc') ? { s: 'anc', t: r.t, b: +r.b } : null;
+          if (!l) return;
+          var k = A.locKey(l); if (!k) return;
+          var q = Number(r.qty) || 0;
+          S.plan[k] = S.plan[k] || {};
+          if (S.plan[k][r.key] !== q) { S.plan[k][r.key] = q; n++; }
+        });
+        if (n) A.save();
+        render();
+      }, function () { planWait = false; });
+    } catch (e) { planWait = false; }
+  }
+  window.__vPlanPull = planPull;      /* 검사에서 부른다 */
+
+  /* 설계수량이 올라온 위치만 — 없는 곳은 애초에 작업 대상이 아니다 */
+  function planLocs(site) {
+    return A.allLocs(site).filter(function (l) { return A.hasPlan(l) > 0; });
+  }
+  function uniqv(a) {
+    var seen = {}, o = [];
+    a.forEach(function (x) { if (!seen[x]) { seen[x] = 1; o.push(x); } });
+    return o;
+  }
+
   /* ── 위치 선택 (항상 영문 — 층1) ───────────────────── */
   function locHTML() {
+    var pls = planLocs(V.s);
+    /* ★못 받았거나 한 곳도 없으면 **빈 목록만 두지 않는다** — 왜 못 올리는지 알린다.
+       업체가 영문도 모른 채 멈추면 현장이 선다. */
+    if (!pls.length) {
+      return '<div class="vloc">' +
+        '<select class="in" data-v="s">' + opts(A.SITES, V.s, function (x) { return x.id; }, function (x) { return x.en; }) + '</select>' +
+        '<span class="vloc__now vloc__warn">' +
+        esc(planWait ? A.T('v_planwait') : A.T('v_noplan_t')) + '</span></div>' +
+        '<div class="vhint">' + esc(A.T('v_noplan_n')) + '</div>';
+    }
     var l = V.s === 'civil'
-      ? '<select class="in" data-v="p">' + opts(A.PHASES, V.p, null, function (x) { return 'Phase ' + x; }) + '</select>' +
-        '<select class="in" data-v="c">' + opts(A.SECTORS, V.c, null, function (x) { return 'Phase ' + V.p + '-' + x; }) + '</select>'
-      : '<select class="in" data-v="t">' + opts(A.TOWNS, V.t, function (x) { return x.t; }, function (x) { return 'Town ' + x.t; }) + '</select>' +
-        '<select class="in" data-v="b">' + opts(A.townBlocks(V.t), V.b, null, function (x) { return 'Block ' + x; }) + '</select>';
+      ? '<select class="in" data-v="p">' +
+          opts(uniqv(pls.map(function (x) { return x.p; })), V.p, null, function (x) { return 'Phase ' + x; }) + '</select>' +
+        '<select class="in" data-v="c">' +
+          opts(pls.filter(function (x) { return x.p === +V.p; }).map(function (x) { return x.c; }), V.c, null,
+               function (x) { return 'Phase ' + V.p + '-' + x; }) + '</select>'
+      : '<select class="in" data-v="t">' +
+          opts(uniqv(pls.map(function (x) { return x.t; })), V.t, null, function (x) { return 'Town ' + x; }) + '</select>' +
+        '<select class="in" data-v="b">' +
+          opts(pls.filter(function (x) { return x.t === V.t; }).map(function (x) { return x.b; }), V.b, null,
+               function (x) { return 'Block ' + x; }) + '</select>';
     return '<div class="vloc">' +
       '<select class="in" data-v="s">' + opts(A.SITES, V.s, function (x) { return x.id; }, function (x) { return x.en; }) + '</select>' +
       l + '<span class="vloc__now">' + esc(A.locLabel(loc())) + '</span></div>';
+  }
+  /* 고른 곳이 설계수량 없는 곳이면 있는 첫 곳으로 옮긴다 */
+  function locFix() {
+    var pls = planLocs(V.s);
+    if (!pls.length) return;
+    var ok = pls.some(function (x) {
+      return V.s === 'civil' ? (x.p === +V.p && x.c === +V.c) : (x.t === V.t && x.b === +V.b);
+    });
+    if (ok) return;
+    var f = pls[0];
+    if (V.s === 'civil') { V.p = f.p; V.c = f.c; } else { V.t = f.t; V.b = f.b; }
   }
 
   /* ── 업체 확인 ──────────────────────────────────────
@@ -847,11 +916,27 @@
   ];
 
   function render() {
+    /* ★고른 곳에 설계수량이 없으면 있는 곳으로 옮긴다 (v2.50.0) —
+       종전에 고른 자리가 목록에서 빠지면 엉뚱한 곳에 올릴 수 있다. */
+    locFix();
     /* 명부가 등록됐는데 업체 링크가 없으면 입력 자체를 막는다 */
     if (!vendGate()) {
       $('#vTabs').innerHTML = '';
       $('#vLoc').innerHTML = '';
       $('#vBody').innerHTML = gateHTML();
+      $('#vMine').innerHTML = '';
+      return;
+    }
+    /* ★설계수량이 올라온 곳이 **한 군데도 없으면 올리지 못하게 막는다**
+       (v2.50.0 사용자 확정 「협력업체도 설계수량이 확인된 곳만 올릴 수 있어」).
+       ★조용히 막지 않는다 — 왜 못 올리는지 글로 알린다. 영문도 모른 채 멈추면
+         현장이 선다. 받는 중이면 그렇다고 말한다. */
+    if (!planLocs().length) {
+      $('#vTabs').innerHTML = '';
+      $('#vLoc').innerHTML = '';
+      $('#vBody').innerHTML = '<div class="vgate"><b>' +
+        esc(planWait ? A.T('v_planwait') : A.T('v_noplan_t')) + '</b>' +
+        '<div class="sp">' + esc(A.T('v_noplan_n')) + '</div></div>';
       $('#vMine').innerHTML = '';
       return;
     }
@@ -1352,6 +1437,16 @@
   if (typeof document !== 'undefined' && document.addEventListener)
     document.addEventListener('visibilitychange', autoRetry);
   window.__vAutoRetry = autoRetry;   /* 검사(smoke)에서 부른다 */
+
+  /* ★설계수량을 받아 온다 (v2.50.0) — 이것이 있어야 「설계수량이 확인된 곳만」
+     고를 수 있다. 화면이 뜬 뒤에 부른다(첫 그림을 늦추지 않는다).
+     ★온라인으로 돌아오거나 화면을 다시 볼 때도 한 번 더 맞춘다 — 관리자가
+       새 공구의 설계수량을 올리면 업체도 곧 그곳을 고를 수 있어야 한다. */
+  if (typeof setTimeout === 'function') setTimeout(planPull, 0);
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('online', planPull);
+    window.addEventListener('focus', planPull);
+  }
 
   /* state는 검사(smoke)에서 화면 상태를 만들기 위해 노출한다.
      화면 코드는 내부 V를 쓰므로 이걸 통해 조작해도 동작이 달라지지 않는다. */
