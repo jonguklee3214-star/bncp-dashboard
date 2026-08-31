@@ -3801,6 +3801,7 @@
       esc(fltLabel()) + ' · ' + nf(rows.length) + T('u_item'),
       '<div class="tw"><table><thead><tr><th>' + T('u_sec') + '</th>' +
       '<th>' + T('m_mat') + '</th>' +
+      '<th>' + T('m_by') + '</th>' +
       '<th class="r">' + T('sp_plan') + '</th>' +
       '<th class="r">' + T('m_req') + '</th>' +
       '<th class="r">' + T('m_stock') + '</th>' +
@@ -3819,6 +3820,7 @@
           /* ★플랜트 자재는 표를 단다 (v2.22.2). 안 달면 레미콘과 창고 자재가
              같은 줄처럼 보인다 — 받는 곳도 처리도 다르다. */
           (a.plant ? ' <span class="bd bd--o">' + T('m_plant') + '</span>' : '') + '</td>' +
+          matCoCell(a) +
           '<td class="r sp">' + (a.design ? nf(a.design, 2) + ' <span class="sp">' + esc(A.trU(a.unit)) + '</span>' : '—') + '</td>' +
           /* ★신청 — 협력업체가 올린 것. 지급 전이라 다른 칸이 다 비어 있어도
              여기만 차 있다. 스탭이 가장 먼저 봐야 할 칸이다. */
@@ -3842,6 +3844,23 @@
       rngBtn('mat') + '<button class="btn btn--g btn--sm noprint" id="mtCsv">' + T('csv') + '</button>') +
       matAddHTML() + '</div>';
     return h;
+  }
+
+  /* ★어느 업체가 신청해서 지급받았나 (v2.52.0 사용자 지시).
+       「관리자나 스탭 자재 현황에 보면 어떤 업체가 신청해서 지급했는지 몰라」
+     ★한 업체뿐이면 이름만 — 옆 칸의 지급량이 곧 그 업체 것이라 겹쳐 쓰면 시끄럽다.
+     ★여럿이면 이름마다 지급량을 붙인다 — 물음이 「누가 **얼마나**」이므로
+       이름만 늘어놓으면 답이 안 된다.
+     ★한 곳도 안 풀리면 「—」. 설계만 있고 신청이 없는 줄이 그렇다.
+       없는 업체명을 지어내지 않는다(v2.46.3 원칙). */
+  function matCoCell(a) {
+    var cs = a.cos || [];
+    if (!cs.length) return '<td><span class="sp">—</span></td>';
+    if (cs.length === 1) return '<td><span class="nm">' + esc(cs[0].co) + '</span></td>';
+    return '<td>' + cs.map(function (c) {
+      return '<div><span class="nm">' + esc(c.co) + '</span> ' +
+        '<span class="sp">' + nf(c.iss, 2) + '</span></div>';
+    }).join('') + '</td>';
   }
 
   /* ★신청 건마다 결재 흐름을 그린다 (v2.20.0 사용자 지시).
@@ -4767,10 +4786,12 @@
     if ($('#mtCsv')) $('#mtCsv').onclick = function () {
       A.dl(T('t4') + '.csv', A.toCSV(
         [T('u_sec'), T('c_grp'), T('c_sub'), T('c_mat'), T('c_spec'), T('c_unit'),
-         T('sp_plan'), T('m_req'), T('m_stock'), T('m_iss')],
+         /* ★업체 칸은 표에도 있다 — 내려받기에만 빠지면 두 장이 어긋난다 (v2.52.0) */
+         T('m_by'), T('sp_plan'), T('m_req'), T('m_stock'), T('m_iss')],
         A.matRows(flt).map(function (a) {
-          return [A.locShort(a.loc), a.grp, a.sub, a.mat, a.spec, a.unit, a.design, a.req,
-                  a.stock == null ? '' : a.stock, a.iss];
+          return [A.locShort(a.loc), a.grp, a.sub, a.mat, a.spec, a.unit,
+                  (a.cos || []).map(function (c) { return c.co + ' ' + nf(c.iss, 2); }).join(' / '),
+                  a.design, a.req, a.stock == null ? '' : a.stock, a.iss];
         })));
     };
     $$('[data-gb]').forEach(function (b) {

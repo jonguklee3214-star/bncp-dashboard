@@ -2416,14 +2416,33 @@
          (설계 외 추가)는 blankAgg가 false로 두므로, 협력업체가 올린
          값으로 메운다 — 안 그러면 화면에서 창고 자재로 보인다. */
       if (r.plant) agg[k].plant = true;
-      agg[k].req += Number(r.qty) || 0;
-      if (r.st === 'iss') agg[k].iss += Number(r.iss) || 0;
-      if (r.use != null) agg[k].use += Number(r.use) || 0;
+      var q = Number(r.qty) || 0,
+          i = (r.st === 'iss') ? (Number(r.iss) || 0) : 0,
+          u = (r.use != null) ? (Number(r.use) || 0) : 0;
+      agg[k].req += q;
+      agg[k].iss += i;
+      agg[k].use += u;
+      /* ★v2.52.0 — 「어느 업체가 신청해서 지급받았나」. 종전에는 묶는 과정에서
+         줄마다 달려 있던 업체가 버려져, 화면에 낼 자료 자체가 없었다.
+         ★업체명은 A.coOf가 명부를 거쳐 푼다 — 사람 이름으로 올라온 옛 줄도
+           그 사람의 업체로 묶인다. 비어 있으면 ''를 돌려주므로(v2.46.3)
+           **없는 이름을 지어내지 않는다** — 그런 줄은 목록에서 뺀다. */
+      var co = A.coOf(r, false);
+      if (co) {
+        var c = agg[k].co[co] || (agg[k].co[co] = { co: co, req: 0, iss: 0, use: 0 });
+        c.req += q; c.iss += i; c.use += u;
+      }
     });
     return Object.keys(agg).map(function (k) {
       var a = agg[k];
       a.gapIss = a.design ? a.iss - a.design : null;   // 지급 − 설계
       a.gapUse = a.design ? a.use - a.design : null;   // 실사용 − 설계
+      /* ★표가 흔들리지 않게 순서를 정한다 — 지급 많은 곳 먼저, 같으면 이름순 */
+      a.cos = Object.keys(a.co).map(function (n) { return a.co[n]; })
+        .sort(function (x, y) {
+          if (y.iss !== x.iss) return y.iss - x.iss;
+          return x.co < y.co ? -1 : (x.co > y.co ? 1 : 0);
+        });
       return a;
     }).sort(function (a, b) {
       /* ★위치가 먼저다 — 같은 공구 것끼리 붙어 있어야 읽힌다.
@@ -2438,7 +2457,9 @@
     var p = id.split('|');
     return { id: id, loc: loc, grp: p[0], sub: p[1], mat: p[2], spec: p[3], unit: p[4],
              plant: A.matById(id) ? A.matById(id).plant : false,
-             design: 0, req: 0, iss: 0, use: 0 };
+             design: 0, req: 0, iss: 0, use: 0,
+             /* ★업체별 신청·지급 (v2.52.0). 설계만 있는 줄은 끝까지 비어 있다. */
+             co: {} };
   }
   /* ══ 재고 — 직접 입력 (v2.17.1 사용자 지시) ═══════════
      ★자재는 설계수량 · 재고수량 · 지급수량 셋으로 통일한다.

@@ -1864,6 +1864,118 @@ console.log('\n[83] 처리시간 — 올린 뒤 처리까지 걸린 시간');
   A.setRole(kRole); A.go(1);
 }
 
+/* ★[29] 앞 — 자재 현황에 업체명 (v2.52.0 사용자 요청).
+   사용자 지적 : 「관리자나 스탭 자재 현황에 보면 어떤 업체가 신청해서 지급했는지
+   몰라」. 원인은 mVariance가 (위치+자재)로 묶으면서 줄마다 달린 업체를 버린 것.
+   ★번호가 [82]까지 내려와 앞자리가 다 찼다 — 죽은 구역([29] 뒤)에 이미 [82]가
+     있어 겹친다. 여기서부터는 [100]으로 올려 붙인다. */
+console.log('\n[100] 자재 현황 — 어느 업체가 신청해서 지급받았나 (v2.52.0)');
+{
+  const kRole = A.role(), kFlt = A.flt(), kLang = S.lang, kDl = A.dl;
+  const kMreq = S.mreq.slice(), kVend = S.vend.slice();
+
+  S.vend.length = 0;
+  S.vend.push({ name: '가나건설', code: 'GN01', staff: ['토공|김포장|010'], key: 'GN01-a' });
+  S.vend.push({ name: '다라토건', code: 'DR02', staff: [], key: 'DR02-a' });
+  A.coDirty && A.coDirty();
+
+  const LM = { s: 'civil', p: 1, c: 1 }, LK = A.locKey(LM);
+  const mA = A.MAT2.filter(m => !m.plant)[0];
+  const mB = A.MAT2.filter(m => !m.plant && A.matId(m) !== A.matId(mA))[0];
+  const mC = A.MAT2.filter(m => !m.plant &&
+    A.matId(m) !== A.matId(mA) && A.matId(m) !== A.matId(mB))[0];
+  const idA = A.matId(mA), idB = A.matId(mB), idC = A.matId(mC);
+  const kDes = {}; [idA, idB, idC].forEach(i => { kDes[i] = (S.mdesign[LK] || {})[i]; });
+  S.mreq.length = 0;
+  function mq(m, co, qty, iss) {
+    const r = A.addMreq({ date: A.today(), loc: LM, grp: m.grp, sub: m.sub, mat: m.mat,
+                          spec: m.spec, unit: m.unit, plant: false, qty: qty, by: co });
+    if (iss != null) A.mIssue(r.id, iss);
+    return r;
+  }
+  /* 같은 자재를 두 업체가 신청해서 지급받았다 — 화면에 둘 다 서야 한다 */
+  mq(mA, '다라토건', 100, 60);
+  mq(mA, '김포장', 50, 40);   /* ★담당자 이름으로 올라온 줄 — 명부를 거쳐 회사로 묶인다 */
+  /* ★업체가 **비어 있는** 줄 — 없는 이름을 지어내면 안 된다(v2.46.3 원칙) */
+  mq(mC, '', 30, 20);
+  /* 설계만 있고 신청이 없는 줄 */
+  S.mdesign[LK] = S.mdesign[LK] || {};
+  S.mdesign[LK][idB] = 200;
+
+  /* ① 자료 — 업체마다 제 몫을 단다 */
+  const rA = A.matRows(LM).filter(x => x.id === idA)[0];
+  ok(!!rA, '두 업체가 받은 자재 줄이 있다(검사가 헛돌지 않게)');
+  const co100 = {}; (rA.cos || []).forEach(c => { co100[c.co] = c; });
+  ok((rA.cos || []).length === 2, '★한 자재를 두 업체가 받았으면 업체가 둘로 선다');
+  ok(co100['다라토건'] && co100['다라토건'].req === 100 && co100['다라토건'].iss === 60,
+     '★업체마다 제 신청·지급량을 단다(남의 것이 섞이지 않는다)');
+  ok(co100['가나건설'] && co100['가나건설'].req === 50 && co100['가나건설'].iss === 40,
+     '★담당자 이름으로 올린 줄도 명부를 거쳐 회사명으로 묶인다');
+  const rB = A.matRows(LM).filter(x => x.id === idB)[0];
+  ok(rB && (rB.cos || []).length === 0,
+     '★신청이 없는(설계만 있는) 줄은 없는 업체명을 지어내지 않는다');
+  const rC = A.matRows(LM).filter(x => x.id === idC)[0];
+  ok(rC && rC.req === 30 && (rC.cos || []).length === 0,
+     '★업체가 비어 있는 줄은 집계는 되되 업체 목록에는 안 선다(v2.46.3)');
+
+  /* ② 화면 — 관리자 자재 탭 */
+  A.setRole('admin'); S.lang = 'ko'; A.setFlt(LM);
+  bag.mtCsv = El('mtCsv');
+  A.go(4);
+  const hm = bag.view.innerHTML;
+  /* ★칸 자리를 **머리글에서** 찾아 그 자리의 칸만 본다.
+     처음에는 줄 전체에서 「60.00」을 찾았는데, 맨 오른쪽 처리 칸이 신청 건마다
+     지급량을 이미 적고 있어 업체 칸을 지워도 검사가 통과했다(거짓 통과). */
+  const thead = hm.split('<thead>').filter(s => s.indexOf(A.T('m_gap')) > 0)[0].split('</thead>')[0];
+  let byIdx = -1;
+  thead.split('<th').forEach((s, i) => { if (s.indexOf('>' + A.T('m_by') + '</th>') === 0) byIdx = i; });
+  ok(byIdx > 0, '★자재 표에 업체 칸이 있다');
+  /* ★줄은 **재고칸의 자재 id**로 집는다 — 자재명으로 자르면 다른 줄·다른 칸에
+       같은 이름이 있어 엉뚱한 데를 본다(0-J 함정). */
+  const trs = hm.split('<tr>');
+  const trA = trs.filter(s => s.indexOf('data-mst="' + A.esc(idA) + '"') > 0)[0];
+  const trB = trs.filter(s => s.indexOf('data-mst="' + A.esc(idB) + '"') > 0)[0];
+  const trC = trs.filter(s => s.indexOf('data-mst="' + A.esc(idC) + '"') > 0)[0];
+  ok(!!trA && !!trB && !!trC, '세 자재 줄을 화면에서 집었다');
+  const cell = tr => ((tr || '').split('<td')[byIdx] || '');
+  const cA = cell(trA), cB = cell(trB), cC = cell(trC);
+  ok(cA.indexOf('다라토건') > 0 && cA.indexOf('가나건설') > 0,
+     '★업체 칸에 두 업체 이름이 모두 뜬다');
+  ok(cA.indexOf(A.nf(60, 2)) > 0 && cA.indexOf(A.nf(40, 2)) > 0,
+     '★업체가 여럿이면 업체 칸에 이름마다 지급량이 붙는다');
+  ok(cB.indexOf('가나건설') < 0 && cB.indexOf('다라토건') < 0 &&
+     cB.indexOf(A.T('e_nocomp')) < 0,
+     '★신청 없는 줄에 남의 업체나 「미등록 업체」가 서지 않는다');
+  ok(cB.indexOf('—') > 0, '신청 없는 줄의 업체 칸은 —');
+  ok(cC.indexOf('—') > 0 && cC.indexOf(A.T('e_nocomp')) < 0,
+     '★업체가 비어 있는 줄도 —일 뿐, 「미등록 업체」로 서지 않는다');
+  /* 한 업체뿐인 줄은 이름만 — 옆 칸에 이미 지급량이 있어 겹쳐 쓰면 시끄럽다 */
+  mq(mB, '다라토건', 70, 70);
+  A.go(4);
+  const c1 = cell(bag.view.innerHTML.split('<tr>')
+    .filter(s => s.indexOf('data-mst="' + A.esc(idB) + '"') > 0)[0]);
+  ok(c1.indexOf('다라토건') > 0 && c1.indexOf(A.nf(70, 2)) < 0,
+     '★업체가 하나뿐이면 이름만 적는다(수량은 옆 칸에 이미 있다)');
+
+  /* ③ 내려받기 — 표에 있는 칸이 여기 없으면 두 장이 어긋난다 */
+  let csv100 = '';
+  A.dl = function (n, t) { csv100 = t; };
+  bag.mtCsv.onclick();
+  A.dl = kDl;
+  ok(csv100.split('\r\n')[0].indexOf(A.T('m_by')) >= 0, '★내려받기 머리글에도 업체 칸이 있다');
+  ok(csv100.indexOf('다라토건 ' + A.nf(60, 2)) > 0 &&
+     csv100.indexOf('가나건설 ' + A.nf(40, 2)) > 0,
+     '★내려받기에도 업체마다 지급량이 담긴다');
+
+  delete bag.mtCsv;
+  S.mreq.length = 0; kMreq.forEach(x => S.mreq.push(x));
+  S.vend.length = 0; kVend.forEach(x => S.vend.push(x)); A.coDirty && A.coDirty();
+  Object.keys(kDes).forEach(i => {
+    if (kDes[i] == null) delete S.mdesign[LK][i]; else S.mdesign[LK][i] = kDes[i];
+  });
+  S.lang = kLang; A.setFlt(kFlt); A.setRole(kRole); A.go(1);
+}
+
 /* ── 29 내역서 원본 인식 (v2.14.0) ────────────────────── */
 console.log('\n[29] 내역서 원본 인식 — 실제 P3-1 파일로 검사');
 {
