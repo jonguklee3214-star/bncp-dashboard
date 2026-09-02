@@ -1,0 +1,134 @@
+{
+  "appTitle": "জ্বালানি ট্র্যাকিং",
+  "appSubtitle": "Fuel Tracking System",
+  "campaign": "অযথা ইঞ্জিন চালু রাখবেন না · জ্বালানি সাশ্রয় করুন",
+  "nav": {
+    "dashboard": "ড্যাশবোর্ড",
+    "fuelEntry": "জ্বালানি এন্ট্রি",
+    "fuelHistory": "জ্বালানি ইতিহাস",
+    "reports": "রিপোর্ট",
+    "vehicles": "যানবাহন",
+    "settings": "সেটিংস",
+    "fuel": "জ্বালানি",
+    "history": "ইতিহাস",
+    "more": "আরও"
+  },
+  "common": {
+    "save": "সংরক্ষণ",
+    "saving": "সংরক্ষণ হচ্ছে...",
+    "saveSuccess": "জ্বালানি রেকর্ড সফলভাবে সংরক্ষিত হয়েছে।",
+    "saveFail": "জ্বালানি রেকর্ড সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।",
+    "search": "অনুসন্ধান",
+    "filter": "ফিল্টার",
+    "apply": "প্রয়োগ",
+    "cancel": "বাতিল",
+    "all": "সব",
+    "loading": "লোড হচ্ছে...",
+    "noRecords": "কোনো জ্বালানি রেকর্ড পাওয়া যায়নি।",
+    "weatherUnavailable": "আবহাওয়া তথ্য নেই",
+    "print": "প্রিন্ট",
+    "csv": "CSV",
+    "pdf": "PDF",
+    "close": "বন্ধ",
+    "select": "নির্বাচন"
+  },
+  "fuelType": {
+    "label": "জ্বালানির ধরন",
+    "diesel": "ডিজেল",
+    "gasoline": "পেট্রোল",
+    "selectPrompt": "প্রথমে জ্বালানির ধরন নির্বাচন করুন"
+  },
+  "entry": {
+    "title": "জ্বালানি এন্ট্রি",
+    "fuelDatetime": "জ্বালানি তারিখ / সময়",
+    "mainVehicleNo": "প্রধান যানবাহন নং",
+    "controlNo": "কন্ট্রোল নং",
+    "equipment": "সরঞ্জাম",
+    "driver": "চালক",
+    "company": "প্রতিষ্ঠান",
+    "team": "টিম",
+    "part": "পার্ট",
+    "vehicleType": "যানবাহনের ধরন",
+    "capacity": "ক্ষমতা",
+    "teamCode": "টিম কোড",
+    "previousMileage": "পূর্ববর্তী মাইলেজ",
+    "currentMileage": "বর্তমান মাইলেজ",
+    "distance": "দূরত্ব",
+    "fuelVolume": "জ্বালানির পরিমাণ",
+    "remarks": "মন্তব্য",
+    "selectVehicle": "যানবাহন নির্বাচন",
+    "selectEquipment": "সরঞ্জাম নির্বাচন",
+    "searchVehicle": "যানবাহন অনুসন্ধান",
+    "searchEquipment": "সরঞ্জাম অনুসন্ধান",
+    "mileageWarning": "বর্তমান মাইলেজ পূর্ববর্তী মাইলেজের চেয়ে কম।",
+    "mileageException": "অ্যাডমিন ব্যতিক্রম হিসেবে সংরক্ষণ",
+    "detail": "বিস্তারিত"
+  },
+  "dashboard": {
+    "title": "ড্যাশবোর্ড",
+    "kpi": {
+      "transactions": "জ্বালানি লেনদেন",
+      "volume": "জ্বালানির পরিমাণ",
+      "distance": "মোট দূরত্ব",
+      "avgVolume": "গড় জ্বালানির পরিমাণ",
+      "activeVehicles": "সক্রিয় যানবাহন"
+    },
+    "charts": {
+      "dailyVolume": "দৈনিক জ্বালানির পরিমাণ",
+      "weeklyVolume": "সাপ্তাহিক জ্বালানির পরিমাণ",
+      "monthlyVolume": "মাসিক জ্বালানির পরিমাণ",
+      "dailyCount": "দৈনিক জ্বালানি সংখ্যা",
+      "partVolume": "পার্ট অনুযায়ী জ্বালানি",
+      "vehicleVolume": "যানবাহন অনুযায়ী জ্বালানি",
+      "driverVolume": "চালক অনুযায়ী জ্বালানি"
+    },
+    "recent": "সাম্প্রতিক জ্বালানি রেকর্ড",
+    "summary": "জ্বালানি সারসংক্ষেপ",
+    "alerts": "ডেটা সতর্কতা",
+    "mileageIssues": "মাইলেজ সমস্যা"
+  },
+  "period": {
+    "label": "সময়কাল",
+    "today": "আজ",
+    "yesterday": "গতকাল",
+    "thisWeek": "এই সপ্তাহ",
+    "lastWeek": "গত সপ্তাহ",
+    "thisMonth": "এই মাস",
+    "lastMonth": "গত মাস",
+    "thisYear": "এই বছর",
+    "custom": "কাস্টম রেঞ্জ"
+  },
+  "filter": {
+    "part": "পার্ট",
+    "vehicle": "যানবাহন",
+    "driver": "চালক",
+    "vehicleType": "যানবাহনের ধরন",
+    "controlNo": "কন্ট্রোল নং",
+    "fuelType": "জ্বালানির ধরন"
+  },
+  "history": {
+    "title": "জ্বালানি ইতিহাস",
+    "datetime": "তারিখ/সময়",
+    "searchPlaceholder": "যানবাহন · কন্ট্রোল নং · চালক · পার্ট অনুসন্ধান"
+  },
+  "units": {
+    "l": "L",
+    "km": "km",
+    "transactions": "টি"
+  },
+  "vehicles": {
+    "title": "যানবাহন",
+    "add": "যানবাহন যোগ করুন",
+    "edit": "সম্পাদনা",
+    "status": "অবস্থা",
+    "active": "সক্রিয়",
+    "inactive": "নিষ্ক্রিয়",
+    "driversHint": "একাধিক চালক / দিয়ে আলাদা করুন",
+    "saved": "সংরক্ষিত হয়েছে।",
+    "import": "CSV ইম্পোর্ট",
+    "template": "CSV টেমপ্লেট",
+    "importDone": "ইম্পোর্ট সম্পন্ন"
+  },
+  "reports": { "title": "রিপোর্ট" },
+  "settings": { "title": "সেটিংস", "language": "ভাষা", "initSheet": "শিট ইনিশিয়ালাইজ" }
+}

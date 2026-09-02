@@ -1,0 +1,134 @@
+{
+  "appTitle": "Fuel Tracking",
+  "appSubtitle": "Fuel Tracking System",
+  "campaign": "NO IDLING · SAVE FUEL",
+  "nav": {
+    "dashboard": "Dashboard",
+    "fuelEntry": "Fuel Entry",
+    "fuelHistory": "Fuel History",
+    "reports": "Reports",
+    "vehicles": "Vehicles",
+    "settings": "Settings",
+    "fuel": "Fuel",
+    "history": "History",
+    "more": "More"
+  },
+  "common": {
+    "save": "Save",
+    "saving": "Saving...",
+    "saveSuccess": "Fuel record saved successfully.",
+    "saveFail": "Unable to save fuel record. Please try again.",
+    "search": "Search",
+    "filter": "Filter",
+    "apply": "Apply",
+    "cancel": "Cancel",
+    "all": "All",
+    "loading": "Loading...",
+    "noRecords": "No fuel records found.",
+    "weatherUnavailable": "Weather unavailable",
+    "print": "Print",
+    "csv": "CSV",
+    "pdf": "PDF",
+    "close": "Close",
+    "select": "Select"
+  },
+  "fuelType": {
+    "label": "Fuel Type",
+    "diesel": "Diesel",
+    "gasoline": "Gasoline",
+    "selectPrompt": "Select fuel type first"
+  },
+  "entry": {
+    "title": "Fuel Entry",
+    "fuelDatetime": "Fuel Date / Time",
+    "mainVehicleNo": "Main Vehicle No.",
+    "controlNo": "CONTROL N°",
+    "equipment": "Equipment",
+    "driver": "Driver",
+    "company": "Company",
+    "team": "Team",
+    "part": "Part",
+    "vehicleType": "Vehicle Type",
+    "capacity": "Capacity",
+    "teamCode": "Team Code",
+    "previousMileage": "Previous Mileage",
+    "currentMileage": "Current Mileage",
+    "distance": "Distance",
+    "fuelVolume": "Fuel Volume",
+    "remarks": "Remarks",
+    "selectVehicle": "Select vehicle",
+    "selectEquipment": "Select equipment",
+    "searchVehicle": "Search vehicle",
+    "searchEquipment": "Search equipment",
+    "mileageWarning": "Current mileage is lower than previous mileage.",
+    "mileageException": "Save with admin exception",
+    "detail": "Details"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "kpi": {
+      "transactions": "Fuel Transactions",
+      "volume": "Fuel Volume",
+      "distance": "Total Distance",
+      "avgVolume": "Average Fuel Volume",
+      "activeVehicles": "Active Vehicles"
+    },
+    "charts": {
+      "dailyVolume": "Daily Fuel Volume",
+      "weeklyVolume": "Weekly Fuel Volume",
+      "monthlyVolume": "Monthly Fuel Volume",
+      "dailyCount": "Daily Fuel Count",
+      "partVolume": "Part-wise Fuel Volume",
+      "vehicleVolume": "Vehicle-wise Fuel Volume",
+      "driverVolume": "Driver-wise Fuel Volume"
+    },
+    "recent": "Recent Fuel Records",
+    "summary": "Fuel Summary",
+    "alerts": "Data Alerts",
+    "mileageIssues": "Mileage Issues"
+  },
+  "period": {
+    "label": "Period",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "thisWeek": "This Week",
+    "lastWeek": "Last Week",
+    "thisMonth": "This Month",
+    "lastMonth": "Last Month",
+    "thisYear": "This Year",
+    "custom": "Custom Range"
+  },
+  "filter": {
+    "part": "Part",
+    "vehicle": "Vehicle",
+    "driver": "Driver",
+    "vehicleType": "Vehicle Type",
+    "controlNo": "CONTROL N°",
+    "fuelType": "Fuel Type"
+  },
+  "history": {
+    "title": "Fuel History",
+    "datetime": "Date/Time",
+    "searchPlaceholder": "Search vehicle · control no · driver · part"
+  },
+  "units": {
+    "l": "L",
+    "km": "km",
+    "transactions": "transactions"
+  },
+  "vehicles": {
+    "title": "Vehicles",
+    "add": "Add Vehicle",
+    "edit": "Edit",
+    "status": "Status",
+    "active": "Active",
+    "inactive": "Inactive",
+    "driversHint": "Separate multiple drivers with /",
+    "saved": "Saved.",
+    "import": "Import CSV",
+    "template": "CSV Template",
+    "importDone": "Import complete"
+  },
+  "reports": { "title": "Reports" },
+  "settings": { "title": "Settings", "language": "Language", "initSheet": "Initialize Sheet" }
+}

@@ -1,0 +1,134 @@
+{
+  "appTitle": "유류 주유 관리",
+  "appSubtitle": "Fuel Tracking System",
+  "campaign": "공회전 금지 · 기름 아껴 씁시다",
+  "nav": {
+    "dashboard": "대시보드",
+    "fuelEntry": "주유 입력",
+    "fuelHistory": "주유 이력",
+    "reports": "리포트",
+    "vehicles": "차량 관리",
+    "settings": "설정",
+    "fuel": "주유",
+    "history": "이력",
+    "more": "더보기"
+  },
+  "common": {
+    "save": "저장",
+    "saving": "저장 중...",
+    "saveSuccess": "주유 기록이 저장되었습니다.",
+    "saveFail": "주유 기록을 저장하지 못했습니다. 다시 시도해 주세요.",
+    "search": "검색",
+    "filter": "필터",
+    "apply": "적용",
+    "cancel": "취소",
+    "all": "전체",
+    "loading": "불러오는 중...",
+    "noRecords": "주유 기록이 없습니다.",
+    "weatherUnavailable": "날씨 정보 없음",
+    "print": "인쇄",
+    "csv": "CSV",
+    "pdf": "PDF",
+    "close": "닫기",
+    "select": "선택"
+  },
+  "fuelType": {
+    "label": "유종",
+    "diesel": "디젤",
+    "gasoline": "가솔린",
+    "selectPrompt": "먼저 유종을 선택하세요"
+  },
+  "entry": {
+    "title": "주유 입력",
+    "fuelDatetime": "주유 일시",
+    "mainVehicleNo": "차량번호",
+    "controlNo": "관리번호",
+    "equipment": "장비",
+    "driver": "운전자",
+    "company": "소속",
+    "team": "팀",
+    "part": "파트",
+    "vehicleType": "차량 종류",
+    "capacity": "용량",
+    "teamCode": "팀 코드",
+    "previousMileage": "이전 주행거리",
+    "currentMileage": "현재 주행거리",
+    "distance": "주행거리",
+    "fuelVolume": "주유량",
+    "remarks": "비고",
+    "selectVehicle": "차량 선택",
+    "selectEquipment": "장비 선택",
+    "searchVehicle": "차량 검색",
+    "searchEquipment": "장비 검색",
+    "mileageWarning": "현재 주행거리가 이전 주행거리보다 작습니다.",
+    "mileageException": "관리자 예외 저장",
+    "detail": "상세 정보"
+  },
+  "dashboard": {
+    "title": "대시보드",
+    "kpi": {
+      "transactions": "주유 횟수",
+      "volume": "주유량",
+      "distance": "총 주행거리",
+      "avgVolume": "평균 주유량",
+      "activeVehicles": "운행 차량"
+    },
+    "charts": {
+      "dailyVolume": "일별 주유량",
+      "weeklyVolume": "주별 주유량",
+      "monthlyVolume": "월별 주유량",
+      "dailyCount": "일별 주유 횟수",
+      "partVolume": "파트별 주유량",
+      "vehicleVolume": "차량별 주유량",
+      "driverVolume": "운전자별 주유량"
+    },
+    "recent": "최근 주유 기록",
+    "summary": "주유 요약",
+    "alerts": "데이터 경보",
+    "mileageIssues": "주행거리 이상"
+  },
+  "period": {
+    "label": "기간",
+    "today": "오늘",
+    "yesterday": "어제",
+    "thisWeek": "이번 주",
+    "lastWeek": "지난 주",
+    "thisMonth": "이번 달",
+    "lastMonth": "지난 달",
+    "thisYear": "올해",
+    "custom": "사용자 지정"
+  },
+  "filter": {
+    "part": "파트",
+    "vehicle": "차량",
+    "driver": "운전자",
+    "vehicleType": "차량 종류",
+    "controlNo": "관리번호",
+    "fuelType": "유종"
+  },
+  "history": {
+    "title": "주유 이력",
+    "datetime": "일시",
+    "searchPlaceholder": "차량번호 · 관리번호 · 운전자 · 파트 검색"
+  },
+  "units": {
+    "l": "L",
+    "km": "km",
+    "transactions": "건"
+  },
+  "vehicles": {
+    "title": "차량 관리",
+    "add": "차량 추가",
+    "edit": "수정",
+    "status": "상태",
+    "active": "운행",
+    "inactive": "미운행",
+    "driversHint": "복수 운전자는 / 로 구분",
+    "saved": "저장되었습니다.",
+    "import": "CSV 등록",
+    "template": "CSV 양식",
+    "importDone": "등록 완료"
+  },
+  "reports": { "title": "리포트" },
+  "settings": { "title": "설정", "language": "언어", "initSheet": "시트 초기화" }
+}
