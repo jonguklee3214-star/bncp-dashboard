@@ -16,6 +16,7 @@ import {
   readTab,
   writeHeader,
   writeRow,
+  writeRows,
 } from "./sheets";
 
 // ─────────────────────────────────────────────────────────────
@@ -246,11 +247,8 @@ export async function initSheet(): Promise<{ vehicles: number; demo?: boolean }>
   // 이미 차량이 있으면 seed 를 덮지 않는다 (과거 데이터 보존, 항목 90).
   const existing = await getVehicles();
   if (existing.length === 0) {
-    let rowNo = 2;
-    for (const v of SEED_VEHICLES) {
-      await writeRow(SHEET_TABS.vehicles, rowNo, vehicleToRow(v));
-      rowNo += 1;
-    }
+    // 58행을 한 번의 요청으로 기록 (쓰기 할당량·속도)
+    await writeRows(SHEET_TABS.vehicles, 2, SEED_VEHICLES.map(vehicleToRow));
     return { vehicles: SEED_VEHICLES.length };
   }
   return { vehicles: existing.length };

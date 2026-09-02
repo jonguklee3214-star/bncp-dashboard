@@ -128,6 +128,22 @@ export async function writeRow(
   });
 }
 
+/** 여러 행을 한 번의 요청으로 기록한다 (쓰기 할당량 절약 — 항목 89). */
+export async function writeRows(
+  tab: string,
+  startRow: number,
+  rows: (string | number)[][],
+): Promise<void> {
+  if (rows.length === 0) return;
+  const sheets = getSheetsClient();
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: getSheetId(),
+    range: `${tab}!A${startRow}`,
+    valueInputOption: "RAW",
+    requestBody: { values: rows },
+  });
+}
+
 /** 탭 헤더(1행)만 설정한다. */
 export async function writeHeader(tab: string, header: readonly string[]): Promise<void> {
   const sheets = getSheetsClient();
