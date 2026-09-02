@@ -74,8 +74,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <DemoBanner />
           <div className="flex h-14 items-center justify-between gap-3 px-4">
-            {/* mobile logo + 팀명 */}
-            <div className="flex flex-col md:hidden">
+            {/* mobile logo + 팀명 (가운데 정렬) */}
+            <div className="flex flex-col items-center md:hidden">
               <Image src={logo} alt="Hanwha E&C" width={140} height={30} className="h-6 w-auto" />
               <span className="mt-0.5 text-[11px] font-bold text-gray-800">{t("appTeam")}</span>
             </div>

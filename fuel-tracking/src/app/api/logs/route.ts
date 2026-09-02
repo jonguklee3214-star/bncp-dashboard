@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
         company: "Construction",
         team: "공사팀",
         part: "",
-        vehicleType: "기타(말통)",
+        vehicleType: "기타 급유",
         capacity: "",
         teamCode: "",
         mileageKm: null,

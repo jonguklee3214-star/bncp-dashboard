@@ -65,10 +65,10 @@
     "mileageWarning": "현재 주행거리가 이전 주행거리보다 작습니다.",
     "mileageException": "관리자 예외 저장",
     "detail": "상세 정보",
-    "misc": "기타 · 말통 급유",
+    "misc": "기타 급유",
     "miscSub": "소형 발전기·소형 기계 등 (차량 없이 주유량만)",
     "reason": "사유",
-    "reasonPlaceholder": "예: 소형 발전기 말통 급유"
+    "reasonPlaceholder": "예: 소형 발전기 급유"
   },
   "dashboard": {
     "title": "대시보드",
