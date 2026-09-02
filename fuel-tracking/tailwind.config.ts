@@ -22,17 +22,16 @@ const config: Config = {
         danger: "#DC2626",
       },
       fontFamily: {
-        // Hanwha 전용 폰트 + 언어별 폴백 (한글/영문: Hanwha, বাংলা: Noto Sans Bengali)
+        // 본문·UI: Pretendard 우선(화면 선명도). বাংলা 는 Noto Sans Bengali 폴백.
         sans: [
-          "Hanwha R",
           "Pretendard",
           "Noto Sans KR",
           "Noto Sans Bengali",
           "system-ui",
           "sans-serif",
         ],
-        bold: ["Hanwha B", "Pretendard", "Noto Sans KR", "sans-serif"],
-        light: ["Hanwha L", "Pretendard", "Noto Sans KR", "sans-serif"],
+        // 제목·브랜드: 한화 전용 폰트 (큰 글자에서 브랜드 유지)
+        hanwha: ["Hanwha B", "Hanwha R", "Pretendard", "Noto Sans KR", "sans-serif"],
       },
       borderRadius: {
         card: "14px",
