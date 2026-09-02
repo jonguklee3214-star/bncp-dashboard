@@ -72,13 +72,13 @@ export default function DashboardPage() {
 
       {/* Charts */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <BucketBarChart title={t("dashboard.charts.dailyVolume")} data={byDay(filtered)} metric="volume" labelFormatter={(k) => formatDayLabel(k + "T00:00:00")} />
-        <BucketBarChart title={t("dashboard.charts.dailyCount")} data={byDay(filtered)} metric="count" labelFormatter={(k) => formatDayLabel(k + "T00:00:00")} />
-        <BucketBarChart title={t("dashboard.charts.weeklyVolume")} data={byWeek(filtered)} metric="volume" />
-        <BucketBarChart title={t("dashboard.charts.monthlyVolume")} data={byMonth(filtered)} metric="volume" />
-        <BucketBarChart title={t("dashboard.charts.partVolume")} data={byPart(filtered)} metric="volume" horizontal />
-        <BucketBarChart title={t("dashboard.charts.vehicleVolume")} data={byVehicle(filtered).slice(0, 10)} metric="volume" horizontal />
-        <BucketBarChart title={t("dashboard.charts.driverVolume")} data={byDriverName(filtered).slice(0, 10)} metric="volume" horizontal />
+        <BucketBarChart title={t("dashboard.charts.dailyVolume")} data={byDay(filtered)} metric="volume" unit={t("units.l")} labelFormatter={(k) => formatDayLabel(k + "T00:00:00")} />
+        <BucketBarChart title={t("dashboard.charts.dailyCount")} data={byDay(filtered)} metric="count" unit={t("units.transactions")} labelFormatter={(k) => formatDayLabel(k + "T00:00:00")} />
+        <BucketBarChart title={t("dashboard.charts.weeklyVolume")} data={byWeek(filtered)} metric="volume" unit={t("units.l")} />
+        <BucketBarChart title={t("dashboard.charts.monthlyVolume")} data={byMonth(filtered)} metric="volume" unit={t("units.l")} />
+        <BucketBarChart title={t("dashboard.charts.partVolume")} data={byPart(filtered)} metric="volume" unit={t("units.l")} horizontal />
+        <BucketBarChart title={t("dashboard.charts.vehicleVolume")} data={byVehicle(filtered).slice(0, 10)} metric="volume" unit={t("units.l")} horizontal />
+        <BucketBarChart title={t("dashboard.charts.driverVolume")} data={byDriverName(filtered).slice(0, 10)} metric="volume" unit={t("units.l")} horizontal />
       </div>
 
       {/* Recent */}
