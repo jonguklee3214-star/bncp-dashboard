@@ -116,6 +116,13 @@
     "km": "km",
     "transactions": "transactions"
   },
+  "weather": {
+    "forecast": "7-Day Forecast",
+    "wind": "Wind",
+    "precip": "Precip.",
+    "humidity": "Humidity",
+    "now": "Now"
+  },
   "vehicles": {
     "title": "Vehicles",
     "add": "Add Vehicle",

@@ -19,6 +19,7 @@ import { formatDayLabel, formatDateTime, formatL } from "@/lib/format";
 import { KpiTile, Card } from "@/components/ui";
 import { FilterBar } from "@/components/FilterBar";
 import { BucketBarChart } from "@/components/Charts";
+import { WeatherWidget } from "@/components/WeatherWidget";
 
 export default function DashboardPage() {
   const { t } = useI18n();
@@ -41,6 +42,9 @@ export default function DashboardPage() {
 
       {error && <p className="rounded-lg bg-danger/10 p-3 text-sm text-danger">{error}</p>}
       {loading && <p className="text-sm text-gray-400">{t("common.loading")}</p>}
+
+      {/* 주간 날씨 (항목 68) */}
+      <WeatherWidget />
 
       <FilterBar filters={filters} onChange={setFilters} vehicles={vehicles} />
 

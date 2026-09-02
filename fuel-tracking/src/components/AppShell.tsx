@@ -65,9 +65,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="md:ml-60">
         {/* Top bar */}
         <header className="no-print sticky top-0 z-20 border-b border-neutral-border bg-white/90 backdrop-blur">
-          {/* 유류 절약 캠페인 문구 (항목 8) — 선택 언어 하나만 */}
-          <div className="bg-hanwha px-4 py-1 text-center text-xs font-medium text-white">
-            {t("campaign")}
+          {/* 캠페인 문구(왼쪽) + 현재 날씨(오른쪽) 반반 (항목 8·7) */}
+          <div className="flex items-center justify-between gap-3 bg-hanwha px-4 py-2 text-white">
+            <div className="flex items-center gap-2 font-bold">
+              <span className="text-base leading-none">⛽</span>
+              <span className="text-[13px] sm:text-[15px]">{t("campaign")}</span>
+            </div>
+            <WeatherBar onDark />
           </div>
           <DemoBanner />
           <div className="flex h-14 items-center justify-between gap-3 px-4">
@@ -76,15 +80,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Image src={logo} alt="Hanwha E&C" width={140} height={30} className="h-6 w-auto" />
               <span className="mt-0.5 text-[11px] font-bold text-gray-700">BNCP 공사팀</span>
             </div>
-            <div className="hidden md:block">
-              <WeatherBar />
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="md:hidden">
-                <WeatherBar compact />
-              </div>
-              <LanguageSwitcher />
-            </div>
+            <div className="hidden text-sm text-gray-400 md:block">{t("appSubtitle")}</div>
+            <LanguageSwitcher />
           </div>
         </header>
 

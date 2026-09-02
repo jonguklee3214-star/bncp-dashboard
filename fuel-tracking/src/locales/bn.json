@@ -116,6 +116,13 @@
     "km": "km",
     "transactions": "টি"
   },
+  "weather": {
+    "forecast": "৭ দিনের পূর্বাভাস",
+    "wind": "বাতাস",
+    "precip": "বৃষ্টির সম্ভাবনা",
+    "humidity": "আর্দ্রতা",
+    "now": "এখন"
+  },
   "vehicles": {
     "title": "যানবাহন",
     "add": "যানবাহন যোগ করুন",
