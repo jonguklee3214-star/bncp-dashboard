@@ -35,3 +35,11 @@ export function demoGetLogs(): FuelLog[] {
 export function demoAppendLog(log: FuelLog): void {
   demoLogs.push(log);
 }
+
+const demoAudit: (string | number)[][] = [];
+export function demoAppendAudit(row: (string | number)[]): void {
+  demoAudit.push(row);
+}
+export function demoGetAudit(): (string | number)[][] {
+  return demoAudit;
+}

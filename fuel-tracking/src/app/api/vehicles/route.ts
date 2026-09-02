@@ -1,9 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Vehicle } from "@/types";
-import { getVehicles, upsertVehicle } from "@/lib/repository";
+import { appendAudit, getVehicles, upsertVehicle } from "@/lib/repository";
 import { errorResponse } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
+
+function summarize(v: Vehicle): string {
+  return [
+    v.fuelType,
+    v.mainVehicleNo,
+    v.controlNo,
+    v.fuelType === "diesel" ? v.equipmentName : v.vehicleType,
+    v.part || v.teamCode,
+    v.driverIds.join("/"),
+    v.status,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 export async function GET() {
   try {
@@ -55,7 +69,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 변경 전 값 (수정 시 audit 용)
+    const before = isNew
+      ? undefined
+      : (await getVehicles()).find((x) => x.vehicleId === vehicle.vehicleId);
+
     await upsertVehicle(vehicle);
+
+    // 관리자 변경 추적 (항목 79)
+    await appendAudit({
+      user: "admin",
+      action: isNew ? "vehicle.create" : "vehicle.update",
+      target: vehicle.controlNo || vehicle.mainVehicleNo,
+      oldValue: before ? summarize(before) : "",
+      newValue: summarize(vehicle),
+    });
+
     return NextResponse.json({ ok: true, vehicle, created: isNew });
   } catch (e) {
     return errorResponse(e);

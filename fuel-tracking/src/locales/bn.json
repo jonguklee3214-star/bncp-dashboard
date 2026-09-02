@@ -124,7 +124,10 @@
     "active": "সক্রিয়",
     "inactive": "নিষ্ক্রিয়",
     "driversHint": "একাধিক চালক / দিয়ে আলাদা করুন",
-    "saved": "সংরক্ষিত হয়েছে।"
+    "saved": "সংরক্ষিত হয়েছে।",
+    "import": "CSV ইম্পোর্ট",
+    "template": "CSV টেমপ্লেট",
+    "importDone": "ইম্পোর্ট সম্পন্ন"
   },
   "reports": { "title": "রিপোর্ট" },
   "settings": { "title": "সেটিংস", "language": "ভাষা", "initSheet": "শিট ইনিশিয়ালাইজ" }

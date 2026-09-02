@@ -124,7 +124,10 @@
     "active": "운행",
     "inactive": "미운행",
     "driversHint": "복수 운전자는 / 로 구분",
-    "saved": "저장되었습니다."
+    "saved": "저장되었습니다.",
+    "import": "CSV 등록",
+    "template": "CSV 양식",
+    "importDone": "등록 완료"
   },
   "reports": { "title": "리포트" },
   "settings": { "title": "설정", "language": "언어", "initSheet": "시트 초기화" }

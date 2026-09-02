@@ -6,6 +6,7 @@ import { useI18n } from "@/lib/i18n";
 import { useStore } from "@/lib/store";
 import { Card } from "@/components/ui";
 import { VehicleEditor } from "@/components/VehicleEditor";
+import { VehicleImport } from "@/components/VehicleImport";
 
 export default function VehiclesPage() {
   const { t } = useI18n();
@@ -27,14 +28,17 @@ export default function VehiclesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">{t("vehicles.title")}</h1>
-        <button
-          onClick={() => setAdding(true)}
-          className="rounded-lg bg-hanwha px-3 py-1.5 text-sm font-bold text-white"
-        >
-          + {t("vehicles.add")}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <VehicleImport onDone={refresh} />
+          <button
+            onClick={() => setAdding(true)}
+            className="rounded-lg bg-hanwha px-3 py-1.5 text-sm font-bold text-white"
+          >
+            + {t("vehicles.add")}
+          </button>
+        </div>
       </div>
       <input
         value={q}

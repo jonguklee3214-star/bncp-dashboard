@@ -124,7 +124,10 @@
     "active": "Active",
     "inactive": "Inactive",
     "driversHint": "Separate multiple drivers with /",
-    "saved": "Saved."
+    "saved": "Saved.",
+    "import": "Import CSV",
+    "template": "CSV Template",
+    "importDone": "Import complete"
   },
   "reports": { "title": "Reports" },
   "settings": { "title": "Settings", "language": "Language", "initSheet": "Initialize Sheet" }

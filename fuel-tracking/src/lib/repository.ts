@@ -1,6 +1,13 @@
 import type { FuelLog, Part, Vehicle } from "@/types";
 import { SEED_VEHICLES } from "@/data/seed";
-import { demoAppendLog, demoGetLogs, demoUpsertVehicle, demoVehicles, isConfigured } from "./demo";
+import {
+  demoAppendAudit,
+  demoAppendLog,
+  demoGetLogs,
+  demoUpsertVehicle,
+  demoVehicles,
+  isConfigured,
+} from "./demo";
 import {
   HEADERS,
   SHEET_TABS,
@@ -87,6 +94,34 @@ export async function getVehicles(): Promise<Vehicle[]> {
   return rowsToObjects(rows, HEADERS.vehicles)
     .filter((o) => o.vehicle_id)
     .map(toVehicle);
+}
+
+// 관리자 변경 추적 (항목 79)
+export async function appendAudit(entry: {
+  user: string;
+  action: string;
+  target: string;
+  oldValue: string;
+  newValue: string;
+}): Promise<void> {
+  const row = [
+    new Date().toISOString(),
+    entry.user,
+    entry.action,
+    entry.target,
+    entry.oldValue,
+    entry.newValue,
+  ];
+  if (!isConfigured()) {
+    demoAppendAudit(row);
+    return;
+  }
+  try {
+    await ensureTab(SHEET_TABS.audit);
+    await appendRow(SHEET_TABS.audit, row);
+  } catch {
+    /* audit 실패가 본 작업을 막지 않도록 무시 */
+  }
 }
 
 /**
@@ -201,10 +236,12 @@ export async function initSheet(): Promise<{ vehicles: number; demo?: boolean }>
   await ensureTab(SHEET_TABS.vehicles);
   await ensureTab(SHEET_TABS.logs);
   await ensureTab(SHEET_TABS.settings);
+  await ensureTab(SHEET_TABS.audit);
 
   await writeHeader(SHEET_TABS.vehicles, HEADERS.vehicles);
   await writeHeader(SHEET_TABS.logs, HEADERS.logs);
   await writeHeader(SHEET_TABS.settings, HEADERS.settings);
+  await writeHeader(SHEET_TABS.audit, HEADERS.audit);
 
   // 이미 차량이 있으면 seed 를 덮지 않는다 (과거 데이터 보존, 항목 90).
   const existing = await getVehicles();

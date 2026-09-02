@@ -9,6 +9,7 @@ export const SHEET_TABS = {
   vehicles: "Vehicle_Master",
   logs: "Fuel_Log",
   settings: "Settings",
+  audit: "Audit_Log",
 } as const;
 
 export const HEADERS = {
@@ -52,6 +53,7 @@ export const HEADERS = {
     "updated_at",
   ],
   settings: ["key", "value"],
+  audit: ["timestamp", "user", "action", "target", "old_value", "new_value"],
 } as const;
 
 export class SheetsConfigError extends Error {}
