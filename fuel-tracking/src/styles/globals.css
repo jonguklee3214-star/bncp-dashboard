@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Hanwha 전용 폰트 (로고 서체 계열) ── */
+@font-face {
+  font-family: "Hanwha L";
+  src: url("/fonts/HanwhaL.ttf") format("truetype");
+  font-weight: 300;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Hanwha R";
+  src: url("/fonts/HanwhaR.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Hanwha B";
+  src: url("/fonts/HanwhaB.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  --hanwha: #f37321;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  background: #f7f8fa;
+  color: #111111;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* বাংলা 문자가 Hanwha 폰트에 없으므로 Noto Sans Bengali 로 폴백 */
+:lang(bn) {
+  font-family: "Noto Sans Bengali", "Hanwha R", sans-serif;
+}
+
+/* 숫자 표에서 정렬 맞춤 */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 인쇄 (항목 59): 사이드바·네비·버튼 숨김, 본문만 A4 ── */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+  .print-full {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+}
