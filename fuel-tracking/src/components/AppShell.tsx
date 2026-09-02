@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
 import { WeatherBar } from "./WeatherBar";
 import { LanguageSwitcher } from "./LanguageSwitcher";
+import { DemoBanner } from "./DemoBanner";
 
 interface NavItem {
   href: string;
@@ -67,6 +68,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="bg-hanwha px-4 py-1 text-center text-xs font-medium text-white">
             {t("campaign")}
           </div>
+          <DemoBanner />
           <div className="flex h-14 items-center justify-between gap-3 px-4">
             {/* mobile logo */}
             <Image

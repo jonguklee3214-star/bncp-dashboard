@@ -1,5 +1,6 @@
 import type { FuelLog, Part, Vehicle } from "@/types";
 import { SEED_VEHICLES } from "@/data/seed";
+import { demoAppendLog, demoGetLogs, demoVehicles, isConfigured } from "./demo";
 import {
   HEADERS,
   SHEET_TABS,
@@ -81,6 +82,7 @@ function vehicleToRow(v: Vehicle): string[] {
 }
 
 export async function getVehicles(): Promise<Vehicle[]> {
+  if (!isConfigured()) return demoVehicles();
   const rows = await readTab(SHEET_TABS.vehicles);
   return rowsToObjects(rows, HEADERS.vehicles)
     .filter((o) => o.vehicle_id)
@@ -137,6 +139,7 @@ function fuelLogToRow(l: FuelLog): (string | number)[] {
 }
 
 export async function getFuelLogs(): Promise<FuelLog[]> {
+  if (!isConfigured()) return demoGetLogs();
   const rows = await readTab(SHEET_TABS.logs);
   return rowsToObjects(rows, HEADERS.logs)
     .filter((o) => o.record_id)
@@ -144,6 +147,10 @@ export async function getFuelLogs(): Promise<FuelLog[]> {
 }
 
 export async function appendFuelLog(log: FuelLog): Promise<void> {
+  if (!isConfigured()) {
+    demoAppendLog(log);
+    return;
+  }
   await appendRow(SHEET_TABS.logs, fuelLogToRow(log));
 }
 
@@ -163,7 +170,8 @@ export async function recordExists(recordId: string): Promise<boolean> {
 }
 
 // ── 초기화: 헤더 + seed 데이터 심기 ──
-export async function initSheet(): Promise<{ vehicles: number }> {
+export async function initSheet(): Promise<{ vehicles: number; demo?: boolean }> {
+  if (!isConfigured()) return { vehicles: SEED_VEHICLES.length, demo: true };
   await ensureTab(SHEET_TABS.vehicles);
   await ensureTab(SHEET_TABS.logs);
   await ensureTab(SHEET_TABS.settings);
