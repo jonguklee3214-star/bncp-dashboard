@@ -1,6 +1,7 @@
 {
   "appTitle": "Fuel Tracking",
   "appSubtitle": "Fuel Tracking System",
+  "appTeam": "BNCP Construction Team",
   "campaign": "NO IDLING · SAVE FUEL",
   "nav": {
     "dashboard": "Dashboard",

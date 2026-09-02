@@ -22,8 +22,8 @@ export function SectionTitle({ children }: { children: React.ReactNode }) {
 export function ReadonlyField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="mt-0.5 min-h-[24px] font-medium text-gray-900">{value || "—"}</div>
+      <div className="text-xs font-medium text-gray-600">{label}</div>
+      <div className="mt-0.5 min-h-[24px] font-semibold text-gray-900">{value || "—"}</div>
     </div>
   );
 }
@@ -39,10 +39,10 @@ export function KpiTile({
 }) {
   return (
     <Card className="p-4">
-      <div className="text-xs text-gray-500">{label}</div>
+      <div className="text-xs font-medium text-gray-600">{label}</div>
       <div className="mt-1 flex items-baseline gap-1">
         <span className="tabular text-2xl font-bold text-gray-900">{value}</span>
-        {unit && <span className="text-sm text-gray-400">{unit}</span>}
+        {unit && <span className="text-sm text-gray-500">{unit}</span>}
       </div>
     </Card>
   );

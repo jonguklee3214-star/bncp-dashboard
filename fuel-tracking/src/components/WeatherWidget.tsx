@@ -37,12 +37,10 @@ export function WeatherWidget() {
     };
   }, []);
 
-  if (!w) {
-    return <Card className="h-[132px] animate-pulse bg-neutral-soft" />;
-  }
+  if (!w) return <Card className="h-[84px] animate-pulse bg-neutral-soft" />;
   if (!w.available || !w.current) {
     return (
-      <Card className="flex h-[132px] items-center justify-center text-sm text-gray-400">
+      <Card className="flex h-[64px] items-center justify-center text-sm text-gray-500">
         {t("common.weatherUnavailable")}
       </Card>
     );
@@ -54,45 +52,41 @@ export function WeatherWidget() {
       : new Date(iso + "T00:00:00").toLocaleDateString(LOCALE[lang] ?? "en-GB", { weekday: "short" });
 
   return (
-    <Card className="overflow-hidden">
-      <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center">
-        {/* 현재 날씨 */}
-        <div className="flex items-center gap-4 sm:w-64 sm:border-r sm:border-neutral-border sm:pr-4">
-          <div className="text-5xl leading-none">{weatherEmoji(w.current.code)}</div>
-          <div>
-            <div className="text-xs text-gray-500">📍 {w.location}</div>
-            <div className="flex items-baseline gap-1">
-              <span className="tabular text-4xl font-bold text-gray-900">{w.current.temp}°</span>
-              <span className="text-sm text-gray-500">{w.current.condition}</span>
-            </div>
-            <div className="mt-1 flex gap-3 text-[11px] text-gray-500">
-              <span>💨 {w.current.wind}km/h</span>
-              {w.current.humidity != null && <span>💧 {w.current.humidity}%</span>}
-            </div>
+    <Card className="flex items-stretch gap-3 overflow-x-auto p-3">
+      {/* 현재 날씨 — 컴팩트 */}
+      <div className="flex shrink-0 items-center gap-2.5 border-r border-neutral-border pr-3">
+        <span className="text-3xl leading-none">{weatherEmoji(w.current.code)}</span>
+        <div>
+          <div className="text-[11px] font-medium text-gray-600">📍 {w.location}</div>
+          <div className="flex items-baseline gap-1">
+            <span className="tabular text-2xl font-bold text-gray-900">{w.current.temp}°</span>
+            <span className="text-xs text-gray-600">{w.current.condition}</span>
+          </div>
+          <div className="flex gap-2 text-[10px] text-gray-500">
+            <span>💨 {w.current.wind}</span>
+            {w.current.humidity != null && <span>💧 {w.current.humidity}%</span>}
           </div>
         </div>
+      </div>
 
-        {/* 7일 예보 */}
-        <div className="min-w-0 flex-1">
-          <div className="mb-1.5 text-xs font-bold text-gray-500">{t("weather.forecast")}</div>
-          <div className="grid grid-cols-7 gap-1">
-            {(w.daily ?? []).map((d, i) => (
-              <div
-                key={d.date}
-                className="flex flex-col items-center rounded-lg py-1.5 text-center"
-                style={{ background: i === 0 ? "rgba(243,115,33,0.08)" : "transparent" }}
-              >
-                <span className="text-[11px] font-medium text-gray-600">{dow(d.date, i)}</span>
-                <span className="my-0.5 text-lg leading-none">{weatherEmoji(d.code)}</span>
-                <span className="tabular text-[11px] font-bold text-gray-800">{d.tmax}°</span>
-                <span className="tabular text-[10px] text-gray-400">{d.tmin}°</span>
-                {d.precipProb != null && d.precipProb > 0 && (
-                  <span className="tabular text-[10px] text-blue-500">💧{d.precipProb}%</span>
-                )}
-              </div>
-            ))}
+      {/* 7일 예보 — 한 줄 */}
+      <div className="flex flex-1 items-center justify-between gap-1">
+        {(w.daily ?? []).map((d, i) => (
+          <div
+            key={d.date}
+            className="flex min-w-[42px] flex-col items-center rounded-md px-1 py-0.5 text-center"
+            style={{ background: i === 0 ? "rgba(243,115,33,0.08)" : "transparent" }}
+          >
+            <span className="text-[11px] font-semibold text-gray-700">{dow(d.date, i)}</span>
+            <span className="text-base leading-tight">{weatherEmoji(d.code)}</span>
+            <span className="tabular text-[11px] font-bold text-gray-900">
+              {d.tmax}° <span className="font-normal text-gray-500">{d.tmin}°</span>
+            </span>
+            {d.precipProb != null && d.precipProb > 0 && (
+              <span className="tabular text-[10px] font-medium text-blue-600">💧{d.precipProb}%</span>
+            )}
           </div>
-        </div>
+        ))}
       </div>
     </Card>
   );

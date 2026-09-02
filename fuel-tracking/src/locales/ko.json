@@ -1,6 +1,7 @@
 {
   "appTitle": "유류 주유 관리",
   "appSubtitle": "Fuel Tracking System",
+  "appTeam": "BNCP 공사팀",
   "campaign": "공회전 금지 · 기름 아껴 씁시다",
   "nav": {
     "dashboard": "대시보드",

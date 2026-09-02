@@ -34,17 +34,7 @@ body {
   color: #111111;
 }
 
-/* 제목은 한화 전용 폰트(브랜드), 본문은 Pretendard(선명) */
-h1,
-h2,
-h3 {
-  font-family: "Hanwha B", "Hanwha R", Pretendard, "Noto Sans KR", sans-serif;
-}
-:lang(bn) h1,
-:lang(bn) h2,
-:lang(bn) h3 {
-  font-family: "Noto Sans Bengali", "Hanwha B", sans-serif;
-}
+/* 제목·본문 모두 Pretendard 로 통일 (화면 선명도·일관성). 브랜드는 로고로 유지. */
 
 /* বাংলা 문자가 Hanwha 폰트에 없으므로 Noto Sans Bengali 로 폴백 */
 :lang(bn) {

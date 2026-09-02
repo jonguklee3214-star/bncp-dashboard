@@ -83,7 +83,7 @@ export function BucketBarChart({
             {horizontal ? (
               <BarChart data={rows} layout="vertical" margin={{ left: 8, right: 44, top: 4, bottom: 4 }}>
                 <CartesianGrid horizontal={false} stroke="#F0F0F0" />
-                <XAxis type="number" tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
+                <XAxis type="number" tick={{ fontSize: 11, fill: "#4b5563" }} axisLine={false} tickLine={false} />
                 <YAxis
                   type="category"
                   dataKey="label"
@@ -116,7 +116,7 @@ export function BucketBarChart({
                   axisLine={{ stroke: "#E5E7EB" }}
                   tickLine={false}
                 />
-                <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} width={36} />
+                <YAxis tick={{ fontSize: 11, fill: "#4b5563" }} axisLine={false} tickLine={false} width={36} />
                 {tooltip}
                 <Bar dataKey="value" fill={HANWHA} radius={[6, 6, 0, 0]} maxBarSize={64}>
                   <LabelList
