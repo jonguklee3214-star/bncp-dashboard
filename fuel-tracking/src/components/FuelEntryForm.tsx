@@ -151,8 +151,14 @@ export function FuelEntryForm() {
   }
 
   const showInputs = isMisc || !!vehicle;
+  // 주행거리 대상 차량은 주행거리 필수 (미터기 고장 면제 승인 시 tracksMileage=false 로 내려옴)
+  const mileageMissing = !isMisc && tracksMileage && currentMileage === "";
   const saveDisabled =
-    save === "saving" || !fuelVolume || (isMisc && !reason.trim()) || (mileageLow && !allowException);
+    save === "saving" ||
+    !fuelVolume ||
+    (isMisc && !reason.trim()) ||
+    mileageMissing ||
+    (mileageLow && !allowException);
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -224,6 +230,13 @@ export function FuelEntryForm() {
               </div>
             )}
 
+            {/* 미터기 고장 등 주행거리 면제 승인 차량 표시 */}
+            {vehicle?.mileageExemptReason && (
+              <div className="mt-3 rounded-lg bg-warning/10 p-2.5 text-xs text-warning">
+                🛠 {t("admin.exemptOn")} — {vehicle.mileageExemptReason}
+              </div>
+            )}
+
             {isMisc && (
               <div className="mt-3 rounded-lg bg-hanwha/5 p-3 text-xs text-gray-600">
                 {t("entry.miscSub")}
@@ -262,7 +275,9 @@ export function FuelEntryForm() {
                 <div className="grid grid-cols-2 gap-3">
                   <ReadonlyField label={t("entry.previousMileage")} value={formatKm(previousMileage)} />
                   <label className="block">
-                    <span className="text-xs font-medium text-gray-600">{t("entry.currentMileage")}</span>
+                    <span className="text-xs font-medium text-gray-600">
+                      {t("entry.currentMileage")} *
+                    </span>
                     <input
                       inputMode="decimal"
                       value={currentMileage}
@@ -276,6 +291,10 @@ export function FuelEntryForm() {
                     value={distance != null ? formatKm(distance) : "—"}
                   />
                 </div>
+              )}
+
+              {mileageMissing && (
+                <p className="text-xs text-warning">⚠ {t("entry.mileageRequired")}</p>
               )}
 
               {mileageLow && (

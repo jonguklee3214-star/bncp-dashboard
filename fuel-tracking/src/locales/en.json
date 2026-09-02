@@ -68,7 +68,8 @@
     "misc": "Other Refuel",
     "miscSub": "Small generators/machines (volume only, no vehicle)",
     "reason": "Reason",
-    "reasonPlaceholder": "e.g. refuel for small generator"
+    "reasonPlaceholder": "e.g. refuel for small generator",
+    "mileageRequired": "Mileage required. If the odometer is broken, ask an admin for an exemption."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -136,7 +137,13 @@
     "requests": "Edit Requests",
     "approve": "Approve",
     "reject": "Reject",
-    "noRequests": "No pending edit requests."
+    "noRequests": "No pending edit requests.",
+    "exempt": "Mileage Exemption",
+    "exemptGrant": "Approve exemption",
+    "exemptRevoke": "Revoke exemption",
+    "exemptReason": "Exemption reason (e.g. broken odometer)",
+    "exemptOn": "Exempt (no mileage needed)",
+    "exemptHint": "If a vehicle's odometer is broken, an admin approves an exemption once; after that it can be entered with volume only."
   },
   "request": {
     "button": "Request Edit",
@@ -169,6 +176,12 @@
     "template": "CSV Template",
     "importDone": "Import complete"
   },
-  "reports": { "title": "Reports" },
-  "settings": { "title": "Settings", "language": "Language", "initSheet": "Initialize Sheet" }
+  "reports": {
+    "title": "Reports"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "initSheet": "Initialize Sheet"
+  }
 }

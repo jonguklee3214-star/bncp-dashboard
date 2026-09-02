@@ -118,6 +118,17 @@ export async function POST(req: NextRequest) {
     let previousMileageKm: number | null = null;
     let distanceKm: number | null = null;
 
+    // 주행거리 대상 차량은 주행거리 필수. 미터기 고장 면제 승인 차량은 tracksMileage=false 로 내려와 통과.
+    if (vehicle.tracksMileage && body.currentMileage == null) {
+      return NextResponse.json(
+        {
+          error: "mileage_required",
+          message: "주행거리를 입력하세요. 미터기가 고장이면 관리자 예외 승인이 필요합니다.",
+        },
+        { status: 400 },
+      );
+    }
+
     // 주행거리 관리 대상(트럭류·가솔린)만 처리. 굴삭기·로더·바브캣·발전기는 주유량만.
     if (vehicle.tracksMileage && body.currentMileage != null) {
       mileageKm = body.currentMileage;

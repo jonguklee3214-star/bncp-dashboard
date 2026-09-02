@@ -52,6 +52,7 @@ const MANUAL: Record<Lang, Manual> = {
         bullets: [
           "기타 급유: 차량 대신 목록 맨 위 '기타 급유'를 고르면 주유량 + 사유만 입력해 저장합니다(소형 발전기·소형 기계용, 말통 급유 등).",
           "디젤 트럭(카고·덤프·미니카고·워터트럭·박스카)은 주행거리(km)도 입력. 굴삭기·로더·바브캣·발전기는 주유량만.",
+          "미터기 고장: 주행거리를 못 넣으면 관리자가 차량 관리에서 '면제 승인'을 1회 해주면, 그 차량은 이후 주유량만으로 입력됩니다(수리 후 해제 가능).",
         ],
         note: "주행거리 경고: 현재 주행거리가 이전보다 작으면 저장이 막힙니다. 관리자만 예외 저장할 수 있습니다.",
       },
@@ -128,6 +129,7 @@ const MANUAL: Record<Lang, Manual> = {
         bullets: [
           "Other Refuel: pick 'Other Refuel' at the top of the list instead of a vehicle, then enter volume + reason only (for small generators/machines, jerry-can refuels).",
           "Diesel trucks (Cargo, Dump, Mini Cargo, Water Truck, Box Car) also need mileage (km). Excavators, loaders, Bobcat and generators are volume-only.",
+          "Broken odometer: if mileage cannot be entered, an admin grants a one-time exemption in Vehicles; that vehicle can then be entered with volume only (revocable after repair).",
         ],
         note: "Mileage warning: if current mileage is lower than previous, saving is blocked. Only an admin can save as an exception.",
       },
@@ -204,6 +206,7 @@ const MANUAL: Record<Lang, Manual> = {
         bullets: [
           "অন্যান্য জ্বালানি: যানবাহনের বদলে তালিকার উপরে 'অন্যান্য জ্বালানি' বেছে নিয়ে শুধু পরিমাণ + কারণ লিখে সংরক্ষণ (ছোট জেনারেটর/মেশিনের জন্য)।",
           "ডিজেল ট্রাক (কার্গো·ডাম্প·মিনি কার্গো·ওয়াটার ট্রাক·বক্স কার) মাইলেজও (km) লাগে। এক্সকাভেটর·লোডার·ববক্যাট·জেনারেটর শুধু পরিমাণ।",
+          "মিটার নষ্ট: মাইলেজ দেওয়া না গেলে অ্যাডমিন একবার 'ছাড় অনুমোদন' দিলে সেই যানবাহন শুধু পরিমাণ দিয়েই এন্ট্রি করা যায় (মেরামতের পর বাতিল করা যায়)।",
         ],
         note: "মাইলেজ সতর্কতা: বর্তমান মাইলেজ আগেরটির চেয়ে কম হলে সংরক্ষণ আটকে যায়। শুধু অ্যাডমিন ব্যতিক্রম করতে পারেন।",
       },

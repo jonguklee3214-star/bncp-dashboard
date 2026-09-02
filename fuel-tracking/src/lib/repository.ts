@@ -1,12 +1,15 @@
 import type { EditRequest, FuelLog, Part, Vehicle } from "@/types";
 import { SEED_VEHICLES, dieselTracksMileage } from "@/data/seed";
 import {
+  demoAddExempt,
   demoAddRequest,
   demoAppendAudit,
   demoAppendLog,
+  demoGetExempt,
   demoGetLogs,
   demoGetRequests,
   demoGetVoided,
+  demoRemoveExempt,
   demoUpdateLog,
   demoUpdateRequest,
   demoUpsertVehicle,
@@ -103,12 +106,72 @@ function vehicleToRow(v: Vehicle): string[] {
   ];
 }
 
+/**
+ * 주행거리 입력 면제 차량 (미터기 고장 등, 관리자 1회 승인).
+ * CONTROL N° → 사유.
+ */
+export async function getMileageExempt(): Promise<Map<string, string>> {
+  if (!isConfigured()) return demoGetExempt();
+  try {
+    const rows = await readTab(SHEET_TABS.exempt);
+    const header = rows[0] ?? HEADERS.exempt;
+    const cCol = header.indexOf("control_no");
+    const rCol = header.indexOf("reason");
+    const map = new Map<string, string>();
+    for (let i = 1; i < rows.length; i += 1) {
+      const c = rows[i]?.[cCol];
+      if (c) map.set(c, rows[i]?.[rCol] ?? "");
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+/** 면제 승인 (관리자). */
+export async function addMileageExempt(controlNo: string, reason: string): Promise<void> {
+  if (!isConfigured()) {
+    demoAddExempt(controlNo, reason);
+    return;
+  }
+  await ensureTab(SHEET_TABS.exempt);
+  const existing = await getMileageExempt();
+  if (existing.has(controlNo)) return; // 중복 승인 방지
+  await appendRow(SHEET_TABS.exempt, [controlNo, reason, "admin", new Date().toISOString()]);
+}
+
+/** 면제 해제 (미터기 수리 등). 해당 행을 비운다. */
+export async function removeMileageExempt(controlNo: string): Promise<void> {
+  if (!isConfigured()) {
+    demoRemoveExempt(controlNo);
+    return;
+  }
+  const rows = await readTab(SHEET_TABS.exempt);
+  const header = rows[0] ?? HEADERS.exempt;
+  const cCol = header.indexOf("control_no");
+  const kept = rows.slice(1).filter((r) => r?.[cCol] && r[cCol] !== controlNo);
+  await writeHeader(SHEET_TABS.exempt, HEADERS.exempt);
+  // 전체 재작성 (행 수가 적어 단순 재기록)
+  await writeRows(
+    SHEET_TABS.exempt,
+    2,
+    kept.length ? kept : [["", "", "", ""]],
+  );
+}
+
 export async function getVehicles(): Promise<Vehicle[]> {
-  if (!isConfigured()) return demoVehicles();
-  const rows = await readTab(SHEET_TABS.vehicles);
-  return rowsToObjects(rows, HEADERS.vehicles)
-    .filter((o) => o.vehicle_id)
-    .map(toVehicle);
+  const exempt = await getMileageExempt();
+  const list = isConfigured()
+    ? rowsToObjects(await readTab(SHEET_TABS.vehicles), HEADERS.vehicles)
+        .filter((o) => o.vehicle_id)
+        .map(toVehicle)
+    : demoVehicles();
+  // 면제 승인된 차량은 주행거리 입력 대상에서 제외
+  return list.map((v) =>
+    v.controlNo && exempt.has(v.controlNo)
+      ? { ...v, tracksMileage: false, mileageExemptReason: exempt.get(v.controlNo) || "" }
+      : v,
+  );
 }
 
 // 관리자 변경 추적 (항목 79)
@@ -411,6 +474,7 @@ export async function initSheet(): Promise<{ vehicles: number; demo?: boolean }>
   await ensureTab(SHEET_TABS.audit);
   await ensureTab(SHEET_TABS.voided);
   await ensureTab(SHEET_TABS.requests);
+  await ensureTab(SHEET_TABS.exempt);
 
   await writeHeader(SHEET_TABS.vehicles, HEADERS.vehicles);
   await writeHeader(SHEET_TABS.logs, HEADERS.logs);
@@ -418,6 +482,7 @@ export async function initSheet(): Promise<{ vehicles: number; demo?: boolean }>
   await writeHeader(SHEET_TABS.audit, HEADERS.audit);
   await writeHeader(SHEET_TABS.voided, HEADERS.voided);
   await writeHeader(SHEET_TABS.requests, HEADERS.requests);
+  await writeHeader(SHEET_TABS.exempt, HEADERS.exempt);
 
   // 이미 차량이 있으면 seed 를 덮지 않는다 (과거 데이터 보존, 항목 90).
   const existing = await getVehicles();

@@ -59,6 +59,17 @@ export function demoGetVoided(): Set<string> {
   return demoVoided;
 }
 
+const demoExempt = new Map<string, string>(); // controlNo → reason
+export function demoAddExempt(controlNo: string, reason: string): void {
+  demoExempt.set(controlNo, reason);
+}
+export function demoRemoveExempt(controlNo: string): void {
+  demoExempt.delete(controlNo);
+}
+export function demoGetExempt(): Map<string, string> {
+  return demoExempt;
+}
+
 const demoRequests: EditRequest[] = [];
 export function demoAddRequest(r: EditRequest): void {
   demoRequests.push(r);

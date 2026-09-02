@@ -12,6 +12,7 @@ export const SHEET_TABS = {
   audit: "Audit_Log",
   voided: "Voided",
   requests: "Edit_Requests",
+  exempt: "Mileage_Exempt",
 } as const;
 
 export const HEADERS = {
@@ -57,6 +58,8 @@ export const HEADERS = {
   settings: ["key", "value"],
   audit: ["timestamp", "user", "action", "target", "old_value", "new_value"],
   voided: ["record_id", "reason", "user", "at"],
+  // 미터기 고장 등으로 주행거리 입력을 면제한 차량 (관리자 승인)
+  exempt: ["control_no", "reason", "approved_by", "at"],
   requests: [
     "request_id",
     "record_id",
