@@ -19,6 +19,7 @@ const EMPTY: Vehicle = {
   team: "공사팀",
   part: "",
   driverIds: [],
+  tracksMileage: true,
   status: "active",
   createdAt: "",
   updatedAt: "",

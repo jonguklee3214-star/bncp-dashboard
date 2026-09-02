@@ -20,6 +20,7 @@ function vehicle(v: Partial<Vehicle> & { vehicleId: string; fuelType: Vehicle["f
     team: "",
     part: "" as Part,
     driverIds: [],
+    tracksMileage: true,
     status: "active",
     createdAt: now,
     updatedAt: now,
@@ -109,6 +110,15 @@ const DIESEL_ROWS: [string, string, string, string, string, string][] = [
   ["2509", "Water Truck (Steel)", "6X4,12Kl", "WT-031", "63711", "CLDS"],
 ];
 
+/**
+ * 디젤 장비의 주행거리(km) 입력 대상 여부.
+ * 트럭류(Box Car·Cargo·Dump·Mini Cargo·Water Truck)=true.
+ * 굴삭기·휠로더/스키드로더·바브캣·발전기=false (주유량만).
+ */
+export function dieselTracksMileage(equipmentName: string): boolean {
+  return /truck|box\s*car/i.test(equipmentName);
+}
+
 const DIESEL: Vehicle[] = DIESEL_ROWS.map(([sl, name, capacity, control, hourKm, teamCode]) =>
   vehicle({
     vehicleId: `D-${sl}`,
@@ -122,6 +132,7 @@ const DIESEL: Vehicle[] = DIESEL_ROWS.map(([sl, name, capacity, control, hourKm,
     team: "공사팀", // 유종=디젤 → 공사팀 통일
     part: "",
     driverIds: [],
+    tracksMileage: dieselTracksMileage(name),
   }),
 );
 

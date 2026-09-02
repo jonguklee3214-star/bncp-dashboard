@@ -1,5 +1,5 @@
 import type { FuelLog, Part, Vehicle } from "@/types";
-import { SEED_VEHICLES } from "@/data/seed";
+import { SEED_VEHICLES, dieselTracksMileage } from "@/data/seed";
 import {
   demoAppendAudit,
   demoAppendLog,
@@ -45,12 +45,19 @@ function rowsToObjects(rows: string[][], header: readonly string[]): Record<stri
 
 // ── Vehicle ──
 function toVehicle(o: Record<string, string>): Vehicle {
+  const fuelType = o.fuel_type === "gasoline" ? "gasoline" : "diesel";
+  const equipmentName = o.equipment_name ?? "";
+  // 주행거리 여부: 저장값이 있으면 그것을, 없으면 유종·장비명으로 유도.
+  let tracksMileage: boolean;
+  if (o.tracks_mileage === "true") tracksMileage = true;
+  else if (o.tracks_mileage === "false") tracksMileage = false;
+  else tracksMileage = fuelType === "gasoline" ? true : dieselTracksMileage(equipmentName);
   return {
     vehicleId: o.vehicle_id,
-    fuelType: o.fuel_type === "gasoline" ? "gasoline" : "diesel",
+    fuelType,
     mainVehicleNo: o.main_vehicle_no ?? "",
     controlNo: o.control_no ?? "",
-    equipmentName: o.equipment_name ?? "",
+    equipmentName,
     vehicleType: o.vehicle_type ?? "",
     capacity: o.capacity ?? "",
     teamCode: o.team_code ?? "",
@@ -62,6 +69,7 @@ function toVehicle(o: Record<string, string>): Vehicle {
       .split("/")
       .map((d) => d.trim())
       .filter(Boolean),
+    tracksMileage,
     status: o.status === "inactive" ? "inactive" : "active",
     createdAt: o.created_at ?? "",
     updatedAt: o.updated_at ?? "",
@@ -216,11 +224,12 @@ export async function appendFuelLog(log: FuelLog): Promise<void> {
   await appendRow(SHEET_TABS.logs, fuelLogToRow(log));
 }
 
-/** 동일 차량(가솔린)의 가장 최근 mileage → previous mileage 자동조회 (항목 32). */
-export async function getLatestMileage(mainVehicleNo: string): Promise<number | null> {
+/** 동일 차량/장비(CONTROL N° 기준)의 가장 최근 mileage → previous mileage 자동조회 (항목 32). */
+export async function getLatestMileage(controlNo: string): Promise<number | null> {
+  if (!controlNo) return null;
   const logs = await getFuelLogs();
   const mine = logs
-    .filter((l) => l.mainVehicleNo === mainVehicleNo && l.mileageKm != null)
+    .filter((l) => l.controlNo === controlNo && l.mileageKm != null)
     .sort((a, b) => b.fuelDatetime.localeCompare(a.fuelDatetime));
   return mine.length ? mine[0].mileageKm : null;
 }

@@ -30,6 +30,8 @@ interface CreateLogBody {
   remarks?: string;
   fuelDatetime?: string;
   allowMileageException?: boolean;
+  misc?: boolean; // 기타·말통 급유 (차량 없이 주유량+사유)
+  reason?: string; // 말통 급유 사유 (수동 입력)
 }
 
 export async function POST(req: NextRequest) {
@@ -55,6 +57,42 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, duplicate: true });
     }
 
+    const nowIso = new Date().toISOString();
+
+    // ── 기타·말통 급유: 차량 없이 주유량 + 사유(수동) ──
+    if (body.misc) {
+      const reason = (body.reason ?? "").trim();
+      if (!reason) {
+        return NextResponse.json(
+          { error: "validation", message: "사유를 입력하세요." },
+          { status: 400 },
+        );
+      }
+      const miscLog: FuelLog = {
+        recordId: body.recordId,
+        fuelDatetime: body.fuelDatetime || nowIso,
+        fuelType: body.fuelType,
+        mainVehicleNo: "",
+        controlNo: "",
+        driver: "",
+        company: "Construction",
+        team: "공사팀",
+        part: "",
+        vehicleType: "기타(말통)",
+        capacity: "",
+        teamCode: "",
+        mileageKm: null,
+        previousMileageKm: null,
+        distanceKm: null,
+        fuelVolumeL: body.fuelVolume,
+        remarks: reason,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+      await appendFuelLog(miscLog);
+      return NextResponse.json({ ok: true, log: miscLog });
+    }
+
     const vehicles = await getVehicles();
     const vehicle =
       body.fuelType === "gasoline"
@@ -68,15 +106,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const nowIso = new Date().toISOString();
     let mileageKm: number | null = null;
     let previousMileageKm: number | null = null;
     let distanceKm: number | null = null;
 
-    // 가솔린만 주행거리 처리. 디젤은 주유량만 (사용자 결정).
-    if (body.fuelType === "gasoline" && body.currentMileage != null) {
+    // 주행거리 관리 대상(트럭류·가솔린)만 처리. 굴삭기·로더·바브캣·발전기는 주유량만.
+    if (vehicle.tracksMileage && body.currentMileage != null) {
       mileageKm = body.currentMileage;
-      previousMileageKm = await getLatestMileage(vehicle.mainVehicleNo);
+      previousMileageKm = await getLatestMileage(vehicle.controlNo);
       if (previousMileageKm != null) {
         // 주행거리 이상 (항목 34)
         if (mileageKm < previousMileageKm && !body.allowMileageException) {

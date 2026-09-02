@@ -32,6 +32,7 @@ export interface Vehicle {
   team: string; // diesel = "공사팀" 고정
   part: Part;
   driverIds: string[]; // 운전자 이름 배열. gasoline 만 (복수 운전자 지원, 항목 19)
+  tracksMileage: boolean; // 주행거리(km) 입력 대상 여부. 트럭류=true, 굴삭기·로더·바브캣·발전기=false
   status: VehicleStatus;
   createdAt: string;
   updatedAt: string;

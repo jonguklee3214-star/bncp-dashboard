@@ -64,7 +64,11 @@
     "searchEquipment": "Search equipment",
     "mileageWarning": "Current mileage is lower than previous mileage.",
     "mileageException": "Save with admin exception",
-    "detail": "Details"
+    "detail": "Details",
+    "misc": "Other · Jerry can",
+    "miscSub": "Small generators/machines (volume only, no vehicle)",
+    "reason": "Reason",
+    "reasonPlaceholder": "e.g. jerry-can refuel for small generator"
   },
   "dashboard": {
     "title": "Dashboard",

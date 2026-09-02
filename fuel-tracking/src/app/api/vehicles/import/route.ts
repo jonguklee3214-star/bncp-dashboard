@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { FuelType, Part, Vehicle } from "@/types";
 import { appendAudit, getVehicles, upsertVehicle } from "@/lib/repository";
+import { dieselTracksMileage } from "@/data/seed";
 import { errorResponse } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -71,6 +72,8 @@ export async function POST(req: NextRequest) {
           .split("/")
           .map((d) => d.trim())
           .filter(Boolean),
+        tracksMileage:
+          fuelType === "gasoline" ? true : dieselTracksMileage((r.vehicleType ?? "").trim()),
         status: (r.status ?? "").includes("inactive") || (r.status ?? "").includes("미운행")
           ? "inactive"
           : "active",

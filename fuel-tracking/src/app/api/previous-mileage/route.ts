@@ -6,8 +6,12 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
-    const mainVehicleNo = req.nextUrl.searchParams.get("mainVehicleNo") ?? "";
-    const previousMileageKm = await getLatestMileage(mainVehicleNo);
+    // CONTROL N° 기준 (가솔린·디젤 트럭 공통). 하위호환으로 mainVehicleNo 도 받음.
+    const controlNo =
+      req.nextUrl.searchParams.get("controlNo") ??
+      req.nextUrl.searchParams.get("mainVehicleNo") ??
+      "";
+    const previousMileageKm = await getLatestMileage(controlNo);
     return NextResponse.json({ previousMileageKm });
   } catch (e) {
     return errorResponse(e);
