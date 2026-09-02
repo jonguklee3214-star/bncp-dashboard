@@ -1,16 +1,35 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { FuelLog } from "@/types";
 import { useI18n } from "@/lib/i18n";
 import { useStore } from "@/lib/store";
+import { useAdmin } from "@/lib/useAdmin";
 import { formatDateTime, formatKm, formatL } from "@/lib/format";
 import { downloadCsv, logsToCsv } from "@/lib/csv";
 import { Card } from "@/components/ui";
+import { LogEditor } from "@/components/LogEditor";
 
 export default function HistoryPage() {
   const { t } = useI18n();
-  const { logs, loading } = useStore();
+  const { logs, loading, refresh } = useStore();
+  const { isAdmin, pin, unlock, lock } = useAdmin();
   const [q, setQ] = useState("");
+  const [editing, setEditing] = useState<FuelLog | null>(null);
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pinInput, setPinInput] = useState("");
+  const [pinErr, setPinErr] = useState("");
+
+  async function tryUnlock() {
+    setPinErr("");
+    const r = await unlock(pinInput);
+    if (r.ok) {
+      setPinOpen(false);
+      setPinInput("");
+    } else {
+      setPinErr(r.message || t("admin.wrongPin"));
+    }
+  }
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -29,7 +48,22 @@ export default function HistoryPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold">{t("history.title")}</h1>
-        <div className="no-print flex gap-2">
+        <div className="no-print flex flex-wrap gap-2">
+          {isAdmin ? (
+            <button
+              onClick={lock}
+              className="rounded-md border border-hanwha bg-hanwha/10 px-3 py-1.5 text-sm font-medium text-hanwha"
+            >
+              🔓 {t("admin.unlocked")}
+            </button>
+          ) : (
+            <button
+              onClick={() => setPinOpen(true)}
+              className="rounded-md border border-neutral-border bg-white px-3 py-1.5 text-sm hover:border-hanwha"
+            >
+              🔒 {t("admin.edit")}
+            </button>
+          )}
           <button
             onClick={() => downloadCsv("fuel-history.csv", logsToCsv(filtered))}
             className="rounded-md border border-neutral-border bg-white px-3 py-1.5 text-sm hover:border-hanwha"
@@ -44,6 +78,44 @@ export default function HistoryPage() {
           </button>
         </div>
       </div>
+
+      {/* 관리자 PIN 입력 */}
+      {pinOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-xs rounded-card bg-white p-5">
+            <div className="mb-3 font-bold">{t("admin.enterPin")}</div>
+            <input
+              type="password"
+              inputMode="numeric"
+              value={pinInput}
+              autoFocus
+              onChange={(e) => setPinInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && tryUnlock()}
+              className="w-full rounded-lg border border-neutral-border px-3 py-2.5 outline-none focus:border-hanwha"
+            />
+            {pinErr && <p className="mt-2 text-sm text-danger">{pinErr}</p>}
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => {
+                  setPinOpen(false);
+                  setPinInput("");
+                  setPinErr("");
+                }}
+                className="flex-1 rounded-lg border border-neutral-border py-2 text-sm"
+              >
+                {t("common.cancel")}
+              </button>
+              <button onClick={tryUnlock} className="flex-1 rounded-lg bg-hanwha py-2 text-sm font-bold text-white">
+                {t("admin.unlock")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editing && pin && (
+        <LogEditor log={editing} pin={pin} onClose={() => setEditing(null)} onSaved={refresh} />
+      )}
 
       <input
         value={q}
@@ -70,6 +142,7 @@ export default function HistoryPage() {
                 <th className="px-3 py-2 font-medium">{t("entry.part")}</th>
                 <th className="px-3 py-2 text-right font-medium">{t("entry.distance")}</th>
                 <th className="px-3 py-2 text-right font-medium">{t("entry.fuelVolume")}</th>
+                {isAdmin && <th className="px-3 py-2"></th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-border">
@@ -77,11 +150,21 @@ export default function HistoryPage() {
                 <tr key={l.recordId}>
                   <td className="whitespace-nowrap px-3 py-2">{formatDateTime(l.fuelDatetime)}</td>
                   <td className="px-3 py-2 font-medium">{l.mainVehicleNo || "—"}</td>
-                  <td className="px-3 py-2">{l.controlNo}</td>
+                  <td className="px-3 py-2">{l.controlNo || l.vehicleType}</td>
                   <td className="px-3 py-2">{l.driver || "—"}</td>
                   <td className="px-3 py-2">{l.part || l.teamCode || "—"}</td>
                   <td className="tabular px-3 py-2 text-right">{l.distanceKm != null ? formatKm(l.distanceKm) : "—"}</td>
                   <td className="tabular px-3 py-2 text-right font-bold text-hanwha">{formatL(l.fuelVolumeL)}</td>
+                  {isAdmin && (
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        onClick={() => setEditing(l)}
+                        className="rounded-md border border-neutral-border px-2 py-1 text-xs hover:border-hanwha"
+                      >
+                        {t("vehicles.edit")}
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -93,8 +176,20 @@ export default function HistoryPage() {
       <div className="space-y-3 md:hidden">
         {filtered.map((l) => (
           <Card key={l.recordId} className="p-4">
-            <div className="font-bold">{l.mainVehicleNo || l.controlNo}</div>
-            <div className="text-xs text-gray-500">{l.controlNo}</div>
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="font-bold">{l.mainVehicleNo || l.controlNo || l.vehicleType}</div>
+                <div className="text-xs text-gray-500">{l.controlNo || l.vehicleType}</div>
+              </div>
+              {isAdmin && (
+                <button
+                  onClick={() => setEditing(l)}
+                  className="rounded-md border border-neutral-border px-2 py-1 text-xs hover:border-hanwha"
+                >
+                  {t("vehicles.edit")}
+                </button>
+              )}
+            </div>
             {l.driver && <div className="text-sm text-gray-700">{l.driver}</div>}
             <div className="mt-2 space-y-1 text-sm">
               <div className="text-xs text-gray-500">{formatDateTime(l.fuelDatetime)}</div>

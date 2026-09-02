@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { FuelLog } from "@/types";
 import {
+  appendAudit,
   appendFuelLog,
   getFuelLogs,
   getLatestMileage,
   getVehicles,
   recordExists,
+  updateFuelLog,
 } from "@/lib/repository";
 import { errorResponse } from "@/lib/api";
+
+function isAdmin(req: NextRequest): boolean {
+  const pin = req.headers.get("x-admin-pin");
+  return Boolean(process.env.ADMIN_PIN) && pin === process.env.ADMIN_PIN;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -155,6 +162,59 @@ export async function POST(req: NextRequest) {
 
     await appendFuelLog(log);
     return NextResponse.json({ ok: true, log });
+  } catch (e) {
+    return errorResponse(e);
+  }
+}
+
+interface PatchLogBody {
+  recordId: string;
+  fuelVolume?: number;
+  mileageKm?: number | null;
+  remarks?: string;
+  fuelDatetime?: string;
+}
+
+// 기록 수정 (관리자 전용 — PIN 필요)
+export async function PATCH(req: NextRequest) {
+  try {
+    if (!isAdmin(req)) {
+      return NextResponse.json(
+        { error: "forbidden", message: "관리자만 수정할 수 있습니다." },
+        { status: 403 },
+      );
+    }
+    const body = (await req.json()) as PatchLogBody;
+    if (!body.recordId) {
+      return NextResponse.json({ error: "validation", message: "recordId 필요" }, { status: 400 });
+    }
+    if (body.fuelVolume != null && body.fuelVolume <= 0) {
+      return NextResponse.json(
+        { error: "validation", message: "Fuel Volume 은 0보다 커야 합니다." },
+        { status: 400 },
+      );
+    }
+
+    const patch: Partial<FuelLog> = {};
+    if (body.fuelVolume != null) patch.fuelVolumeL = body.fuelVolume;
+    if (body.mileageKm !== undefined) patch.mileageKm = body.mileageKm;
+    if (body.remarks !== undefined) patch.remarks = body.remarks;
+    if (body.fuelDatetime) patch.fuelDatetime = new Date(body.fuelDatetime).toISOString();
+
+    const updated = await updateFuelLog(body.recordId, patch);
+    if (!updated) {
+      return NextResponse.json({ error: "notfound", message: "기록을 찾을 수 없습니다." }, { status: 404 });
+    }
+
+    await appendAudit({
+      user: "admin",
+      action: "fuellog.update",
+      target: `${updated.controlNo || updated.mainVehicleNo || updated.vehicleType} · ${updated.recordId}`,
+      oldValue: "",
+      newValue: `${updated.fuelVolumeL}L ${updated.mileageKm ?? ""}`,
+    });
+
+    return NextResponse.json({ ok: true, log: updated });
   } catch (e) {
     return errorResponse(e);
   }

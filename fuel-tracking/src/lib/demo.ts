@@ -36,6 +36,13 @@ export function demoAppendLog(log: FuelLog): void {
   demoLogs.push(log);
 }
 
+export function demoUpdateLog(recordId: string, patch: Partial<FuelLog>): boolean {
+  const i = demoLogs.findIndex((l) => l.recordId === recordId);
+  if (i < 0) return false;
+  demoLogs[i] = { ...demoLogs[i], ...patch, updatedAt: new Date().toISOString() };
+  return true;
+}
+
 const demoAudit: (string | number)[][] = [];
 export function demoAppendAudit(row: (string | number)[]): void {
   demoAudit.push(row);

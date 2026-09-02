@@ -49,6 +49,10 @@ const MANUAL: Record<Lang, Manual> = {
           { st: "주유량(L) 입력", de: "디젤은 주유량만. 가솔린은 현재 주행거리(km)도 입력(거리 자동 계산)." },
           { st: "저장", de: "'주유 기록이 저장되었습니다'가 뜨면 완료. 대시보드에 즉시 반영." },
         ],
+        bullets: [
+          "기타 급유: 차량 대신 목록 맨 위 '기타 급유'를 고르면 주유량 + 사유만 입력해 저장합니다(소형 발전기·소형 기계용, 말통 급유 등).",
+          "디젤 트럭(카고·덤프·미니카고·워터트럭·박스카)은 주행거리(km)도 입력. 굴삭기·로더·바브캣·발전기는 주유량만.",
+        ],
         note: "주행거리 경고: 현재 주행거리가 이전보다 작으면 저장이 막힙니다. 관리자만 예외 저장할 수 있습니다.",
       },
       {
@@ -69,6 +73,7 @@ const MANUAL: Record<Lang, Manual> = {
           "검색: 차량번호·관리번호·운전자·파트·차종 일부만 입력해도 찾습니다.",
           "CSV: 현재 목록을 엑셀 파일로 내려받기.",
           "인쇄/PDF: 인쇄 버튼 → 'PDF로 저장' 선택 가능. 금액 정보는 없습니다.",
+          "기록 수정(관리자): 오른쪽 위 🔒 관리자 수정 → PIN 입력 후, 각 기록의 '수정' 버튼으로 주유량·주행거리·비고를 고칩니다. 관리자만 가능.",
         ],
       },
       {
@@ -118,6 +123,10 @@ const MANUAL: Record<Lang, Manual> = {
           { st: "Enter Fuel Volume (L)", de: "Diesel: volume only. Gasoline: also current mileage (km); distance auto-calculated." },
           { st: "Save", de: "'Fuel record saved successfully' means done. Dashboard updates immediately." },
         ],
+        bullets: [
+          "Other Refuel: pick 'Other Refuel' at the top of the list instead of a vehicle, then enter volume + reason only (for small generators/machines, jerry-can refuels).",
+          "Diesel trucks (Cargo, Dump, Mini Cargo, Water Truck, Box Car) also need mileage (km). Excavators, loaders, Bobcat and generators are volume-only.",
+        ],
         note: "Mileage warning: if current mileage is lower than previous, saving is blocked. Only an admin can save as an exception.",
       },
       {
@@ -138,6 +147,7 @@ const MANUAL: Record<Lang, Manual> = {
           "Search: find by part of vehicle no., control no., driver, part or type.",
           "CSV: download the current list as a spreadsheet.",
           "Print/PDF: Print button → choose 'Save as PDF'. No cost information included.",
+          "Edit records (admin): top-right 🔒 Admin Edit → enter PIN, then use each row's 'Edit' button to fix volume, mileage or remarks. Admin only.",
         ],
       },
       {
@@ -187,6 +197,10 @@ const MANUAL: Record<Lang, Manual> = {
           { st: "জ্বালানির পরিমাণ (L) দিন", de: "ডিজেল: শুধু পরিমাণ। পেট্রোল: বর্তমান মাইলেজও (km); দূরত্ব স্বয়ংক্রিয়।" },
           { st: "সংরক্ষণ", de: "'সফলভাবে সংরক্ষিত' দেখালে শেষ। ড্যাশবোর্ডে সাথে সাথে দেখায়।" },
         ],
+        bullets: [
+          "অন্যান্য জ্বালানি: যানবাহনের বদলে তালিকার উপরে 'অন্যান্য জ্বালানি' বেছে নিয়ে শুধু পরিমাণ + কারণ লিখে সংরক্ষণ (ছোট জেনারেটর/মেশিনের জন্য)।",
+          "ডিজেল ট্রাক (কার্গো·ডাম্প·মিনি কার্গো·ওয়াটার ট্রাক·বক্স কার) মাইলেজও (km) লাগে। এক্সকাভেটর·লোডার·ববক্যাট·জেনারেটর শুধু পরিমাণ।",
+        ],
         note: "মাইলেজ সতর্কতা: বর্তমান মাইলেজ আগেরটির চেয়ে কম হলে সংরক্ষণ আটকে যায়। শুধু অ্যাডমিন ব্যতিক্রম করতে পারেন।",
       },
       {
@@ -207,6 +221,7 @@ const MANUAL: Record<Lang, Manual> = {
           "অনুসন্ধান: যানবাহন·কন্ট্রোল নং·চালক·পার্ট·ধরন দিয়ে।",
           "CSV: বর্তমান তালিকা স্প্রেডশিট হিসেবে ডাউনলোড।",
           "প্রিন্ট/PDF: প্রিন্ট → 'Save as PDF'। কোনো খরচের তথ্য নেই।",
+          "রেকর্ড সম্পাদনা (অ্যাডমিন): উপরে ডানে 🔒 → পিন দিয়ে প্রতিটি রেকর্ডের 'সম্পাদনা' বোতামে পরিমাণ·মাইলেজ·মন্তব্য ঠিক করুন। শুধু অ্যাডমিন।",
         ],
       },
       {

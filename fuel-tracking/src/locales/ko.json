@@ -122,6 +122,15 @@
     "km": "km",
     "transactions": "건"
   },
+  "admin": {
+    "edit": "관리자 수정",
+    "enterPin": "관리자 PIN 입력",
+    "unlock": "잠금 해제",
+    "wrongPin": "PIN이 올바르지 않습니다.",
+    "notConfigured": "관리자 PIN이 설정되지 않았습니다. 관리자에게 문의하세요.",
+    "editRecord": "기록 수정",
+    "unlocked": "관리자 모드 (수정 가능)"
+  },
   "weather": {
     "forecast": "주간 날씨 예보",
     "wind": "바람",

@@ -122,6 +122,15 @@
     "km": "km",
     "transactions": "transactions"
   },
+  "admin": {
+    "edit": "Admin Edit",
+    "enterPin": "Enter admin PIN",
+    "unlock": "Unlock",
+    "wrongPin": "Incorrect PIN.",
+    "notConfigured": "Admin PIN is not set. Contact your administrator.",
+    "editRecord": "Edit Record",
+    "unlocked": "Admin mode (editing enabled)"
+  },
   "weather": {
     "forecast": "7-Day Forecast",
     "wind": "Wind",

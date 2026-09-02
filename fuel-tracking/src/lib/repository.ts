@@ -4,6 +4,7 @@ import {
   demoAppendAudit,
   demoAppendLog,
   demoGetLogs,
+  demoUpdateLog,
   demoUpsertVehicle,
   demoVehicles,
   isConfigured,
@@ -222,6 +223,53 @@ export async function appendFuelLog(log: FuelLog): Promise<void> {
     return;
   }
   await appendRow(SHEET_TABS.logs, fuelLogToRow(log));
+}
+
+/** 기존 주유 기록 수정 (관리자). record_id 로 행을 찾아 지정 필드만 갱신. */
+export async function updateFuelLog(
+  recordId: string,
+  patch: Partial<Pick<FuelLog, "fuelDatetime" | "mileageKm" | "distanceKm" | "fuelVolumeL" | "remarks">>,
+): Promise<FuelLog | null> {
+  if (!isConfigured()) {
+    const logs = demoGetLogs();
+    const cur = logs.find((l) => l.recordId === recordId);
+    if (!cur) return null;
+    const next = applyLogPatch(cur, patch);
+    demoUpdateLog(recordId, next);
+    return { ...cur, ...next };
+  }
+  const rows = await readTab(SHEET_TABS.logs);
+  const header = rows[0] ?? HEADERS.logs;
+  const idCol = header.indexOf("record_id");
+  let rowNumber = -1;
+  let curObj: Record<string, string> | null = null;
+  for (let i = 1; i < rows.length; i += 1) {
+    if (rows[i]?.[idCol] === recordId) {
+      rowNumber = i + 1;
+      const o: Record<string, string> = {};
+      header.forEach((h, j) => (o[h] = rows[i][j] ?? ""));
+      curObj = o;
+      break;
+    }
+  }
+  if (rowNumber < 0 || !curObj) return null;
+  const cur = toFuelLog(curObj);
+  const next = { ...cur, ...applyLogPatch(cur, patch) };
+  await writeRow(SHEET_TABS.logs, rowNumber, fuelLogToRow(next));
+  return next;
+}
+
+// 수정 시 거리 재계산: mileage 가 바뀌고 previous 가 있으면 distance = mileage - previous.
+function applyLogPatch(
+  cur: FuelLog,
+  patch: Partial<Pick<FuelLog, "fuelDatetime" | "mileageKm" | "distanceKm" | "fuelVolumeL" | "remarks">>,
+): Partial<FuelLog> {
+  const merged: Partial<FuelLog> = { ...patch, updatedAt: new Date().toISOString() };
+  if (patch.mileageKm !== undefined) {
+    const prev = cur.previousMileageKm;
+    merged.distanceKm = patch.mileageKm != null && prev != null ? patch.mileageKm - prev : cur.distanceKm;
+  }
+  return merged;
 }
 
 /** 동일 차량/장비(CONTROL N° 기준)의 가장 최근 mileage → previous mileage 자동조회 (항목 32). */
