@@ -1,6 +1,6 @@
 import type { FuelLog, Part, Vehicle } from "@/types";
 import { SEED_VEHICLES } from "@/data/seed";
-import { demoAppendLog, demoGetLogs, demoVehicles, isConfigured } from "./demo";
+import { demoAppendLog, demoGetLogs, demoUpsertVehicle, demoVehicles, isConfigured } from "./demo";
 import {
   HEADERS,
   SHEET_TABS,
@@ -87,6 +87,32 @@ export async function getVehicles(): Promise<Vehicle[]> {
   return rowsToObjects(rows, HEADERS.vehicles)
     .filter((o) => o.vehicle_id)
     .map(toVehicle);
+}
+
+/**
+ * 차량 추가/수정 (항목 62·63·64). vehicle_id 로 찾아 있으면 덮고 없으면 추가.
+ * Fuel Log 가 있는 차량은 삭제 대신 status=inactive 로 처리한다 (데이터 무결성).
+ */
+export async function upsertVehicle(v: Vehicle): Promise<void> {
+  if (!isConfigured()) {
+    demoUpsertVehicle(v);
+    return;
+  }
+  const rows = await readTab(SHEET_TABS.vehicles);
+  const header = rows[0] ?? HEADERS.vehicles;
+  const idCol = header.indexOf("vehicle_id");
+  let rowNumber = -1;
+  for (let i = 1; i < rows.length; i += 1) {
+    if (rows[i]?.[idCol] === v.vehicleId) {
+      rowNumber = i + 1; // 1-based
+      break;
+    }
+  }
+  if (rowNumber > 0) {
+    await writeRow(SHEET_TABS.vehicles, rowNumber, vehicleToRow(v));
+  } else {
+    await appendRow(SHEET_TABS.vehicles, vehicleToRow(v));
+  }
 }
 
 // ── FuelLog ──

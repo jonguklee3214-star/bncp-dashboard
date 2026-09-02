@@ -83,7 +83,9 @@
       "driverVolume": "운전자별 주유량"
     },
     "recent": "최근 주유 기록",
-    "summary": "주유 요약"
+    "summary": "주유 요약",
+    "alerts": "데이터 경보",
+    "mileageIssues": "주행거리 이상"
   },
   "period": {
     "label": "기간",
@@ -114,7 +116,16 @@
     "km": "km",
     "transactions": "건"
   },
-  "vehicles": { "title": "차량 관리" },
+  "vehicles": {
+    "title": "차량 관리",
+    "add": "차량 추가",
+    "edit": "수정",
+    "status": "상태",
+    "active": "운행",
+    "inactive": "미운행",
+    "driversHint": "복수 운전자는 / 로 구분",
+    "saved": "저장되었습니다."
+  },
   "reports": { "title": "리포트" },
   "settings": { "title": "설정", "language": "언어", "initSheet": "시트 초기화" }
 }

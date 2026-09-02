@@ -16,9 +16,16 @@ export function isConfigured(): boolean {
 
 // 모듈 스코프 in-memory 저장 (dev/preview 한정)
 const demoLogs: FuelLog[] = [];
+const demoVehicleList: Vehicle[] = SEED_VEHICLES.map((v) => ({ ...v }));
 
 export function demoVehicles(): Vehicle[] {
-  return SEED_VEHICLES;
+  return demoVehicleList;
+}
+
+export function demoUpsertVehicle(v: Vehicle): void {
+  const i = demoVehicleList.findIndex((x) => x.vehicleId === v.vehicleId);
+  if (i >= 0) demoVehicleList[i] = v;
+  else demoVehicleList.push(v);
 }
 
 export function demoGetLogs(): FuelLog[] {

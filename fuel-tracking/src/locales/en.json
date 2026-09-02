@@ -83,7 +83,9 @@
       "driverVolume": "Driver-wise Fuel Volume"
     },
     "recent": "Recent Fuel Records",
-    "summary": "Fuel Summary"
+    "summary": "Fuel Summary",
+    "alerts": "Data Alerts",
+    "mileageIssues": "Mileage Issues"
   },
   "period": {
     "label": "Period",
@@ -114,7 +116,16 @@
     "km": "km",
     "transactions": "transactions"
   },
-  "vehicles": { "title": "Vehicles" },
+  "vehicles": {
+    "title": "Vehicles",
+    "add": "Add Vehicle",
+    "edit": "Edit",
+    "status": "Status",
+    "active": "Active",
+    "inactive": "Inactive",
+    "driversHint": "Separate multiple drivers with /",
+    "saved": "Saved."
+  },
   "reports": { "title": "Reports" },
   "settings": { "title": "Settings", "language": "Language", "initSheet": "Initialize Sheet" }
 }

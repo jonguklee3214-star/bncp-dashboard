@@ -140,6 +140,13 @@ function round(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+// 주행거리 이상 데이터 (항목 78): 현재<이전.
+export function mileageIssues(logs: FuelLog[]): FuelLog[] {
+  return logs.filter(
+    (l) => l.mileageKm != null && l.previousMileageKm != null && l.mileageKm < l.previousMileageKm,
+  );
+}
+
 export interface Bucket {
   key: string;
   volume: number;

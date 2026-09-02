@@ -12,6 +12,7 @@ import {
   byVehicle,
   byWeek,
   computeKpi,
+  mileageIssues,
   type Filters,
 } from "@/lib/stats";
 import { formatDayLabel, formatDateTime, formatL } from "@/lib/format";
@@ -30,6 +31,7 @@ export default function DashboardPage() {
     () => [...filtered].sort((a, b) => b.fuelDatetime.localeCompare(a.fuelDatetime)).slice(0, 8),
     [filtered],
   );
+  const issues = useMemo(() => mileageIssues(filtered), [filtered]);
 
   return (
     <div className="space-y-5">
@@ -41,6 +43,23 @@ export default function DashboardPage() {
       {loading && <p className="text-sm text-gray-400">{t("common.loading")}</p>}
 
       <FilterBar filters={filters} onChange={setFilters} vehicles={vehicles} />
+
+      {/* Data Alerts (항목 78) */}
+      {issues.length > 0 && (
+        <Card className="border-warning/40 bg-warning/5 p-3">
+          <div className="text-sm font-bold text-warning">
+            ⚠ {t("dashboard.alerts")} · {issues.length} {t("dashboard.mileageIssues")}
+          </div>
+          <ul className="mt-2 space-y-1 text-xs text-gray-600">
+            {issues.slice(0, 5).map((l) => (
+              <li key={l.recordId}>
+                {l.mainVehicleNo || l.controlNo} · {formatDateTime(l.fuelDatetime)} ·{" "}
+                {l.previousMileageKm?.toLocaleString()} → {l.mileageKm?.toLocaleString()} km
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {/* KPI (금액 KPI 없음, 항목 41) */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
