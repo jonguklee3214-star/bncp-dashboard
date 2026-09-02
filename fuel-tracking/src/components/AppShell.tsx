@@ -21,6 +21,7 @@ const NAV: NavItem[] = [
   { href: "/history", key: "nav.fuelHistory", mobileKey: "nav.history", icon: "≣" },
   { href: "/reports", key: "nav.reports", icon: "📄" },
   { href: "/vehicles", key: "nav.vehicles", icon: "🚚" },
+  { href: "/help", key: "nav.help", icon: "❓" },
   { href: "/settings", key: "nav.settings", mobileKey: "nav.more", icon: "⚙" },
 ];
 

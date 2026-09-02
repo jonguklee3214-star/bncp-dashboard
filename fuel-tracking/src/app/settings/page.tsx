@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { LANGS, useI18n } from "@/lib/i18n";
 import { useStore } from "@/lib/store";
 import { Card, SectionTitle } from "@/components/ui";
@@ -30,6 +31,13 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-xl space-y-4">
       <h1 className="text-xl font-bold">{t("settings.title")}</h1>
+
+      <Link href="/help" className="block">
+        <Card className="flex items-center justify-between p-4 hover:border-hanwha">
+          <span className="font-bold text-gray-800">❓ {t("nav.help")}</span>
+          <span className="text-gray-400">›</span>
+        </Card>
+      </Link>
 
       <Card className="p-4">
         <SectionTitle>{t("settings.language")}</SectionTitle>
