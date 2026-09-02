@@ -32,8 +32,6 @@ body {
   margin: 0;
   background: #f7f8fa;
   color: #111111;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
 }
 
 /* 제목은 한화 전용 폰트(브랜드), 본문은 Pretendard(선명) */
