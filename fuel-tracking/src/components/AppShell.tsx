@@ -36,8 +36,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen">
       {/* ── Desktop sidebar ── */}
       <aside className="no-print fixed inset-y-0 left-0 hidden w-60 flex-col border-r border-neutral-border bg-white md:flex">
-        <div className="flex h-16 items-center px-5">
+        <div className="flex flex-col gap-1.5 px-5 py-4">
           <Image src={logo} alt="Hanwha E&C" width={150} height={33} priority className="h-8 w-auto" />
+          <span className="text-sm font-bold text-gray-700">BNCP 공사팀</span>
         </div>
         <nav className="flex-1 px-3 py-4">
           {NAV.map((n) => (
@@ -70,14 +71,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <DemoBanner />
           <div className="flex h-14 items-center justify-between gap-3 px-4">
-            {/* mobile logo */}
-            <Image
-              src={logo}
-              alt="Hanwha E&C"
-              width={140}
-              height={30}
-              className="h-7 w-auto md:hidden"
-            />
+            {/* mobile logo + 팀명 */}
+            <div className="flex flex-col md:hidden">
+              <Image src={logo} alt="Hanwha E&C" width={140} height={30} className="h-6 w-auto" />
+              <span className="mt-0.5 text-[11px] font-bold text-gray-700">BNCP 공사팀</span>
+            </div>
             <div className="hidden md:block">
               <WeatherBar />
             </div>
