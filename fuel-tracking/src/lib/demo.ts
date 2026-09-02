@@ -1,4 +1,4 @@
-import type { FuelLog, Vehicle } from "@/types";
+import type { EditRequest, FuelLog, Vehicle } from "@/types";
 import { SEED_VEHICLES } from "@/data/seed";
 
 // ─────────────────────────────────────────────────────────────
@@ -49,4 +49,24 @@ export function demoAppendAudit(row: (string | number)[]): void {
 }
 export function demoGetAudit(): (string | number)[][] {
   return demoAudit;
+}
+
+const demoVoided = new Set<string>();
+export function demoVoid(recordId: string): void {
+  demoVoided.add(recordId);
+}
+export function demoGetVoided(): Set<string> {
+  return demoVoided;
+}
+
+const demoRequests: EditRequest[] = [];
+export function demoAddRequest(r: EditRequest): void {
+  demoRequests.push(r);
+}
+export function demoGetRequests(): EditRequest[] {
+  return demoRequests;
+}
+export function demoUpdateRequest(requestId: string, status: EditRequest["status"]): void {
+  const r = demoRequests.find((x) => x.requestId === requestId);
+  if (r) r.status = status;
 }

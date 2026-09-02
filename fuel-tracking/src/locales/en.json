@@ -129,7 +129,25 @@
     "wrongPin": "Incorrect PIN.",
     "notConfigured": "Admin PIN is not set. Contact your administrator.",
     "editRecord": "Edit Record",
-    "unlocked": "Admin mode (editing enabled)"
+    "unlocked": "Admin mode (editing enabled)",
+    "void": "Delete (void)",
+    "voidConfirm": "Void this record? It will be excluded from totals and history (data preserved).",
+    "voidReason": "Void reason (optional)",
+    "requests": "Edit Requests",
+    "approve": "Approve",
+    "reject": "Reject",
+    "noRequests": "No pending edit requests."
+  },
+  "request": {
+    "button": "Request Edit",
+    "title": "Request Edit",
+    "by": "Requester (name)",
+    "reason": "Reason",
+    "submit": "Send request",
+    "submitted": "Your edit request was submitted. It applies after admin approval.",
+    "hint": "Only enter values to change. Leave others blank to keep them.",
+    "current": "Current",
+    "proposed": "Requested"
   },
   "weather": {
     "forecast": "7-Day Forecast",

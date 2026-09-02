@@ -1,12 +1,17 @@
-import type { FuelLog, Part, Vehicle } from "@/types";
+import type { EditRequest, FuelLog, Part, Vehicle } from "@/types";
 import { SEED_VEHICLES, dieselTracksMileage } from "@/data/seed";
 import {
+  demoAddRequest,
   demoAppendAudit,
   demoAppendLog,
   demoGetLogs,
+  demoGetRequests,
+  demoGetVoided,
   demoUpdateLog,
+  demoUpdateRequest,
   demoUpsertVehicle,
   demoVehicles,
+  demoVoid,
   isConfigured,
 } from "./demo";
 import {
@@ -209,12 +214,42 @@ function fuelLogToRow(l: FuelLog): (string | number)[] {
   ];
 }
 
+/** 무효 처리된 record_id 집합. */
+async function getVoidedIds(): Promise<Set<string>> {
+  if (!isConfigured()) return demoGetVoided();
+  try {
+    const rows = await readTab(SHEET_TABS.voided);
+    const idCol = (rows[0] ?? HEADERS.voided).indexOf("record_id");
+    const set = new Set<string>();
+    for (let i = 1; i < rows.length; i += 1) {
+      const id = rows[i]?.[idCol];
+      if (id) set.add(id);
+    }
+    return set;
+  } catch {
+    return new Set();
+  }
+}
+
+/** 유효한 주유 기록 (무효 제외). */
 export async function getFuelLogs(): Promise<FuelLog[]> {
-  if (!isConfigured()) return demoGetLogs();
-  const rows = await readTab(SHEET_TABS.logs);
-  return rowsToObjects(rows, HEADERS.logs)
-    .filter((o) => o.record_id)
-    .map(toFuelLog);
+  const voided = await getVoidedIds();
+  const all = isConfigured()
+    ? rowsToObjects(await readTab(SHEET_TABS.logs), HEADERS.logs)
+        .filter((o) => o.record_id)
+        .map(toFuelLog)
+    : demoGetLogs();
+  return all.filter((l) => !voided.has(l.recordId));
+}
+
+/** 기록 무효 처리 (삭제 대신, 데이터 보존 — 항목 90). 관리자. */
+export async function voidRecord(recordId: string, reason: string): Promise<void> {
+  if (!isConfigured()) {
+    demoVoid(recordId);
+    return;
+  }
+  await ensureTab(SHEET_TABS.voided);
+  await appendRow(SHEET_TABS.voided, [recordId, reason, "admin", new Date().toISOString()]);
 }
 
 export async function appendFuelLog(log: FuelLog): Promise<void> {
@@ -272,6 +307,85 @@ function applyLogPatch(
   return merged;
 }
 
+// ── 수정 요청 (입력자 → 관리자 승인) ──
+function toRequest(o: Record<string, string>): EditRequest {
+  const n = (v: string) => (v === "" ? null : Number(v));
+  return {
+    requestId: o.request_id,
+    recordId: o.record_id,
+    requestedBy: o.requested_by ?? "",
+    fuelVolume: n(o.fuel_volume ?? ""),
+    mileageKm: n(o.mileage_km ?? ""),
+    remarks: o.remarks ?? "",
+    reason: o.reason ?? "",
+    status:
+      o.status === "approved" ? "approved" : o.status === "rejected" ? "rejected" : "pending",
+    createdAt: o.created_at ?? "",
+  };
+}
+function requestToRow(r: EditRequest): (string | number)[] {
+  return [
+    r.requestId,
+    r.recordId,
+    r.requestedBy,
+    r.fuelVolume ?? "",
+    r.mileageKm ?? "",
+    r.remarks,
+    r.reason,
+    r.status,
+    r.createdAt,
+  ];
+}
+
+export async function addEditRequest(r: EditRequest): Promise<void> {
+  if (!isConfigured()) {
+    demoAddRequest(r);
+    return;
+  }
+  await ensureTab(SHEET_TABS.requests);
+  await appendRow(SHEET_TABS.requests, requestToRow(r));
+}
+
+export async function getEditRequests(status?: EditRequest["status"]): Promise<EditRequest[]> {
+  let all: EditRequest[];
+  if (!isConfigured()) {
+    all = [...demoGetRequests()];
+  } else {
+    try {
+      all = rowsToObjects(await readTab(SHEET_TABS.requests), HEADERS.requests)
+        .filter((o) => o.request_id)
+        .map(toRequest);
+    } catch {
+      all = [];
+    }
+  }
+  const list = status ? all.filter((r) => r.status === status) : all;
+  return list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function setEditRequestStatus(
+  requestId: string,
+  status: EditRequest["status"],
+): Promise<EditRequest | null> {
+  const all = await getEditRequests();
+  const req = all.find((r) => r.requestId === requestId);
+  if (!req) return null;
+  if (!isConfigured()) {
+    demoUpdateRequest(requestId, status);
+    return { ...req, status };
+  }
+  const rows = await readTab(SHEET_TABS.requests);
+  const header = rows[0] ?? HEADERS.requests;
+  const idCol = header.indexOf("request_id");
+  for (let i = 1; i < rows.length; i += 1) {
+    if (rows[i]?.[idCol] === requestId) {
+      await writeRow(SHEET_TABS.requests, i + 1, requestToRow({ ...req, status }));
+      break;
+    }
+  }
+  return { ...req, status };
+}
+
 /** 동일 차량/장비(CONTROL N° 기준)의 가장 최근 mileage → previous mileage 자동조회 (항목 32). */
 export async function getLatestMileage(controlNo: string): Promise<number | null> {
   if (!controlNo) return null;
@@ -295,11 +409,15 @@ export async function initSheet(): Promise<{ vehicles: number; demo?: boolean }>
   await ensureTab(SHEET_TABS.logs);
   await ensureTab(SHEET_TABS.settings);
   await ensureTab(SHEET_TABS.audit);
+  await ensureTab(SHEET_TABS.voided);
+  await ensureTab(SHEET_TABS.requests);
 
   await writeHeader(SHEET_TABS.vehicles, HEADERS.vehicles);
   await writeHeader(SHEET_TABS.logs, HEADERS.logs);
   await writeHeader(SHEET_TABS.settings, HEADERS.settings);
   await writeHeader(SHEET_TABS.audit, HEADERS.audit);
+  await writeHeader(SHEET_TABS.voided, HEADERS.voided);
+  await writeHeader(SHEET_TABS.requests, HEADERS.requests);
 
   // 이미 차량이 있으면 seed 를 덮지 않는다 (과거 데이터 보존, 항목 90).
   const existing = await getVehicles();

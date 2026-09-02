@@ -23,6 +23,7 @@ export function LogEditor({
   const [remarks, setRemarks] = useState(log.remarks);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [voiding, setVoiding] = useState(false);
 
   const hasMileage = log.mileageKm != null;
   const input =
@@ -50,6 +51,28 @@ export function LogEditor({
       setErr(e instanceof Error ? e.message : "error");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function voidRecord() {
+    if (!confirm(t("admin.voidConfirm"))) return;
+    const reason = window.prompt(t("admin.voidReason")) ?? "";
+    setVoiding(true);
+    setErr("");
+    try {
+      const res = await fetch("/api/logs", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", "x-admin-pin": pin },
+        body: JSON.stringify({ recordId: log.recordId, reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || "void failed");
+      onSaved();
+      onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "error");
+    } finally {
+      setVoiding(false);
     }
   }
 
@@ -102,6 +125,14 @@ export function LogEditor({
             className="w-full rounded-lg bg-hanwha py-3 font-bold text-white disabled:opacity-50"
           >
             {saving ? t("common.saving") : t("common.save")}
+          </button>
+
+          <button
+            onClick={voidRecord}
+            disabled={voiding}
+            className="w-full rounded-lg border border-danger/40 py-2.5 text-sm font-medium text-danger hover:bg-danger/5 disabled:opacity-50"
+          >
+            🗑 {t("admin.void")}
           </button>
         </div>
       </div>

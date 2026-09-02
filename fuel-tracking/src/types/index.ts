@@ -61,8 +61,22 @@ export interface FuelLog {
   distanceKm: number | null;
   fuelVolumeL: number;
   remarks: string;
+  voided?: boolean; // 무효 처리(삭제 대신). 집계·이력에서 제외.
   createdAt: string;
   updatedAt: string;
+}
+
+/** 수정 요청 (입력자 → 관리자 승인). */
+export interface EditRequest {
+  requestId: string;
+  recordId: string;
+  requestedBy: string;
+  fuelVolume: number | null;
+  mileageKm: number | null;
+  remarks: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
 }
 
 export interface AppSettings {

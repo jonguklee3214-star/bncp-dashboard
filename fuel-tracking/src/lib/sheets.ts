@@ -10,6 +10,8 @@ export const SHEET_TABS = {
   logs: "Fuel_Log",
   settings: "Settings",
   audit: "Audit_Log",
+  voided: "Voided",
+  requests: "Edit_Requests",
 } as const;
 
 export const HEADERS = {
@@ -54,6 +56,18 @@ export const HEADERS = {
   ],
   settings: ["key", "value"],
   audit: ["timestamp", "user", "action", "target", "old_value", "new_value"],
+  voided: ["record_id", "reason", "user", "at"],
+  requests: [
+    "request_id",
+    "record_id",
+    "requested_by",
+    "fuel_volume",
+    "mileage_km",
+    "remarks",
+    "reason",
+    "status",
+    "created_at",
+  ],
 } as const;
 
 export class SheetsConfigError extends Error {}

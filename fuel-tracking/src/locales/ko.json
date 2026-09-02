@@ -129,7 +129,25 @@
     "wrongPin": "PIN이 올바르지 않습니다.",
     "notConfigured": "관리자 PIN이 설정되지 않았습니다. 관리자에게 문의하세요.",
     "editRecord": "기록 수정",
-    "unlocked": "관리자 모드 (수정 가능)"
+    "unlocked": "관리자 모드 (수정 가능)",
+    "void": "삭제(무효)",
+    "voidConfirm": "이 기록을 무효 처리할까요? 집계·이력에서 제외됩니다 (데이터는 보존).",
+    "voidReason": "무효 사유 (선택)",
+    "requests": "수정 요청",
+    "approve": "승인",
+    "reject": "반려",
+    "noRequests": "대기 중인 수정 요청이 없습니다."
+  },
+  "request": {
+    "button": "수정 요청",
+    "title": "수정 요청",
+    "by": "요청자 (이름)",
+    "reason": "요청 사유",
+    "submit": "요청 보내기",
+    "submitted": "수정 요청이 접수되었습니다. 관리자 승인 후 반영됩니다.",
+    "hint": "바꿀 값만 입력하세요. 나머지는 비워두면 그대로 유지됩니다.",
+    "current": "현재",
+    "proposed": "요청"
   },
   "weather": {
     "forecast": "주간 날씨 예보",

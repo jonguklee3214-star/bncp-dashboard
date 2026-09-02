@@ -8,6 +8,7 @@ import {
   getVehicles,
   recordExists,
   updateFuelLog,
+  voidRecord,
 } from "@/lib/repository";
 import { errorResponse } from "@/lib/api";
 
@@ -215,6 +216,33 @@ export async function PATCH(req: NextRequest) {
     });
 
     return NextResponse.json({ ok: true, log: updated });
+  } catch (e) {
+    return errorResponse(e);
+  }
+}
+
+// 기록 무효 처리(삭제 대신, 관리자 전용)
+export async function DELETE(req: NextRequest) {
+  try {
+    if (!isAdmin(req)) {
+      return NextResponse.json(
+        { error: "forbidden", message: "관리자만 삭제(무효 처리)할 수 있습니다." },
+        { status: 403 },
+      );
+    }
+    const { recordId, reason } = (await req.json()) as { recordId?: string; reason?: string };
+    if (!recordId) {
+      return NextResponse.json({ error: "validation", message: "recordId 필요" }, { status: 400 });
+    }
+    await voidRecord(recordId, reason ?? "");
+    await appendAudit({
+      user: "admin",
+      action: "fuellog.void",
+      target: recordId,
+      oldValue: "",
+      newValue: reason ?? "",
+    });
+    return NextResponse.json({ ok: true });
   } catch (e) {
     return errorResponse(e);
   }

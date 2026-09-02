@@ -74,6 +74,8 @@ const MANUAL: Record<Lang, Manual> = {
           "CSV: 현재 목록을 엑셀 파일로 내려받기.",
           "인쇄/PDF: 인쇄 버튼 → 'PDF로 저장' 선택 가능. 금액 정보는 없습니다.",
           "기록 수정(관리자): 오른쪽 위 🔒 관리자 수정 → PIN 입력 후, 각 기록의 '수정' 버튼으로 주유량·주행거리·비고를 고칩니다. 관리자만 가능.",
+          "수정 요청(입력자): 잘못 입력했으면 각 기록의 '수정 요청' 버튼으로 올립니다. 관리자가 📥 수정 요청에서 승인해야 반영됩니다.",
+          "삭제(무효): 관리자는 수정 창의 '삭제(무효)'로 잘못된 기록을 무효 처리합니다. 데이터는 보존되고 집계·이력에서만 제외됩니다.",
         ],
       },
       {
@@ -148,6 +150,8 @@ const MANUAL: Record<Lang, Manual> = {
           "CSV: download the current list as a spreadsheet.",
           "Print/PDF: Print button → choose 'Save as PDF'. No cost information included.",
           "Edit records (admin): top-right 🔒 Admin Edit → enter PIN, then use each row's 'Edit' button to fix volume, mileage or remarks. Admin only.",
+          "Request edit (entrant): if you entered something wrong, use the 'Request Edit' button on that row. It applies only after an admin approves it (📥 Edit Requests).",
+          "Delete (void, admin): in the edit dialog use 'Delete (void)' to void a wrong record. Data is preserved; it is only excluded from totals and history.",
         ],
       },
       {
@@ -222,6 +226,8 @@ const MANUAL: Record<Lang, Manual> = {
           "CSV: বর্তমান তালিকা স্প্রেডশিট হিসেবে ডাউনলোড।",
           "প্রিন্ট/PDF: প্রিন্ট → 'Save as PDF'। কোনো খরচের তথ্য নেই।",
           "রেকর্ড সম্পাদনা (অ্যাডমিন): উপরে ডানে 🔒 → পিন দিয়ে প্রতিটি রেকর্ডের 'সম্পাদনা' বোতামে পরিমাণ·মাইলেজ·মন্তব্য ঠিক করুন। শুধু অ্যাডমিন।",
+          "সম্পাদনার অনুরোধ: ভুল হলে রেকর্ডের 'সম্পাদনার অনুরোধ' বোতামে পাঠান। অ্যাডমিন অনুমোদন করলে (📥) তবেই প্রযোজ্য হয়।",
+          "মুছুন (বাতিল, অ্যাডমিন): সম্পাদনা উইন্ডোতে 'মুছুন (বাতিল)' দিয়ে ভুল রেকর্ড বাতিল করুন। ডেটা থাকে, শুধু হিসাব থেকে বাদ যায়।",
         ],
       },
       {

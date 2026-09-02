@@ -9,6 +9,8 @@ import { formatDateTime, formatKm, formatL } from "@/lib/format";
 import { downloadCsv, logsToCsv } from "@/lib/csv";
 import { Card } from "@/components/ui";
 import { LogEditor } from "@/components/LogEditor";
+import { RequestModal } from "@/components/RequestModal";
+import { RequestsPanel } from "@/components/RequestsPanel";
 
 export default function HistoryPage() {
   const { t } = useI18n();
@@ -16,6 +18,8 @@ export default function HistoryPage() {
   const { isAdmin, pin, unlock, lock } = useAdmin();
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<FuelLog | null>(null);
+  const [requesting, setRequesting] = useState<FuelLog | null>(null);
+  const [requestsOpen, setRequestsOpen] = useState(false);
   const [pinOpen, setPinOpen] = useState(false);
   const [pinInput, setPinInput] = useState("");
   const [pinErr, setPinErr] = useState("");
@@ -50,12 +54,20 @@ export default function HistoryPage() {
         <h1 className="text-xl font-bold">{t("history.title")}</h1>
         <div className="no-print flex flex-wrap gap-2">
           {isAdmin ? (
-            <button
-              onClick={lock}
-              className="rounded-md border border-hanwha bg-hanwha/10 px-3 py-1.5 text-sm font-medium text-hanwha"
-            >
-              🔓 {t("admin.unlocked")}
-            </button>
+            <>
+              <button
+                onClick={() => setRequestsOpen(true)}
+                className="rounded-md border border-neutral-border bg-white px-3 py-1.5 text-sm hover:border-hanwha"
+              >
+                📥 {t("admin.requests")}
+              </button>
+              <button
+                onClick={lock}
+                className="rounded-md border border-hanwha bg-hanwha/10 px-3 py-1.5 text-sm font-medium text-hanwha"
+              >
+                🔓 {t("admin.unlocked")}
+              </button>
+            </>
           ) : (
             <button
               onClick={() => setPinOpen(true)}
@@ -116,6 +128,17 @@ export default function HistoryPage() {
       {editing && pin && (
         <LogEditor log={editing} pin={pin} onClose={() => setEditing(null)} onSaved={refresh} />
       )}
+      {requesting && (
+        <RequestModal log={requesting} onClose={() => setRequesting(null)} onDone={() => {}} />
+      )}
+      {requestsOpen && pin && (
+        <RequestsPanel
+          pin={pin}
+          logs={logs}
+          onClose={() => setRequestsOpen(false)}
+          onChanged={refresh}
+        />
+      )}
 
       <input
         value={q}
@@ -142,7 +165,7 @@ export default function HistoryPage() {
                 <th className="px-3 py-2 font-medium">{t("entry.part")}</th>
                 <th className="px-3 py-2 text-right font-medium">{t("entry.distance")}</th>
                 <th className="px-3 py-2 text-right font-medium">{t("entry.fuelVolume")}</th>
-                {isAdmin && <th className="px-3 py-2"></th>}
+                <th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-border">
@@ -155,16 +178,14 @@ export default function HistoryPage() {
                   <td className="px-3 py-2">{l.part || l.teamCode || "—"}</td>
                   <td className="tabular px-3 py-2 text-right">{l.distanceKm != null ? formatKm(l.distanceKm) : "—"}</td>
                   <td className="tabular px-3 py-2 text-right font-bold text-hanwha">{formatL(l.fuelVolumeL)}</td>
-                  {isAdmin && (
-                    <td className="px-3 py-2 text-right">
-                      <button
-                        onClick={() => setEditing(l)}
-                        className="rounded-md border border-neutral-border px-2 py-1 text-xs hover:border-hanwha"
-                      >
-                        {t("vehicles.edit")}
-                      </button>
-                    </td>
-                  )}
+                  <td className="no-print px-3 py-2 text-right">
+                    <button
+                      onClick={() => (isAdmin ? setEditing(l) : setRequesting(l))}
+                      className="rounded-md border border-neutral-border px-2 py-1 text-xs hover:border-hanwha"
+                    >
+                      {isAdmin ? t("vehicles.edit") : t("request.button")}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -181,14 +202,12 @@ export default function HistoryPage() {
                 <div className="font-bold">{l.mainVehicleNo || l.controlNo || l.vehicleType}</div>
                 <div className="text-xs text-gray-500">{l.controlNo || l.vehicleType}</div>
               </div>
-              {isAdmin && (
-                <button
-                  onClick={() => setEditing(l)}
-                  className="rounded-md border border-neutral-border px-2 py-1 text-xs hover:border-hanwha"
-                >
-                  {t("vehicles.edit")}
-                </button>
-              )}
+              <button
+                onClick={() => (isAdmin ? setEditing(l) : setRequesting(l))}
+                className="rounded-md border border-neutral-border px-2 py-1 text-xs hover:border-hanwha"
+              >
+                {isAdmin ? t("vehicles.edit") : t("request.button")}
+              </button>
             </div>
             {l.driver && <div className="text-sm text-gray-700">{l.driver}</div>}
             <div className="mt-2 space-y-1 text-sm">
