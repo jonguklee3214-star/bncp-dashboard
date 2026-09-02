@@ -174,6 +174,7 @@ interface PatchLogBody {
   mileageKm?: number | null;
   remarks?: string;
   fuelDatetime?: string;
+  reason?: string;
 }
 
 // 기록 수정 (관리자 전용 — PIN 필요)
@@ -188,6 +189,12 @@ export async function PATCH(req: NextRequest) {
     const body = (await req.json()) as PatchLogBody;
     if (!body.recordId) {
       return NextResponse.json({ error: "validation", message: "recordId 필요" }, { status: 400 });
+    }
+    if (!body.reason?.trim()) {
+      return NextResponse.json(
+        { error: "validation", message: "수정 사유를 입력하세요." },
+        { status: 400 },
+      );
     }
     if (body.fuelVolume != null && body.fuelVolume <= 0) {
       return NextResponse.json(
@@ -211,7 +218,7 @@ export async function PATCH(req: NextRequest) {
       user: "admin",
       action: "fuellog.update",
       target: `${updated.controlNo || updated.mainVehicleNo || updated.vehicleType} · ${updated.recordId}`,
-      oldValue: "",
+      oldValue: body.reason.trim(),
       newValue: `${updated.fuelVolumeL}L ${updated.mileageKm ?? ""}`,
     });
 

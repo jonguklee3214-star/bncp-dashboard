@@ -21,6 +21,7 @@ export function LogEditor({
   const [fuelVolume, setFuelVolume] = useState(String(log.fuelVolumeL));
   const [mileage, setMileage] = useState(log.mileageKm != null ? String(log.mileageKm) : "");
   const [remarks, setRemarks] = useState(log.remarks);
+  const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [voiding, setVoiding] = useState(false);
@@ -41,6 +42,7 @@ export function LogEditor({
           fuelVolume: Number(fuelVolume),
           mileageKm: hasMileage && mileage !== "" ? Number(mileage) : undefined,
           remarks,
+          reason,
         }),
       });
       const data = await res.json();
@@ -117,11 +119,21 @@ export function LogEditor({
             <input value={remarks} onChange={(e) => setRemarks(e.target.value)} className={input} />
           </label>
 
+          <label className="block">
+            <span className="text-xs font-medium text-gray-600">{t("entry.reason")} *</span>
+            <input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder={t("request.reason")}
+              className={input}
+            />
+          </label>
+
           {err && <p className="text-sm text-danger">{err}</p>}
 
           <button
             onClick={save}
-            disabled={saving || !fuelVolume}
+            disabled={saving || !fuelVolume || !reason.trim()}
             className="w-full rounded-lg bg-hanwha py-3 font-bold text-white disabled:opacity-50"
           >
             {saving ? t("common.saving") : t("common.save")}
