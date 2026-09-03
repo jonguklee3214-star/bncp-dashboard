@@ -78,7 +78,9 @@
       "volume": "Fuel Volume",
       "distance": "Total Distance",
       "avgVolume": "Average Fuel Volume",
-      "activeVehicles": "Active Vehicles"
+      "activeVehicles": "Active Vehicles",
+      "volumeDiesel": "Diesel Volume",
+      "volumeGasoline": "Gasoline Volume"
     },
     "charts": {
       "dailyVolume": "Daily Fuel Volume",
@@ -121,7 +123,12 @@
     "datetime": "Date/Time",
     "searchPlaceholder": "Search vehicle · control no · driver · part",
     "edited": "Edited",
-    "editHistory": "Edit history"
+    "editHistory": "Edit history",
+    "summary": "Summary",
+    "who": "Driver · Vehicle",
+    "count": "Refuels",
+    "days": "Days refuelled",
+    "totalCount": "Total"
   },
   "units": {
     "l": "L",

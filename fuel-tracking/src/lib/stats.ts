@@ -121,6 +121,8 @@ export function applyFilters(logs: FuelLog[], f: Filters): FuelLog[] {
 export interface Kpi {
   transactions: number;
   volume: number;
+  volumeDiesel: number;
+  volumeGasoline: number;
   distance: number;
   avgVolume: number;
   activeVehicles: number;
@@ -130,10 +132,14 @@ export interface Kpi {
 export function computeKpi(logs: FuelLog[]): Kpi {
   const transactions = logs.length;
   const volume = round(logs.reduce((s, l) => s + l.fuelVolumeL, 0));
+  const sum = (ft: FuelLog["fuelType"]) =>
+    round(logs.filter((l) => l.fuelType === ft).reduce((s, l) => s + l.fuelVolumeL, 0));
+  const volumeDiesel = sum("diesel");
+  const volumeGasoline = sum("gasoline");
   const distance = round(logs.reduce((s, l) => s + (l.distanceKm ?? 0), 0));
   const avgVolume = transactions ? round(volume / transactions) : 0;
   const activeVehicles = new Set(logs.map((l) => l.controlNo || l.mainVehicleNo)).size;
-  return { transactions, volume, distance, avgVolume, activeVehicles };
+  return { transactions, volume, volumeDiesel, volumeGasoline, distance, avgVolume, activeVehicles };
 }
 
 function round(n: number): number {
@@ -200,3 +206,39 @@ export const byDriverName = (logs: FuelLog[]) => {
     .map((b) => ({ ...b, volume: round(b.volume), distance: round(b.distance) }))
     .sort((a, b) => b.volume - a.volume);
 };
+
+/** 조회 기간 안에서 "누가(또는 어느 차량이) 몇 번, 며칠에" 넣었는지. */
+export interface UsageRow {
+  key: string;        // 운전자 이름 또는 차량 식별자
+  isDriver: boolean;
+  vehicles: string[]; // 그 사람이 넣은 차량들
+  count: number;
+  volume: number;
+  dates: string[];    // YYYY-MM-DD, 오름차순
+}
+
+export function usageByPerson(logs: FuelLog[]): UsageRow[] {
+  const map = new Map<string, UsageRow>();
+  for (const l of logs) {
+    const vehicle = l.mainVehicleNo || l.controlNo || l.vehicleType || "—";
+    // 운전자가 있으면 사람 기준, 없으면(디젤 장비 등) 차량 기준으로 묶는다.
+    const drivers = l.driver
+      ? l.driver.split("/").map((d) => d.trim()).filter(Boolean)
+      : [];
+    const keys = drivers.length ? drivers : [vehicle];
+    for (const key of keys) {
+      const row =
+        map.get(key) ??
+        { key, isDriver: drivers.length > 0, vehicles: [], count: 0, volume: 0, dates: [] };
+      row.count += 1;
+      // 복수 운전자 차량은 주유량을 나눠 갖지 않고 각자에게 그대로 보여준다 (횟수 기준 조회이므로)
+      row.volume = round(row.volume + l.fuelVolumeL);
+      const d = siteDate(l.fuelDatetime);
+      if (!row.dates.includes(d)) row.dates.push(d);
+      if (!row.vehicles.includes(vehicle)) row.vehicles.push(vehicle);
+      map.set(key, row);
+    }
+  }
+  for (const row of map.values()) row.dates.sort();
+  return [...map.values()].sort((a, b) => b.count - a.count || b.volume - a.volume);
+}

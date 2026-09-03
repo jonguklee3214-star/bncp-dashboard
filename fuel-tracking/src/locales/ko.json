@@ -78,7 +78,9 @@
       "volume": "주유량",
       "distance": "총 주행거리",
       "avgVolume": "평균 주유량",
-      "activeVehicles": "운행 차량"
+      "activeVehicles": "운행 차량",
+      "volumeDiesel": "디젤 주유량",
+      "volumeGasoline": "가솔린 주유량"
     },
     "charts": {
       "dailyVolume": "일별 주유량",
@@ -121,7 +123,12 @@
     "datetime": "일시",
     "searchPlaceholder": "차량번호 · 관리번호 · 운전자 · 파트 검색",
     "edited": "수정됨",
-    "editHistory": "수정 이력"
+    "editHistory": "수정 이력",
+    "summary": "조회 요약",
+    "who": "운전자 · 차량",
+    "count": "주유 횟수",
+    "days": "주유한 날",
+    "totalCount": "합계"
   },
   "units": {
     "l": "L",

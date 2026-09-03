@@ -61,13 +61,23 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {/* KPI (금액 KPI 없음, 항목 41) */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <KpiTile label={t("dashboard.kpi.transactions")} value={String(kpi.transactions)} unit={t("units.transactions")} />
-        <KpiTile label={t("dashboard.kpi.volume")} value={kpi.volume.toLocaleString()} unit={t("units.l")} />
-        <KpiTile label={t("dashboard.kpi.distance")} value={kpi.distance.toLocaleString()} unit={t("units.km")} />
-        <KpiTile label={t("dashboard.kpi.avgVolume")} value={String(kpi.avgVolume)} unit={t("units.l")} />
-        <KpiTile label={t("dashboard.kpi.activeVehicles")} value={String(kpi.activeVehicles)} />
+      {/* KPI — 주유량은 유종별로 (금액 KPI 없음, 항목 41) */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <KpiTile
+          label={t("dashboard.kpi.volumeDiesel")}
+          value={kpi.volumeDiesel.toLocaleString()}
+          unit={t("units.l")}
+        />
+        <KpiTile
+          label={t("dashboard.kpi.volumeGasoline")}
+          value={kpi.volumeGasoline.toLocaleString()}
+          unit={t("units.l")}
+        />
+        <KpiTile
+          label={t("dashboard.kpi.distance")}
+          value={kpi.distance.toLocaleString()}
+          unit={t("units.km")}
+        />
       </div>
 
       {/* Charts */}

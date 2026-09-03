@@ -5,18 +5,22 @@ import type { EditHistoryEntry, FuelLog } from "@/types";
 import { useI18n } from "@/lib/i18n";
 import { useStore } from "@/lib/store";
 import { useAdmin } from "@/lib/useAdmin";
+import { applyFilters, usageByPerson, type Filters } from "@/lib/stats";
 import { formatDateTime, formatKm, formatL } from "@/lib/format";
 import { downloadCsv, logsToCsv } from "@/lib/csv";
 import { Card } from "@/components/ui";
+import { FilterBar } from "@/components/FilterBar";
 import { LogEditor } from "@/components/LogEditor";
 import { RequestModal } from "@/components/RequestModal";
 import { RequestsPanel } from "@/components/RequestsPanel";
 
 export default function HistoryPage() {
   const { t } = useI18n();
-  const { logs, loading, refresh } = useStore();
+  const { vehicles, logs, loading, refresh } = useStore();
   const { isAdmin, pin, unlock, lock } = useAdmin();
   const [q, setQ] = useState("");
+  // 조회 기간 — 기본 이번 달. 월별·일별·연도·직접 지정 모두 여기서 고른다.
+  const [filters, setFilters] = useState<Filters>({ period: "thisMonth" });
   const [editing, setEditing] = useState<FuelLog | null>(null);
   const [requesting, setRequesting] = useState<FuelLog | null>(null);
   const [requestsOpen, setRequestsOpen] = useState(false);
@@ -64,16 +68,25 @@ export default function HistoryPage() {
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    const sorted = [...logs].sort((a, b) => b.fuelDatetime.localeCompare(a.fuelDatetime));
-    if (!s) return sorted;
+    const inPeriod = applyFilters(logs, filters).sort((a, b) =>
+      b.fuelDatetime.localeCompare(a.fuelDatetime),
+    );
+    if (!s) return inPeriod;
     // 부분 검색: 차량번호·관리번호·운전자·파트·차종 (항목 48)
-    return sorted.filter((l) =>
+    return inPeriod.filter((l) =>
       [l.mainVehicleNo, l.controlNo, l.driver, l.part, l.vehicleType]
         .join(" ")
         .toLowerCase()
         .includes(s),
     );
-  }, [logs, q]);
+  }, [logs, q, filters]);
+
+  // 조회 결과 요약: 누가(또는 어느 차량이) 몇 번, 며칠에 넣었는지
+  const usage = useMemo(() => usageByPerson(filtered), [filtered]);
+  const totalVolume = useMemo(
+    () => Math.round(filtered.reduce((s, l) => s + l.fuelVolumeL, 0) * 100) / 100,
+    [filtered],
+  );
 
   return (
     <div className="space-y-4">
@@ -180,6 +193,58 @@ export default function HistoryPage() {
         placeholder={`🔍 ${t("history.searchPlaceholder")}`}
         className="no-print w-full rounded-lg border border-neutral-border px-4 py-2.5 outline-none focus:border-hanwha"
       />
+
+      <div className="no-print">
+        <FilterBar filters={filters} onChange={setFilters} vehicles={vehicles} />
+      </div>
+
+      {/* 조회 요약 — 기간 안에서 몇 번, 며칠에 넣었는지 */}
+      {filtered.length > 0 && (
+        <Card className="p-4">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="text-sm font-bold text-gray-700">
+              📊 {t("history.summary")} · {t(`period.${filters.period}`)}
+            </h3>
+            <span className="text-sm text-gray-600">
+              {t("history.totalCount")}{" "}
+              <b className="tabular text-gray-900">{filtered.length}</b>{" "}
+              {t("units.transactions")} · <b className="tabular text-hanwha">{formatL(totalVolume)}</b>
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-neutral-border text-left text-xs text-gray-500">
+                  <th className="py-1.5 pr-3 font-medium">{t("history.who")}</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">{t("history.count")}</th>
+                  <th className="py-1.5 pr-3 text-right font-medium">{t("entry.fuelVolume")}</th>
+                  <th className="py-1.5 font-medium">{t("history.days")}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-border">
+                {usage.map((u) => (
+                  <tr key={u.key}>
+                    <td className="py-1.5 pr-3">
+                      <div className="font-medium">{u.key}</div>
+                      {u.isDriver && (
+                        <div className="text-xs text-gray-500">{u.vehicles.join(" / ")}</div>
+                      )}
+                    </td>
+                    <td className="tabular py-1.5 pr-3 text-right font-bold">
+                      {u.count}
+                      <span className="ml-0.5 text-xs font-normal text-gray-500">
+                        {t("units.transactions")}
+                      </span>
+                    </td>
+                    <td className="tabular py-1.5 pr-3 text-right text-hanwha">{formatL(u.volume)}</td>
+                    <td className="py-1.5 text-xs text-gray-600">{u.dates.map(dayNum).join(", ")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {loading && <p className="text-sm text-gray-400">{t("common.loading")}</p>}
       {!loading && filtered.length === 0 && (
@@ -294,6 +359,12 @@ export default function HistoryPage() {
       </div>
     </div>
   );
+}
+
+/** 요약표의 날짜: 같은 달이면 "3일", 아니면 "9/3" 형태로 짧게. */
+function dayNum(isoDate: string): string {
+  const [, m, d] = isoDate.split("-");
+  return `${Number(m)}/${Number(d)}`;
 }
 
 function Row({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {

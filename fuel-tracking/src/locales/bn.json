@@ -78,7 +78,9 @@
       "volume": "জ্বালানির পরিমাণ",
       "distance": "মোট দূরত্ব",
       "avgVolume": "গড় জ্বালানির পরিমাণ",
-      "activeVehicles": "সক্রিয় যানবাহন"
+      "activeVehicles": "সক্রিয় যানবাহন",
+      "volumeDiesel": "ডিজেল পরিমাণ",
+      "volumeGasoline": "গ্যাসোলিন পরিমাণ"
     },
     "charts": {
       "dailyVolume": "দৈনিক জ্বালানির পরিমাণ",
@@ -121,7 +123,12 @@
     "datetime": "তারিখ/সময়",
     "searchPlaceholder": "যানবাহন · কন্ট্রোল নং · চালক · পার্ট অনুসন্ধান",
     "edited": "সম্পাদিত",
-    "editHistory": "সম্পাদনার ইতিহাস"
+    "editHistory": "সম্পাদনার ইতিহাস",
+    "summary": "সারাংশ",
+    "who": "চালক · যানবাহন",
+    "count": "বার",
+    "days": "যেসব দিনে",
+    "totalCount": "মোট"
   },
   "units": {
     "l": "L",
