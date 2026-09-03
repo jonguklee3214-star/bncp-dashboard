@@ -25,7 +25,7 @@ export interface Filters {
 }
 
 // 현장 기준 날짜 문자열 (YYYY-MM-DD)
-function siteDate(iso: string): string {
+export function siteDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-CA", { timeZone: TZ });
 }
 function siteMonth(iso: string): string {
