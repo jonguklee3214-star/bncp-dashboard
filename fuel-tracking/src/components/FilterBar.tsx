@@ -3,15 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Vehicle } from "@/types";
 import { useI18n } from "@/lib/i18n";
-import type { Filters, PeriodKey } from "@/lib/stats";
+import { resolvePeriod, type Filters, type PeriodKey } from "@/lib/stats";
 
+// 기본 기준은 '이번 달'. 다른 기간을 보고 싶을 때만 아래에서 고른다.
 const PERIODS: PeriodKey[] = [
+  "thisMonth",
+  "lastMonth",
   "today",
   "yesterday",
   "thisWeek",
   "lastWeek",
-  "thisMonth",
-  "lastMonth",
   "thisYear",
   "custom",
 ];
@@ -68,6 +69,9 @@ export function FilterBar({
   const ctl =
     "rounded-lg border border-neutral-border bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-hanwha";
 
+  // 지금 어느 구간을 보고 있는지 명시 (기본은 이번 달 1일~말일)
+  const range = resolvePeriod(filters);
+
   return (
     <div className="space-y-2">
       {/* 한 줄: 기간 드롭다운 + 필터 버튼 */}
@@ -102,6 +106,10 @@ export function FilterBar({
           )}
           <span className="text-[10px] text-gray-500">{open ? "▲" : "▼"}</span>
         </button>
+
+        <span className="tabular text-xs text-gray-600">
+          {range.start} ~ {range.end}
+        </span>
 
         {/* 선택한 조건 요약 — 접혀 있을 때만 */}
         {!open &&
