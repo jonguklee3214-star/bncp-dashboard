@@ -5,7 +5,10 @@ import type { FuelLog } from "@/types";
 import { useI18n } from "@/lib/i18n";
 import { formatDateTime, formatL } from "@/lib/format";
 
-// 입력자가 잘못 입력한 기록에 대해 수정을 '요청'(관리자 승인 필요).
+/**
+ * 입력자가 "이 기록 고치게 해 주세요" 하고 올리는 신청.
+ * 값은 여기서 적지 않는다 — 관리자가 승인하면 본인이 직접 고친다.
+ */
 export function RequestModal({
   log,
   onClose,
@@ -17,44 +20,30 @@ export function RequestModal({
 }) {
   const { t } = useI18n();
   const [by, setBy] = useState("");
-  const [fuelVolume, setFuelVolume] = useState("");
-  const [mileage, setMileage] = useState("");
-  const [remarks, setRemarks] = useState("");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [ok, setOk] = useState(false);
 
-  const hasMileage = log.mileageKm != null;
   const input =
     "mt-1 w-full rounded-lg border border-neutral-border px-3 py-2.5 outline-none focus:border-hanwha";
 
   async function submit() {
-    if (!reason.trim()) {
-      setMsg(t("request.reason"));
-      return;
-    }
+    if (!reason.trim()) return;
     setBusy(true);
     setMsg("");
     try {
       const res = await fetch("/api/requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          recordId: log.recordId,
-          requestedBy: by,
-          fuelVolume: fuelVolume !== "" ? Number(fuelVolume) : null,
-          mileageKm: hasMileage && mileage !== "" ? Number(mileage) : null,
-          remarks: remarks || undefined,
-          reason,
-        }),
+        body: JSON.stringify({ recordId: log.recordId, requestedBy: by, reason }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "failed");
       setOk(true);
       setMsg(t("request.submitted"));
       onDone();
-      setTimeout(onClose, 1600);
+      setTimeout(onClose, 1800);
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "error");
     } finally {
@@ -67,52 +56,34 @@ export function RequestModal({
       <div className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-5 sm:rounded-card">
         <div className="mb-1 flex items-center justify-between">
           <h2 className="font-bold">{t("request.title")}</h2>
-          <button onClick={onClose} className="text-gray-400">✕</button>
+          <button onClick={onClose} className="text-gray-400">
+            ✕
+          </button>
         </div>
-        <div className="mb-2 text-xs text-gray-500">
+
+        <div className="mb-3 rounded-lg bg-neutral-soft px-3 py-2 text-xs text-gray-700">
           {log.mainVehicleNo || log.controlNo || log.vehicleType} · {formatDateTime(log.fuelDatetime)} ·{" "}
-          {t("request.current")} {formatL(log.fuelVolumeL)}
+          {formatL(log.fuelVolumeL)}
         </div>
-        <p className="mb-3 text-xs text-gray-500">{t("request.hint")}</p>
+
+        <p className="mb-4 rounded-lg bg-hanwha/5 p-3 text-xs leading-relaxed text-gray-700">
+          {t("request.flow")}
+        </p>
 
         <div className="space-y-3">
           <label className="block">
             <span className="text-xs font-medium text-gray-600">{t("request.by")}</span>
             <input value={by} onChange={(e) => setBy(e.target.value)} className={input} />
           </label>
-          <label className="block">
-            <span className="text-xs font-medium text-gray-600">
-              {t("request.proposed")} {t("entry.fuelVolume")} ({t("units.l")})
-            </span>
-            <input
-              inputMode="decimal"
-              value={fuelVolume}
-              onChange={(e) => setFuelVolume(e.target.value.replace(/[^0-9.]/g, ""))}
-              placeholder={String(log.fuelVolumeL)}
-              className={input}
-            />
-          </label>
-          {hasMileage && (
-            <label className="block">
-              <span className="text-xs font-medium text-gray-600">
-                {t("request.proposed")} {t("entry.currentMileage")} (km)
-              </span>
-              <input
-                inputMode="decimal"
-                value={mileage}
-                onChange={(e) => setMileage(e.target.value.replace(/[^0-9.]/g, ""))}
-                placeholder={log.mileageKm != null ? String(log.mileageKm) : ""}
-                className={input}
-              />
-            </label>
-          )}
-          <label className="block">
-            <span className="text-xs font-medium text-gray-600">{t("entry.remarks")}</span>
-            <input value={remarks} onChange={(e) => setRemarks(e.target.value)} className={input} />
-          </label>
+
           <label className="block">
             <span className="text-xs font-medium text-gray-600">{t("request.reason")} *</span>
-            <input value={reason} onChange={(e) => setReason(e.target.value)} className={input} />
+            <input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder={t("request.reasonPlaceholder")}
+              className={input}
+            />
           </label>
 
           {msg && <p className={`text-sm ${ok ? "text-success" : "text-danger"}`}>{msg}</p>}

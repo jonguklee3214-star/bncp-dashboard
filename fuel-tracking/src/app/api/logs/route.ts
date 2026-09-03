@@ -5,8 +5,10 @@ import {
   appendFuelLog,
   getFuelLogs,
   getLatestMileage,
+  getEditRequests,
   getVehicles,
   recordExists,
+  setEditRequestStatus,
   updateFuelLog,
   voidRecord,
 } from "@/lib/repository";
@@ -181,22 +183,49 @@ interface PatchLogBody {
   remarks?: string;
   fuelDatetime?: string;
   reason?: string;
+  requestId?: string; // 관리자가 승인한 수정 요청 (입력자가 직접 고칠 때)
+  editedBy?: string;
 }
 
-// 기록 수정 (관리자 전용 — PIN 필요)
+/**
+ * 기록 수정. 두 가지 경로만 허용한다.
+ *   1) 관리자 PIN
+ *   2) 관리자가 승인한 수정 요청(requestId) — 요청한 사람이 직접 고친다. 승인 1건당 1회.
+ */
 export async function PATCH(req: NextRequest) {
   try {
-    if (!isAdminRequest(req)) {
-      return NextResponse.json(
-        { error: "forbidden", message: "관리자만 수정할 수 있습니다." },
-        { status: 403 },
-      );
-    }
     const body = (await req.json()) as PatchLogBody;
     if (!body.recordId) {
       return NextResponse.json({ error: "validation", message: "recordId 필요" }, { status: 400 });
     }
-    if (!body.reason?.trim()) {
+
+    const admin = isAdminRequest(req);
+    let editor = "admin";
+    let approvedReason = "";
+    if (!admin) {
+      if (!body.requestId) {
+        return NextResponse.json(
+          { error: "forbidden", message: "관리자 승인을 받은 뒤에 수정할 수 있습니다." },
+          { status: 403 },
+        );
+      }
+      const approved = await getEditRequests("approved");
+      const match = approved.find(
+        (r) => r.requestId === body.requestId && r.recordId === body.recordId,
+      );
+      if (!match) {
+        return NextResponse.json(
+          { error: "forbidden", message: "승인된 수정 요청이 없거나 이미 수정했습니다." },
+          { status: 403 },
+        );
+      }
+      editor = match.requestedBy || "요청자";
+      approvedReason = match.reason;
+    }
+
+    // 사유: 관리자는 필수, 요청자는 신청할 때 적은 사유를 그대로 쓴다.
+    const reason = body.reason?.trim() || approvedReason;
+    if (!reason) {
       return NextResponse.json(
         { error: "validation", message: "수정 사유를 입력하세요." },
         { status: 400 },
@@ -220,11 +249,14 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "notfound", message: "기록을 찾을 수 없습니다." }, { status: 404 });
     }
 
+    // 승인 1건은 수정 1회로 소진
+    if (!admin && body.requestId) await setEditRequestStatus(body.requestId, "done");
+
     await appendAudit({
-      user: "admin",
+      user: admin ? "admin" : editor,
       action: "fuellog.update",
       target: `${updated.controlNo || updated.mainVehicleNo || updated.vehicleType} · ${updated.recordId}`,
-      oldValue: body.reason.trim(),
+      oldValue: reason,
       newValue: `${updated.fuelVolumeL}L ${updated.mileageKm ?? ""}`,
     });
 

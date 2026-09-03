@@ -5,17 +5,24 @@ import type { EditRequest, FuelLog } from "@/types";
 import { useI18n } from "@/lib/i18n";
 import { formatDateTime } from "@/lib/format";
 
-// 관리자: 대기 중인 수정 요청 검토 → 승인/반려.
+/**
+ * 관리자: 대기 중인 수정 요청 검토.
+ *   승인   → 요청한 사람이 직접 고칠 수 있게 잠금을 푼다
+ *   바로 수정 → 관리자가 이 자리에서 고친다
+ *   반려
+ */
 export function RequestsPanel({
   pin,
   logs,
   onClose,
   onChanged,
+  onEditNow,
 }: {
   pin: string;
   logs: FuelLog[];
   onClose: () => void;
   onChanged: () => void;
+  onEditNow: (log: FuelLog) => void;
 }) {
   const { t } = useI18n();
   const [requests, setRequests] = useState<EditRequest[] | null>(null);
@@ -78,37 +85,43 @@ export function RequestsPanel({
                 )}
                 <div className="mt-2 space-y-1 text-sm">
                   {r.requestedBy && (
-                    <div className="text-xs text-gray-500">{t("request.by")}: {r.requestedBy}</div>
+                    <div className="text-xs text-gray-500">
+                      {t("request.by")}: {r.requestedBy}
+                    </div>
                   )}
-                  <div className="rounded bg-neutral-soft px-2 py-1.5 text-gray-700">
-                    {r.fuelVolume != null && (
-                      <div>
-                        {t("entry.fuelVolume")}: {l ? `${l.fuelVolumeL} → ` : ""}
-                        <b className="text-hanwha">{r.fuelVolume} L</b>
-                      </div>
-                    )}
-                    {r.mileageKm != null && (
-                      <div>
-                        {t("entry.currentMileage")}: {l && l.mileageKm != null ? `${l.mileageKm} → ` : ""}
-                        <b className="text-hanwha">{r.mileageKm} km</b>
-                      </div>
-                    )}
-                    {r.remarks && <div>{t("entry.remarks")}: {r.remarks}</div>}
-                  </div>
+                  {l && (
+                    <div className="rounded bg-neutral-soft px-2 py-1.5 text-xs text-gray-700">
+                      {t("request.current")}: {l.fuelVolumeL} {t("units.l")}
+                      {l.mileageKm != null && ` · ${l.mileageKm} km`}
+                      {l.remarks && ` · ${l.remarks}`}
+                    </div>
+                  )}
                   <div className="text-gray-700">📝 {r.reason}</div>
                 </div>
-                <div className="mt-3 flex gap-2">
+                <div className="mt-3 grid grid-cols-2 gap-2">
                   <button
                     onClick={() => act(r.requestId, "approve")}
                     disabled={busy === r.requestId}
-                    className="flex-1 rounded-lg bg-hanwha py-2 text-sm font-bold text-white disabled:opacity-50"
+                    className="rounded-lg bg-hanwha py-2 text-sm font-bold text-white disabled:opacity-50"
                   >
-                    {t("admin.approve")}
+                    ✅ {t("admin.approveLet")}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!l) return;
+                      await act(r.requestId, "approve");
+                      onClose();
+                      onEditNow(l);
+                    }}
+                    disabled={busy === r.requestId || !l}
+                    className="rounded-lg border border-hanwha py-2 text-sm font-bold text-hanwha disabled:opacity-50"
+                  >
+                    ✏ {t("admin.editNow")}
                   </button>
                   <button
                     onClick={() => act(r.requestId, "reject")}
                     disabled={busy === r.requestId}
-                    className="flex-1 rounded-lg border border-neutral-border py-2 text-sm text-gray-600 disabled:opacity-50"
+                    className="col-span-2 rounded-lg border border-neutral-border py-2 text-sm text-gray-600 disabled:opacity-50"
                   >
                     {t("admin.reject")}
                   </button>

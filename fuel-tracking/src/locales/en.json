@@ -119,7 +119,9 @@
   "history": {
     "title": "Fuel History",
     "datetime": "Date/Time",
-    "searchPlaceholder": "Search vehicle · control no · driver · part"
+    "searchPlaceholder": "Search vehicle · control no · driver · part",
+    "edited": "Edited",
+    "editHistory": "Edit history"
   },
   "units": {
     "l": "L",
@@ -148,7 +150,9 @@
     "exemptRevoke": "Revoke exemption",
     "exemptReason": "Exemption reason (e.g. broken odometer)",
     "exemptOn": "Exempt (no mileage needed)",
-    "exemptHint": "If a vehicle's odometer is broken, an admin approves an exemption once; after that it can be entered with volume only."
+    "exemptHint": "If a vehicle's odometer is broken, an admin approves an exemption once; after that it can be entered with volume only.",
+    "approveLet": "Approve (requester edits)",
+    "editNow": "Edit now"
   },
   "request": {
     "button": "Request Edit",
@@ -159,7 +163,11 @@
     "submitted": "Your edit request was submitted. It applies after admin approval.",
     "hint": "Only enter values to change. Leave others blank to keep them.",
     "current": "Current",
-    "proposed": "Requested"
+    "proposed": "Requested",
+    "flow": "Do not change values here. Send the reason; once an admin approves, an '✏ Edit' button appears on this record so you can fix it yourself.",
+    "editNow": "Edit",
+    "approvedHint": "Approved by an admin. Fix the values and save. (Saving uses up the approval.)",
+    "reasonPlaceholder": "e.g. entered 50 L instead of 65 L"
   },
   "weather": {
     "forecast": "7-Day Forecast",

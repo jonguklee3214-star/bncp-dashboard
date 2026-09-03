@@ -76,8 +76,18 @@ export interface EditRequest {
   mileageKm: number | null;
   remarks: string;
   reason: string;
-  status: "pending" | "approved" | "rejected";
+  // done = 승인 후 실제로 수정까지 끝난 상태 (승인 1건당 수정 1회)
+  status: "pending" | "approved" | "rejected" | "done";
   createdAt: string;
+}
+
+/** 주유 이력에 표시할 수정 흔적 (Audit_Log 에서 읽어온다). */
+export interface EditHistoryEntry {
+  at: string;
+  user: string;
+  action: string;
+  reason: string;
+  result: string;
 }
 
 export interface AppSettings {

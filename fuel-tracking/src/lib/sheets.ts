@@ -173,14 +173,44 @@ export async function writeHeader(tab: string, header: readonly string[]): Promi
 }
 
 /** 탭이 없으면 만든다. */
-export async function ensureTab(tab: string): Promise<void> {
+export async function ensureTab(tab: string, header?: readonly string[]): Promise<void> {
   const sheets = getSheetsClient();
   const meta = await sheets.spreadsheets.get({ spreadsheetId: getSheetId() });
-  const exists = meta.data.sheets?.some((s) => s.properties?.title === tab);
-  if (!exists) {
-    await sheets.spreadsheets.batchUpdate({
+  let sheet = meta.data.sheets?.find((s) => s.properties?.title === tab);
+  if (!sheet) {
+    const res = await sheets.spreadsheets.batchUpdate({
       spreadsheetId: getSheetId(),
       requestBody: { requests: [{ addSheet: { properties: { title: tab } } }] },
     });
+    sheet = res.data.replies?.[0]?.addSheet ?? undefined;
   }
+  if (!header) return;
+
+  // 헤더가 없으면 첫 append 가 헤더 자리에 들어가 그 행이 통째로 사라진다.
+  const rows = await readTab(tab);
+  const first = rows[0] ?? [];
+  if (first[0] === header[0]) return; // 정상
+
+  if (first.length === 0) {
+    await writeHeader(tab, header);
+    return;
+  }
+
+  // 이미 데이터가 1행에 들어가 있는 경우: 맨 위에 한 줄을 끼워 넣어 데이터를 살린다.
+  const sheetId = sheet?.properties?.sheetId;
+  if (sheetId == null) return;
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: getSheetId(),
+    requestBody: {
+      requests: [
+        {
+          insertDimension: {
+            range: { sheetId, dimension: "ROWS", startIndex: 0, endIndex: 1 },
+            inheritFromBefore: false,
+          },
+        },
+      ],
+    },
+  });
+  await writeHeader(tab, header);
 }

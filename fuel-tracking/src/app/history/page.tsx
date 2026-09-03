@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import type { FuelLog } from "@/types";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import type { EditHistoryEntry, FuelLog } from "@/types";
 import { useI18n } from "@/lib/i18n";
 import { useStore } from "@/lib/store";
 import { useAdmin } from "@/lib/useAdmin";
@@ -23,6 +23,33 @@ export default function HistoryPage() {
   const [pinOpen, setPinOpen] = useState(false);
   const [pinInput, setPinInput] = useState("");
   const [pinErr, setPinErr] = useState("");
+  // 관리자가 승인해서 지금 고칠 수 있는 기록들 (recordId → requestId)
+  const [open, setOpen] = useState<Record<string, { requestId: string; requestedBy: string; reason: string }>>({});
+  // 기록별 수정 흔적
+  const [edits, setEdits] = useState<Record<string, EditHistoryEntry[]>>({});
+  const [shown, setShown] = useState<string | null>(null);
+
+  const loadMeta = useCallback(async () => {
+    try {
+      const [o, e] = await Promise.all([
+        fetch("/api/requests/open").then((r) => r.json()),
+        fetch("/api/logs/edits").then((r) => r.json()),
+      ]);
+      setOpen(o.open ?? {});
+      setEdits(e.edits ?? {});
+    } catch {
+      /* 표시용 부가 정보라 실패해도 목록은 그대로 */
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadMeta();
+  }, [loadMeta]);
+
+  const afterChange = useCallback(async () => {
+    await refresh();
+    await loadMeta();
+  }, [refresh, loadMeta]);
 
   async function tryUnlock() {
     setPinErr("");
@@ -125,18 +152,25 @@ export default function HistoryPage() {
         </div>
       )}
 
-      {editing && pin && (
-        <LogEditor log={editing} pin={pin} onClose={() => setEditing(null)} onSaved={refresh} />
+      {editing && (isAdmin || open[editing.recordId]) && (
+        <LogEditor
+          log={editing}
+          pin={isAdmin ? (pin ?? undefined) : undefined}
+          requestId={isAdmin ? undefined : open[editing.recordId]?.requestId}
+          onClose={() => setEditing(null)}
+          onSaved={afterChange}
+        />
       )}
       {requesting && (
-        <RequestModal log={requesting} onClose={() => setRequesting(null)} onDone={() => {}} />
+        <RequestModal log={requesting} onClose={() => setRequesting(null)} onDone={loadMeta} />
       )}
       {requestsOpen && pin && (
         <RequestsPanel
           pin={pin}
           logs={logs}
           onClose={() => setRequestsOpen(false)}
-          onChanged={refresh}
+          onChanged={afterChange}
+          onEditNow={(l) => setEditing(l)}
         />
       )}
 
@@ -165,28 +199,52 @@ export default function HistoryPage() {
                 <th className="px-3 py-2 font-medium">{t("entry.part")}</th>
                 <th className="px-3 py-2 text-right font-medium">{t("entry.distance")}</th>
                 <th className="px-3 py-2 text-right font-medium">{t("entry.fuelVolume")}</th>
+                <th className="px-3 py-2 font-medium">{t("entry.remarks")}</th>
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-border">
               {filtered.map((l) => (
-                <tr key={l.recordId}>
-                  <td className="whitespace-nowrap px-3 py-2">{formatDateTime(l.fuelDatetime)}</td>
-                  <td className="px-3 py-2 font-medium">{l.mainVehicleNo || "—"}</td>
-                  <td className="px-3 py-2">{l.controlNo || l.vehicleType}</td>
-                  <td className="px-3 py-2">{l.driver || "—"}</td>
-                  <td className="px-3 py-2">{l.part || l.teamCode || "—"}</td>
-                  <td className="tabular px-3 py-2 text-right">{l.distanceKm != null ? formatKm(l.distanceKm) : "—"}</td>
-                  <td className="tabular px-3 py-2 text-right font-bold text-hanwha">{formatL(l.fuelVolumeL)}</td>
-                  <td className="no-print px-3 py-2 text-right">
-                    <button
-                      onClick={() => (isAdmin ? setEditing(l) : setRequesting(l))}
-                      className="rounded-md border border-neutral-border px-2 py-1 text-xs hover:border-hanwha"
-                    >
-                      {isAdmin ? t("vehicles.edit") : t("request.button")}
-                    </button>
-                  </td>
-                </tr>
+                <Fragment key={l.recordId}>
+                  <tr>
+                    <td className="whitespace-nowrap px-3 py-2">{formatDateTime(l.fuelDatetime)}</td>
+                    <td className="px-3 py-2 font-medium">{l.mainVehicleNo || "—"}</td>
+                    <td className="px-3 py-2">{l.controlNo || l.vehicleType}</td>
+                    <td className="px-3 py-2">{l.driver || "—"}</td>
+                    <td className="px-3 py-2">{l.part || l.teamCode || "—"}</td>
+                    <td className="tabular px-3 py-2 text-right">
+                      {l.distanceKm != null ? formatKm(l.distanceKm) : "—"}
+                    </td>
+                    <td className="tabular px-3 py-2 text-right font-bold text-hanwha">
+                      {formatL(l.fuelVolumeL)}
+                    </td>
+                    <td className="max-w-[220px] px-3 py-2 text-gray-700">
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate" title={l.remarks}>
+                          {l.remarks || "—"}
+                        </span>
+                        <EditedBadge log={l} edits={edits} shown={shown} setShown={setShown} t={t} />
+                      </div>
+                    </td>
+                    <td className="no-print px-3 py-2 text-right">
+                      <EditButton
+                        log={l}
+                        isAdmin={isAdmin}
+                        open={open}
+                        t={t}
+                        onEdit={() => setEditing(l)}
+                        onRequest={() => setRequesting(l)}
+                      />
+                    </td>
+                  </tr>
+                  {shown === l.recordId && (
+                    <tr className="bg-neutral-soft/60">
+                      <td colSpan={9} className="px-3 py-2">
+                        <EditHistoryList entries={edits[l.recordId] ?? []} t={t} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -202,12 +260,14 @@ export default function HistoryPage() {
                 <div className="font-bold">{l.mainVehicleNo || l.controlNo || l.vehicleType}</div>
                 <div className="text-xs text-gray-500">{l.controlNo || l.vehicleType}</div>
               </div>
-              <button
-                onClick={() => (isAdmin ? setEditing(l) : setRequesting(l))}
-                className="rounded-md border border-neutral-border px-2 py-1 text-xs hover:border-hanwha"
-              >
-                {isAdmin ? t("vehicles.edit") : t("request.button")}
-              </button>
+              <EditButton
+                log={l}
+                isAdmin={isAdmin}
+                open={open}
+                t={t}
+                onEdit={() => setEditing(l)}
+                onRequest={() => setRequesting(l)}
+              />
             </div>
             {l.driver && <div className="text-sm text-gray-700">{l.driver}</div>}
             <div className="mt-2 space-y-1 text-sm">
@@ -219,7 +279,16 @@ export default function HistoryPage() {
                 <Row label={t("entry.distance")} value={formatKm(l.distanceKm)} />
               )}
               <Row label={t("entry.fuelVolume")} value={formatL(l.fuelVolumeL)} highlight />
+              {l.remarks && <Row label={t("entry.remarks")} value={l.remarks} />}
             </div>
+            <div className="mt-2">
+              <EditedBadge log={l} edits={edits} shown={shown} setShown={setShown} t={t} />
+            </div>
+            {shown === l.recordId && (
+              <div className="mt-2 rounded-lg bg-neutral-soft p-2">
+                <EditHistoryList entries={edits[l.recordId] ?? []} t={t} />
+              </div>
+            )}
           </Card>
         ))}
       </div>
@@ -232,6 +301,97 @@ function Row({ label, value, highlight }: { label: string; value: string; highli
     <div className="flex justify-between">
       <span className="text-gray-500">{label}</span>
       <span className={`tabular ${highlight ? "font-bold text-hanwha" : ""}`}>{value}</span>
+    </div>
+  );
+}
+
+/** 관리자 / 승인받은 요청자 / 그 외 — 세 가지 상태의 버튼 하나. */
+function EditButton({
+  log,
+  isAdmin,
+  open,
+  t,
+  onEdit,
+  onRequest,
+}: {
+  log: FuelLog;
+  isAdmin: boolean;
+  open: Record<string, { requestId: string; requestedBy: string; reason: string }>;
+  t: (k: string) => string;
+  onEdit: () => void;
+  onRequest: () => void;
+}) {
+  if (isAdmin) {
+    return (
+      <button
+        onClick={onEdit}
+        className="rounded-md border border-neutral-border px-2 py-1 text-xs hover:border-hanwha"
+      >
+        {t("vehicles.edit")}
+      </button>
+    );
+  }
+  if (open[log.recordId]) {
+    return (
+      <button
+        onClick={onEdit}
+        className="rounded-md border border-success bg-success/10 px-2 py-1 text-xs font-bold text-success"
+      >
+        ✏ {t("request.editNow")}
+      </button>
+    );
+  }
+  return (
+    <button
+      onClick={onRequest}
+      className="rounded-md border border-neutral-border px-2 py-1 text-xs hover:border-hanwha"
+    >
+      {t("request.button")}
+    </button>
+  );
+}
+
+/** 수정된 기록에 붙는 '수정됨 n회' 표시. 누르면 이력을 펼친다. */
+function EditedBadge({
+  log,
+  edits,
+  shown,
+  setShown,
+  t,
+}: {
+  log: FuelLog;
+  edits: Record<string, EditHistoryEntry[]>;
+  shown: string | null;
+  setShown: (v: string | null) => void;
+  t: (k: string) => string;
+}) {
+  const n = edits[log.recordId]?.length ?? 0;
+  if (!n) return null;
+  return (
+    <button
+      onClick={() => setShown(shown === log.recordId ? null : log.recordId)}
+      className="no-print shrink-0 rounded bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning"
+    >
+      ✏ {t("history.edited")} {n}
+    </button>
+  );
+}
+
+function EditHistoryList({ entries, t }: { entries: EditHistoryEntry[]; t: (k: string) => string }) {
+  if (entries.length === 0) return null;
+  return (
+    <div className="space-y-1 text-xs text-gray-700">
+      <div className="font-bold">{t("history.editHistory")}</div>
+      {entries.map((e, i) => (
+        <div key={i} className="flex flex-wrap gap-x-2">
+          <span className="text-gray-500">{formatDateTime(e.at)}</span>
+          <span className="font-medium">{e.user}</span>
+          <span>
+            {e.action === "fuellog.void" ? `🗑 ${t("admin.void")}` : `→ ${e.result}`}
+          </span>
+          {e.reason && <span className="text-gray-500">📝 {e.reason}</span>}
+        </div>
+      ))}
     </div>
   );
 }

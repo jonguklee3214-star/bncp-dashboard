@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { EditRequest, FuelLog } from "@/types";
+import type { EditRequest } from "@/types";
 import {
   addEditRequest,
   appendAudit,
   getEditRequests,
   setEditRequestStatus,
-  updateFuelLog,
 } from "@/lib/repository";
 import { errorResponse, isAdminRequest } from "@/lib/api";
 
@@ -25,7 +24,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// 생성 (누구나 — 입력자가 수정 요청)
+// 생성 (누구나 — 입력자가 "고치게 해 주세요" 하고 사유만 적어 올린다)
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as {
@@ -83,21 +82,14 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "notfound", message: "요청을 찾을 수 없습니다." }, { status: 404 });
     }
 
-    if (action === "approve") {
-      const patch: Partial<FuelLog> = {};
-      if (target.fuelVolume != null) patch.fuelVolumeL = target.fuelVolume;
-      if (target.mileageKm != null) patch.mileageKm = target.mileageKm;
-      if (target.remarks) patch.remarks = target.remarks;
-      await updateFuelLog(target.recordId, patch);
-    }
-
+    // 승인 = 그 기록의 수정 잠금을 푼다. 실제 값은 요청자(또는 관리자)가 직접 고친다.
     await setEditRequestStatus(requestId, action === "approve" ? "approved" : "rejected");
     await appendAudit({
       user: "admin",
       action: `request.${action}`,
       target: `${target.recordId} · ${requestId}`,
       oldValue: target.reason,
-      newValue: `${target.fuelVolume ?? ""}L ${target.mileageKm ?? ""}`,
+      newValue: action === "approve" ? "수정 허용" : "반려",
     });
     return NextResponse.json({ ok: true });
   } catch (e) {

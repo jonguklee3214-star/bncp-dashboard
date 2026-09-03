@@ -5,19 +5,26 @@ import type { FuelLog } from "@/types";
 import { useI18n } from "@/lib/i18n";
 import { formatDateTime } from "@/lib/format";
 
-// 관리자 기록 수정 모달. pin 을 헤더로 전송.
+/**
+ * 기록 수정 모달.
+ *  - 관리자: pin 을 헤더로 보낸다. 사유 필수, 삭제(무효)도 가능.
+ *  - 요청자: 관리자가 승인한 requestId 로 보낸다. 사유는 신청할 때 적은 것을 쓴다.
+ */
 export function LogEditor({
   log,
   pin,
+  requestId,
   onClose,
   onSaved,
 }: {
   log: FuelLog;
-  pin: string;
+  pin?: string;
+  requestId?: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const { t } = useI18n();
+  const isAdmin = Boolean(pin);
   const [fuelVolume, setFuelVolume] = useState(String(log.fuelVolumeL));
   const [mileage, setMileage] = useState(log.mileageKm != null ? String(log.mileageKm) : "");
   const [remarks, setRemarks] = useState(log.remarks);
@@ -36,13 +43,17 @@ export function LogEditor({
     try {
       const res = await fetch("/api/logs", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-admin-pin": pin },
+        headers: {
+          "Content-Type": "application/json",
+          ...(pin ? { "x-admin-pin": pin } : {}),
+        },
         body: JSON.stringify({
           recordId: log.recordId,
           fuelVolume: Number(fuelVolume),
           mileageKm: hasMileage && mileage !== "" ? Number(mileage) : undefined,
           remarks,
           reason,
+          requestId,
         }),
       });
       const data = await res.json();
@@ -64,7 +75,7 @@ export function LogEditor({
     try {
       const res = await fetch("/api/logs", {
         method: "DELETE",
-        headers: { "Content-Type": "application/json", "x-admin-pin": pin },
+        headers: { "Content-Type": "application/json", "x-admin-pin": pin ?? "" },
         body: JSON.stringify({ recordId: log.recordId, reason }),
       });
       const data = await res.json();
@@ -82,7 +93,7 @@ export function LogEditor({
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">
       <div className="w-full max-w-md rounded-t-2xl bg-white p-5 sm:rounded-card">
         <div className="mb-1 flex items-center justify-between">
-          <h2 className="font-bold">{t("admin.editRecord")}</h2>
+          <h2 className="font-bold">{isAdmin ? t("admin.editRecord") : t("request.editNow")}</h2>
           <button onClick={onClose} className="text-gray-400">✕</button>
         </div>
         <div className="mb-4 text-xs text-gray-500">
@@ -119,33 +130,41 @@ export function LogEditor({
             <input value={remarks} onChange={(e) => setRemarks(e.target.value)} className={input} />
           </label>
 
-          <label className="block">
-            <span className="text-xs font-medium text-gray-600">{t("entry.reason")} *</span>
-            <input
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder={t("request.reason")}
-              className={input}
-            />
-          </label>
+          {isAdmin ? (
+            <label className="block">
+              <span className="text-xs font-medium text-gray-600">{t("entry.reason")} *</span>
+              <input
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder={t("request.reason")}
+                className={input}
+              />
+            </label>
+          ) : (
+            <p className="rounded-lg bg-success/10 p-2.5 text-xs text-gray-700">
+              ✅ {t("request.approvedHint")}
+            </p>
+          )}
 
           {err && <p className="text-sm text-danger">{err}</p>}
 
           <button
             onClick={save}
-            disabled={saving || !fuelVolume || !reason.trim()}
+            disabled={saving || !fuelVolume || (isAdmin && !reason.trim())}
             className="w-full rounded-lg bg-hanwha py-3 font-bold text-white disabled:opacity-50"
           >
             {saving ? t("common.saving") : t("common.save")}
           </button>
 
-          <button
-            onClick={voidRecord}
-            disabled={voiding}
-            className="w-full rounded-lg border border-danger/40 py-2.5 text-sm font-medium text-danger hover:bg-danger/5 disabled:opacity-50"
-          >
-            🗑 {t("admin.void")}
-          </button>
+          {isAdmin && (
+            <button
+              onClick={voidRecord}
+              disabled={voiding}
+              className="w-full rounded-lg border border-danger/40 py-2.5 text-sm font-medium text-danger hover:bg-danger/5 disabled:opacity-50"
+            >
+              🗑 {t("admin.void")}
+            </button>
+          )}
         </div>
       </div>
     </div>
