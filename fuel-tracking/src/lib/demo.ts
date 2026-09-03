@@ -1,0 +1,83 @@
+import type { EditRequest, FuelLog, Vehicle } from "@/types";
+import { SEED_VEHICLES } from "@/data/seed";
+
+// ─────────────────────────────────────────────────────────────
+//  데모 폴백 (Google Sheets 미설정 시).
+//  ⚠ 미리보기/테스트 전용 — 서버 재시작 시 초기화된다. 실제 운영은 Google Sheets 사용.
+// ─────────────────────────────────────────────────────────────
+
+export function isConfigured(): boolean {
+  return Boolean(
+    process.env.GOOGLE_SHEET_ID &&
+      process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL &&
+      process.env.GOOGLE_PRIVATE_KEY,
+  );
+}
+
+// 모듈 스코프 in-memory 저장 (dev/preview 한정)
+const demoLogs: FuelLog[] = [];
+const demoVehicleList: Vehicle[] = SEED_VEHICLES.map((v) => ({ ...v }));
+
+export function demoVehicles(): Vehicle[] {
+  return demoVehicleList;
+}
+
+export function demoUpsertVehicle(v: Vehicle): void {
+  const i = demoVehicleList.findIndex((x) => x.vehicleId === v.vehicleId);
+  if (i >= 0) demoVehicleList[i] = v;
+  else demoVehicleList.push(v);
+}
+
+export function demoGetLogs(): FuelLog[] {
+  return demoLogs;
+}
+
+export function demoAppendLog(log: FuelLog): void {
+  demoLogs.push(log);
+}
+
+export function demoUpdateLog(recordId: string, patch: Partial<FuelLog>): boolean {
+  const i = demoLogs.findIndex((l) => l.recordId === recordId);
+  if (i < 0) return false;
+  demoLogs[i] = { ...demoLogs[i], ...patch, updatedAt: new Date().toISOString() };
+  return true;
+}
+
+const demoAudit: (string | number)[][] = [];
+export function demoAppendAudit(row: (string | number)[]): void {
+  demoAudit.push(row);
+}
+export function demoGetAudit(): (string | number)[][] {
+  return demoAudit;
+}
+
+const demoVoided = new Set<string>();
+export function demoVoid(recordId: string): void {
+  demoVoided.add(recordId);
+}
+export function demoGetVoided(): Set<string> {
+  return demoVoided;
+}
+
+const demoExempt = new Map<string, string>(); // controlNo → reason
+export function demoAddExempt(controlNo: string, reason: string): void {
+  demoExempt.set(controlNo, reason);
+}
+export function demoRemoveExempt(controlNo: string): void {
+  demoExempt.delete(controlNo);
+}
+export function demoGetExempt(): Map<string, string> {
+  return demoExempt;
+}
+
+const demoRequests: EditRequest[] = [];
+export function demoAddRequest(r: EditRequest): void {
+  demoRequests.push(r);
+}
+export function demoGetRequests(): EditRequest[] {
+  return demoRequests;
+}
+export function demoUpdateRequest(requestId: string, status: EditRequest["status"]): void {
+  const r = demoRequests.find((x) => x.requestId === requestId);
+  if (r) r.status = status;
+}

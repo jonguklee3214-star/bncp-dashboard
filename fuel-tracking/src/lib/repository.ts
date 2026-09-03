@@ -1,0 +1,542 @@
+import type { EditHistoryEntry, EditRequest, FuelLog, Part, Vehicle } from "@/types";
+import { SEED_VEHICLES, dieselTracksMileage } from "@/data/seed";
+import {
+  demoAddExempt,
+  demoAddRequest,
+  demoAppendAudit,
+  demoGetAudit,
+  demoAppendLog,
+  demoGetExempt,
+  demoGetLogs,
+  demoGetRequests,
+  demoGetVoided,
+  demoRemoveExempt,
+  demoUpdateLog,
+  demoUpdateRequest,
+  demoUpsertVehicle,
+  demoVehicles,
+  demoVoid,
+  isConfigured,
+} from "./demo";
+import {
+  HEADERS,
+  SHEET_TABS,
+  appendRow,
+  ensureTab,
+  readTab,
+  writeHeader,
+  writeRow,
+  writeRows,
+} from "./sheets";
+
+// ─────────────────────────────────────────────────────────────
+//  Vehicle_Master / Fuel_Log 를 도메인 객체로 읽고 쓰는 계층.
+// ─────────────────────────────────────────────────────────────
+
+function num(v: string | undefined): number | null {
+  if (v === undefined || v === "" || v.toUpperCase() === "N/A") return null;
+  const n = Number(String(v).replace(/,/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * 1행이 헤더가 아니면(헤더 없이 데이터부터 들어간 탭) 표준 헤더를 쓰고 1행부터 데이터로 본다.
+ * 그렇지 않으면 그 행이 통째로 사라진다.
+ */
+function splitTable(rows: string[][], header: readonly string[]): { head: string[]; data: string[][] } {
+  const first = rows[0] ?? [];
+  return first[0] === header[0]
+    ? { head: first, data: rows.slice(1) }
+    : { head: [...header], data: rows };
+}
+
+function rowsToObjects(rows: string[][], header: readonly string[]): Record<string, string>[] {
+  if (rows.length === 0) return [];
+  const { head, data } = splitTable(rows, header);
+  const idx = header.map((h) => head.indexOf(h));
+  return data.map((r) => {
+    const o: Record<string, string> = {};
+    header.forEach((h, i) => {
+      const col = idx[i];
+      o[h] = col >= 0 ? (r[col] ?? "") : "";
+    });
+    return o;
+  });
+}
+
+// ── Vehicle ──
+function toVehicle(o: Record<string, string>): Vehicle {
+  const fuelType = o.fuel_type === "gasoline" ? "gasoline" : "diesel";
+  const equipmentName = o.equipment_name ?? "";
+  // 주행거리 여부: 저장값이 있으면 그것을, 없으면 유종·장비명으로 유도.
+  let tracksMileage: boolean;
+  if (o.tracks_mileage === "true") tracksMileage = true;
+  else if (o.tracks_mileage === "false") tracksMileage = false;
+  else tracksMileage = fuelType === "gasoline" ? true : dieselTracksMileage(equipmentName);
+  return {
+    vehicleId: o.vehicle_id,
+    fuelType,
+    mainVehicleNo: o.main_vehicle_no ?? "",
+    controlNo: o.control_no ?? "",
+    equipmentName,
+    vehicleType: o.vehicle_type ?? "",
+    capacity: o.capacity ?? "",
+    teamCode: o.team_code ?? "",
+    hourKm: o.hour_km ?? "",
+    company: o.company ?? "Construction",
+    team: o.team ?? "",
+    part: (o.part ?? "") as Part,
+    driverIds: (o.driver_ids ?? "")
+      .split("/")
+      .map((d) => d.trim())
+      .filter(Boolean),
+    tracksMileage,
+    status: o.status === "inactive" ? "inactive" : "active",
+    createdAt: o.created_at ?? "",
+    updatedAt: o.updated_at ?? "",
+  };
+}
+
+function vehicleToRow(v: Vehicle): string[] {
+  return [
+    v.vehicleId,
+    v.fuelType,
+    v.mainVehicleNo,
+    v.controlNo,
+    v.equipmentName,
+    v.vehicleType,
+    v.capacity,
+    v.teamCode,
+    v.hourKm,
+    v.company,
+    v.team,
+    v.part,
+    v.driverIds.join(" / "),
+    v.status,
+    v.createdAt,
+    v.updatedAt,
+  ];
+}
+
+/**
+ * 주행거리 입력 면제 차량 (미터기 고장 등, 관리자 1회 승인).
+ * CONTROL N° → 사유.
+ */
+export async function getMileageExempt(): Promise<Map<string, string>> {
+  if (!isConfigured()) return demoGetExempt();
+  try {
+    const { head, data } = splitTable(await readTab(SHEET_TABS.exempt), HEADERS.exempt);
+    const cCol = head.indexOf("control_no");
+    const rCol = head.indexOf("reason");
+    const map = new Map<string, string>();
+    for (const r of data) {
+      const c = r?.[cCol];
+      if (c) map.set(c, r?.[rCol] ?? "");
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+/** 면제 승인 (관리자). */
+export async function addMileageExempt(controlNo: string, reason: string): Promise<void> {
+  if (!isConfigured()) {
+    demoAddExempt(controlNo, reason);
+    return;
+  }
+  await ensureTab(SHEET_TABS.exempt, HEADERS.exempt);
+  const existing = await getMileageExempt();
+  if (existing.has(controlNo)) return; // 중복 승인 방지
+  await appendRow(SHEET_TABS.exempt, [controlNo, reason, "admin", new Date().toISOString()]);
+}
+
+/** 면제 해제 (미터기 수리 등). 해당 행을 비운다. */
+export async function removeMileageExempt(controlNo: string): Promise<void> {
+  if (!isConfigured()) {
+    demoRemoveExempt(controlNo);
+    return;
+  }
+  const { head, data } = splitTable(await readTab(SHEET_TABS.exempt), HEADERS.exempt);
+  const cCol = head.indexOf("control_no");
+  const kept = data.filter((r) => r?.[cCol] && r[cCol] !== controlNo);
+  await writeHeader(SHEET_TABS.exempt, HEADERS.exempt);
+  // 전체 재작성 (행 수가 적어 단순 재기록)
+  await writeRows(
+    SHEET_TABS.exempt,
+    2,
+    kept.length ? kept : [["", "", "", ""]],
+  );
+}
+
+export async function getVehicles(): Promise<Vehicle[]> {
+  const exempt = await getMileageExempt();
+  const list = isConfigured()
+    ? rowsToObjects(await readTab(SHEET_TABS.vehicles), HEADERS.vehicles)
+        .filter((o) => o.vehicle_id)
+        .map(toVehicle)
+    : demoVehicles();
+  // 면제 승인된 차량은 주행거리 입력 대상에서 제외
+  return list.map((v) =>
+    v.controlNo && exempt.has(v.controlNo)
+      ? { ...v, tracksMileage: false, mileageExemptReason: exempt.get(v.controlNo) || "" }
+      : v,
+  );
+}
+
+// 관리자 변경 추적 (항목 79)
+export async function appendAudit(entry: {
+  user: string;
+  action: string;
+  target: string;
+  oldValue: string;
+  newValue: string;
+}): Promise<void> {
+  const row = [
+    new Date().toISOString(),
+    entry.user,
+    entry.action,
+    entry.target,
+    entry.oldValue,
+    entry.newValue,
+  ];
+  if (!isConfigured()) {
+    demoAppendAudit(row);
+    return;
+  }
+  try {
+    await ensureTab(SHEET_TABS.audit, HEADERS.audit);
+    await appendRow(SHEET_TABS.audit, row);
+  } catch {
+    /* audit 실패가 본 작업을 막지 않도록 무시 */
+  }
+}
+
+/**
+ * 차량 추가/수정 (항목 62·63·64). vehicle_id 로 찾아 있으면 덮고 없으면 추가.
+ * Fuel Log 가 있는 차량은 삭제 대신 status=inactive 로 처리한다 (데이터 무결성).
+ */
+export async function upsertVehicle(v: Vehicle): Promise<void> {
+  if (!isConfigured()) {
+    demoUpsertVehicle(v);
+    return;
+  }
+  const rows = await readTab(SHEET_TABS.vehicles);
+  const header = rows[0] ?? HEADERS.vehicles;
+  const idCol = header.indexOf("vehicle_id");
+  let rowNumber = -1;
+  for (let i = 1; i < rows.length; i += 1) {
+    if (rows[i]?.[idCol] === v.vehicleId) {
+      rowNumber = i + 1; // 1-based
+      break;
+    }
+  }
+  if (rowNumber > 0) {
+    await writeRow(SHEET_TABS.vehicles, rowNumber, vehicleToRow(v));
+  } else {
+    await appendRow(SHEET_TABS.vehicles, vehicleToRow(v));
+  }
+}
+
+// ── FuelLog ──
+function toFuelLog(o: Record<string, string>): FuelLog {
+  return {
+    recordId: o.record_id,
+    fuelDatetime: o.fuel_datetime ?? "",
+    fuelType: o.fuel_type === "gasoline" ? "gasoline" : "diesel",
+    mainVehicleNo: o.main_vehicle_no ?? "",
+    controlNo: o.control_no ?? "",
+    driver: o.driver ?? "",
+    company: o.company ?? "",
+    team: o.team ?? "",
+    part: (o.part ?? "") as Part,
+    vehicleType: o.vehicle_type ?? "",
+    capacity: o.capacity ?? "",
+    teamCode: o.team_code ?? "",
+    mileageKm: num(o.mileage_km),
+    previousMileageKm: num(o.previous_mileage_km),
+    distanceKm: num(o.distance_km),
+    fuelVolumeL: num(o.fuel_volume_l) ?? 0,
+    remarks: o.remarks ?? "",
+    createdAt: o.created_at ?? "",
+    updatedAt: o.updated_at ?? "",
+  };
+}
+
+function fuelLogToRow(l: FuelLog): (string | number)[] {
+  return [
+    l.recordId,
+    l.fuelDatetime,
+    l.fuelType,
+    l.mainVehicleNo,
+    l.controlNo,
+    l.driver,
+    l.company,
+    l.team,
+    l.part,
+    l.vehicleType,
+    l.capacity,
+    l.teamCode,
+    l.mileageKm ?? "",
+    l.previousMileageKm ?? "",
+    l.distanceKm ?? "",
+    l.fuelVolumeL,
+    l.remarks,
+    l.createdAt,
+    l.updatedAt,
+  ];
+}
+
+/** 무효 처리된 record_id 집합. */
+async function getVoidedIds(): Promise<Set<string>> {
+  if (!isConfigured()) return demoGetVoided();
+  try {
+    const { head, data } = splitTable(await readTab(SHEET_TABS.voided), HEADERS.voided);
+    const idCol = head.indexOf("record_id");
+    const set = new Set<string>();
+    for (const r of data) {
+      const id = r?.[idCol];
+      if (id) set.add(id);
+    }
+    return set;
+  } catch {
+    return new Set();
+  }
+}
+
+/** 유효한 주유 기록 (무효 제외). */
+export async function getFuelLogs(): Promise<FuelLog[]> {
+  const voided = await getVoidedIds();
+  const all = isConfigured()
+    ? rowsToObjects(await readTab(SHEET_TABS.logs), HEADERS.logs)
+        .filter((o) => o.record_id)
+        .map(toFuelLog)
+    : demoGetLogs();
+  return all.filter((l) => !voided.has(l.recordId));
+}
+
+/** 기록 무효 처리 (삭제 대신, 데이터 보존 — 항목 90). 관리자. */
+export async function voidRecord(recordId: string, reason: string): Promise<void> {
+  if (!isConfigured()) {
+    demoVoid(recordId);
+    return;
+  }
+  await ensureTab(SHEET_TABS.voided, HEADERS.voided);
+  await appendRow(SHEET_TABS.voided, [recordId, reason, "admin", new Date().toISOString()]);
+}
+
+export async function appendFuelLog(log: FuelLog): Promise<void> {
+  if (!isConfigured()) {
+    demoAppendLog(log);
+    return;
+  }
+  await appendRow(SHEET_TABS.logs, fuelLogToRow(log));
+}
+
+/** 기존 주유 기록 수정 (관리자). record_id 로 행을 찾아 지정 필드만 갱신. */
+export async function updateFuelLog(
+  recordId: string,
+  patch: Partial<Pick<FuelLog, "fuelDatetime" | "mileageKm" | "distanceKm" | "fuelVolumeL" | "remarks">>,
+): Promise<FuelLog | null> {
+  if (!isConfigured()) {
+    const logs = demoGetLogs();
+    const cur = logs.find((l) => l.recordId === recordId);
+    if (!cur) return null;
+    const next = applyLogPatch(cur, patch);
+    demoUpdateLog(recordId, next);
+    return { ...cur, ...next };
+  }
+  const rows = await readTab(SHEET_TABS.logs);
+  const header = rows[0] ?? HEADERS.logs;
+  const idCol = header.indexOf("record_id");
+  let rowNumber = -1;
+  let curObj: Record<string, string> | null = null;
+  for (let i = 1; i < rows.length; i += 1) {
+    if (rows[i]?.[idCol] === recordId) {
+      rowNumber = i + 1;
+      const o: Record<string, string> = {};
+      header.forEach((h, j) => (o[h] = rows[i][j] ?? ""));
+      curObj = o;
+      break;
+    }
+  }
+  if (rowNumber < 0 || !curObj) return null;
+  const cur = toFuelLog(curObj);
+  const next = { ...cur, ...applyLogPatch(cur, patch) };
+  await writeRow(SHEET_TABS.logs, rowNumber, fuelLogToRow(next));
+  return next;
+}
+
+// 수정 시 거리 재계산: mileage 가 바뀌고 previous 가 있으면 distance = mileage - previous.
+function applyLogPatch(
+  cur: FuelLog,
+  patch: Partial<Pick<FuelLog, "fuelDatetime" | "mileageKm" | "distanceKm" | "fuelVolumeL" | "remarks">>,
+): Partial<FuelLog> {
+  const merged: Partial<FuelLog> = { ...patch, updatedAt: new Date().toISOString() };
+  if (patch.mileageKm !== undefined) {
+    const prev = cur.previousMileageKm;
+    merged.distanceKm = patch.mileageKm != null && prev != null ? patch.mileageKm - prev : cur.distanceKm;
+  }
+  return merged;
+}
+
+// ── 수정 요청 (입력자 → 관리자 승인) ──
+function toRequest(o: Record<string, string>): EditRequest {
+  const n = (v: string) => (v === "" ? null : Number(v));
+  return {
+    requestId: o.request_id,
+    recordId: o.record_id,
+    requestedBy: o.requested_by ?? "",
+    fuelVolume: n(o.fuel_volume ?? ""),
+    mileageKm: n(o.mileage_km ?? ""),
+    remarks: o.remarks ?? "",
+    reason: o.reason ?? "",
+    status:
+      o.status === "approved" ? "approved" : o.status === "rejected" ? "rejected" : "pending",
+    createdAt: o.created_at ?? "",
+  };
+}
+function requestToRow(r: EditRequest): (string | number)[] {
+  return [
+    r.requestId,
+    r.recordId,
+    r.requestedBy,
+    r.fuelVolume ?? "",
+    r.mileageKm ?? "",
+    r.remarks,
+    r.reason,
+    r.status,
+    r.createdAt,
+  ];
+}
+
+export async function addEditRequest(r: EditRequest): Promise<void> {
+  if (!isConfigured()) {
+    demoAddRequest(r);
+    return;
+  }
+  await ensureTab(SHEET_TABS.requests, HEADERS.requests);
+  await appendRow(SHEET_TABS.requests, requestToRow(r));
+}
+
+export async function getEditRequests(status?: EditRequest["status"]): Promise<EditRequest[]> {
+  let all: EditRequest[];
+  if (!isConfigured()) {
+    all = [...demoGetRequests()];
+  } else {
+    try {
+      all = rowsToObjects(await readTab(SHEET_TABS.requests), HEADERS.requests)
+        .filter((o) => o.request_id)
+        .map(toRequest);
+    } catch {
+      all = [];
+    }
+  }
+  const list = status ? all.filter((r) => r.status === status) : all;
+  return list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function setEditRequestStatus(
+  requestId: string,
+  status: EditRequest["status"],
+): Promise<EditRequest | null> {
+  const all = await getEditRequests();
+  const req = all.find((r) => r.requestId === requestId);
+  if (!req) return null;
+  if (!isConfigured()) {
+    demoUpdateRequest(requestId, status);
+    return { ...req, status };
+  }
+  await ensureTab(SHEET_TABS.requests, HEADERS.requests); // 헤더가 없으면 채워 행 번호를 맞춘다
+  const rows = await readTab(SHEET_TABS.requests);
+  const { head, data } = splitTable(rows, HEADERS.requests);
+  const idCol = head.indexOf("request_id");
+  const offset = rows.length - data.length; // 헤더가 있으면 1, 없으면 0
+  for (let i = 0; i < data.length; i += 1) {
+    if (data[i]?.[idCol] === requestId) {
+      await writeRow(SHEET_TABS.requests, i + offset + 1, requestToRow({ ...req, status }));
+      break;
+    }
+  }
+  return { ...req, status };
+}
+
+/**
+ * 주유 기록별 수정 이력 (항목: 수정 흔적을 주유 이력에 남긴다).
+ * Audit_Log 를 읽어 record_id 별로 묶는다. 별도 시트를 만들지 않는다.
+ */
+export async function getEditHistory(): Promise<Record<string, EditHistoryEntry[]>> {
+  let rows: (string | number)[][];
+  if (!isConfigured()) {
+    rows = demoGetAudit();
+  } else {
+    try {
+      rows = splitTable(await readTab(SHEET_TABS.audit), HEADERS.audit).data;
+    } catch {
+      return {};
+    }
+  }
+
+  const out: Record<string, EditHistoryEntry[]> = {};
+  for (const r of rows) {
+    const [at, user, action, target, oldValue, newValue] = r.map((c) => String(c ?? ""));
+    if (action !== "fuellog.update" && action !== "fuellog.void") continue;
+    // target 형식: "<차량> · <recordId>" 또는 recordId 단독
+    const recordId = target.includes(" · ") ? target.split(" · ").pop()!.trim() : target.trim();
+    if (!recordId) continue;
+    (out[recordId] ??= []).push({
+      at,
+      user,
+      action,
+      reason: oldValue,
+      result: newValue,
+    });
+  }
+  for (const k of Object.keys(out)) out[k].sort((a, b) => a.at.localeCompare(b.at));
+  return out;
+}
+
+/** 동일 차량/장비(CONTROL N° 기준)의 가장 최근 mileage → previous mileage 자동조회 (항목 32). */
+export async function getLatestMileage(controlNo: string): Promise<number | null> {
+  if (!controlNo) return null;
+  const logs = await getFuelLogs();
+  const mine = logs
+    .filter((l) => l.controlNo === controlNo && l.mileageKm != null)
+    .sort((a, b) => b.fuelDatetime.localeCompare(a.fuelDatetime));
+  return mine.length ? mine[0].mileageKm : null;
+}
+
+/** 중복 저장 방지: 같은 recordId 가 이미 있으면 true (항목 55). */
+export async function recordExists(recordId: string): Promise<boolean> {
+  const logs = await getFuelLogs();
+  return logs.some((l) => l.recordId === recordId);
+}
+
+// ── 초기화: 헤더 + seed 데이터 심기 ──
+export async function initSheet(): Promise<{ vehicles: number; demo?: boolean }> {
+  if (!isConfigured()) return { vehicles: SEED_VEHICLES.length, demo: true };
+  await ensureTab(SHEET_TABS.vehicles, HEADERS.vehicles);
+  await ensureTab(SHEET_TABS.logs, HEADERS.logs);
+  await ensureTab(SHEET_TABS.settings, HEADERS.settings);
+  await ensureTab(SHEET_TABS.audit, HEADERS.audit);
+  await ensureTab(SHEET_TABS.voided, HEADERS.voided);
+  await ensureTab(SHEET_TABS.requests, HEADERS.requests);
+  await ensureTab(SHEET_TABS.exempt, HEADERS.exempt);
+
+  await writeHeader(SHEET_TABS.vehicles, HEADERS.vehicles);
+  await writeHeader(SHEET_TABS.logs, HEADERS.logs);
+  await writeHeader(SHEET_TABS.settings, HEADERS.settings);
+  await writeHeader(SHEET_TABS.audit, HEADERS.audit);
+  await writeHeader(SHEET_TABS.voided, HEADERS.voided);
+  await writeHeader(SHEET_TABS.requests, HEADERS.requests);
+  await writeHeader(SHEET_TABS.exempt, HEADERS.exempt);
+
+  // 이미 차량이 있으면 seed 를 덮지 않는다 (과거 데이터 보존, 항목 90).
+  const existing = await getVehicles();
+  if (existing.length === 0) {
+    // 58행을 한 번의 요청으로 기록 (쓰기 할당량·속도)
+    await writeRows(SHEET_TABS.vehicles, 2, SEED_VEHICLES.map(vehicleToRow));
+    return { vehicles: SEED_VEHICLES.length };
+  }
+  return { vehicles: existing.length };
+}
