@@ -32,7 +32,9 @@
     "csv": "CSV",
     "pdf": "PDF",
     "close": "বন্ধ",
-    "select": "নির্বাচন"
+    "select": "নির্বাচন",
+    "unit": "একক",
+    "noData": "কোনো ডেটা নেই"
   },
   "fuelType": {
     "label": "জ্বালানির ধরন",

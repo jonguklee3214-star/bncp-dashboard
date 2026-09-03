@@ -70,6 +70,7 @@ const MANUAL: Record<Lang, Manual> = {
         n: "4",
         title: "주유 이력 · 검색 · 내보내기",
         bullets: [
+          "앱을 열면 바로 주유 입력 화면입니다. 대시보드·이력은 왼쪽(휴대폰은 아래) 메뉴에서 엽니다.",
           "이력: 최신 기록부터. PC는 표, 휴대폰은 카드.",
           "검색: 차량번호·관리번호·운전자·파트·차종 일부만 입력해도 찾습니다.",
           "CSV: 현재 목록을 엑셀 파일로 내려받기.",
@@ -153,6 +154,7 @@ const MANUAL: Record<Lang, Manual> = {
         n: "4",
         title: "History · Search · Export",
         bullets: [
+          "The app opens on the Fuel Entry screen. Dashboard and History are in the left menu (bottom bar on mobile).",
           "History: newest first. Table on PC, cards on mobile.",
           "Search: find by part of vehicle no., control no., driver, part or type.",
           "CSV: download the current list as a spreadsheet.",
@@ -236,6 +238,7 @@ const MANUAL: Record<Lang, Manual> = {
         n: "4",
         title: "ইতিহাস · অনুসন্ধান · এক্সপোর্ট",
         bullets: [
+          "অ্যাপ খুললেই জ্বালানি এন্ট্রি স্ক্রিন আসে। ড্যাশবোর্ড ও ইতিহাস বাঁ পাশের (মোবাইলে নিচের) মেনুতে।",
           "ইতিহাস: নতুন আগে। পিসিতে টেবিল, মোবাইলে কার্ড।",
           "অনুসন্ধান: যানবাহন·কন্ট্রোল নং·চালক·পার্ট·ধরন দিয়ে।",
           "CSV: বর্তমান তালিকা স্প্রেডশিট হিসেবে ডাউনলোড।",

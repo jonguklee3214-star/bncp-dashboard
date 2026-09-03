@@ -158,6 +158,35 @@ export interface Bucket {
   volume: number;
   count: number;
   distance: number;
+  // 그래프에서 유종별로 나눠 쌓아 보여주기 위한 분해값
+  volumeDiesel: number;
+  volumeGasoline: number;
+  countDiesel: number;
+  countGasoline: number;
+}
+
+const emptyBucket = (key: string): Bucket => ({
+  key,
+  volume: 0,
+  count: 0,
+  distance: 0,
+  volumeDiesel: 0,
+  volumeGasoline: 0,
+  countDiesel: 0,
+  countGasoline: 0,
+});
+
+function addLog(b: Bucket, l: FuelLog): void {
+  b.volume += l.fuelVolumeL;
+  b.count += 1;
+  b.distance += l.distanceKm ?? 0;
+  if (l.fuelType === "gasoline") {
+    b.volumeGasoline += l.fuelVolumeL;
+    b.countGasoline += 1;
+  } else {
+    b.volumeDiesel += l.fuelVolumeL;
+    b.countDiesel += 1;
+  }
 }
 
 function groupBy(logs: FuelLog[], keyFn: (l: FuelLog) => string): Bucket[] {
@@ -165,16 +194,16 @@ function groupBy(logs: FuelLog[], keyFn: (l: FuelLog) => string): Bucket[] {
   for (const l of logs) {
     const key = keyFn(l);
     if (!key) continue;
-    const b = map.get(key) ?? { key, volume: 0, count: 0, distance: 0 };
-    b.volume += l.fuelVolumeL;
-    b.count += 1;
-    b.distance += l.distanceKm ?? 0;
+    const b = map.get(key) ?? emptyBucket(key);
+    addLog(b, l);
     map.set(key, b);
   }
   return [...map.values()].map((b) => ({
     ...b,
     volume: round(b.volume),
     distance: round(b.distance),
+    volumeDiesel: round(b.volumeDiesel),
+    volumeGasoline: round(b.volumeGasoline),
   }));
 }
 
@@ -195,10 +224,8 @@ export const byDriverName = (logs: FuelLog[]) => {
     const drivers = l.driver ? l.driver.split("/").map((s) => s.trim()) : [];
     for (const dv of drivers) {
       if (!dv) continue;
-      const b = map.get(dv) ?? { key: dv, volume: 0, count: 0, distance: 0 };
-      b.volume += l.fuelVolumeL;
-      b.count += 1;
-      b.distance += l.distanceKm ?? 0;
+      const b = map.get(dv) ?? emptyBucket(dv);
+      addLog(b, l);
       map.set(dv, b);
     }
   }

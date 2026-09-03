@@ -32,7 +32,9 @@
     "csv": "CSV",
     "pdf": "PDF",
     "close": "Close",
-    "select": "Select"
+    "select": "Select",
+    "unit": "Unit",
+    "noData": "No data"
   },
   "fuelType": {
     "label": "Fuel Type",

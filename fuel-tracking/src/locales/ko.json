@@ -32,7 +32,9 @@
     "csv": "CSV",
     "pdf": "PDF",
     "close": "닫기",
-    "select": "선택"
+    "select": "선택",
+    "unit": "단위",
+    "noData": "데이터 없음"
   },
   "fuelType": {
     "label": "유종",

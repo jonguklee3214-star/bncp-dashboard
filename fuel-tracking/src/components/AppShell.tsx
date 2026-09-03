@@ -15,9 +15,10 @@ interface NavItem {
   icon: string;
 }
 
+// 처음 들어오면 바로 주유 입력 화면이 뜬다 (가장 자주 쓰는 기능)
 const NAV: NavItem[] = [
-  { href: "/", key: "nav.dashboard", mobileKey: "nav.dashboard", icon: "▤" },
-  { href: "/entry", key: "nav.fuelEntry", mobileKey: "nav.fuel", icon: "⛽" },
+  { href: "/", key: "nav.fuelEntry", mobileKey: "nav.fuel", icon: "⛽" },
+  { href: "/dashboard", key: "nav.dashboard", mobileKey: "nav.dashboard", icon: "▤" },
   { href: "/history", key: "nav.fuelHistory", mobileKey: "nav.history", icon: "≣" },
   { href: "/reports", key: "nav.reports", icon: "📄" },
   { href: "/vehicles", key: "nav.vehicles", icon: "🚚" },
