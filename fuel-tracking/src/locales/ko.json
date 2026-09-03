@@ -111,7 +111,10 @@
     "driver": "운전자",
     "vehicleType": "차량 종류",
     "controlNo": "관리번호",
-    "fuelType": "유종"
+    "fuelType": "유종",
+    "more": "필터",
+    "reset": "초기화",
+    "view": "조회"
   },
   "history": {
     "title": "주유 이력",

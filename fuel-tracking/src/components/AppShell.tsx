@@ -90,9 +90,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <LanguageSwitcher />
             </div>
           </div>
-          {/* 모바일: 로고 줄 아래에 같은 날씨 줄 (헤더 안이라 스크롤해도 유지) */}
-          <div className="border-t border-neutral-border px-3 py-1 md:hidden">
-            <WeatherWidget variant="bar" />
+          {/* 모바일: 로고 줄 아래 — 왼쪽 제목 + 오른쪽 날씨 (헤더 안이라 스크롤해도 유지) */}
+          <div className="flex items-center gap-2 border-t border-neutral-border px-3 py-1 md:hidden">
+            <span className="shrink-0 text-[11px] font-bold leading-[1.2] text-gray-900">
+              Fuel Tracking
+              <br />
+              System
+            </span>
+            <div className="min-w-0 flex-1">
+              <WeatherWidget variant="bar" />
+            </div>
           </div>
         </header>
 

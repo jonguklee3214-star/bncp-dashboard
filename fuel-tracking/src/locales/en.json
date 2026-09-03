@@ -111,7 +111,10 @@
     "driver": "Driver",
     "vehicleType": "Vehicle Type",
     "controlNo": "CONTROL N°",
-    "fuelType": "Fuel Type"
+    "fuelType": "Fuel Type",
+    "more": "Filters",
+    "reset": "Reset",
+    "view": "View"
   },
   "history": {
     "title": "Fuel History",
