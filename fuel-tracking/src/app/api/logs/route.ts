@@ -10,12 +10,7 @@ import {
   updateFuelLog,
   voidRecord,
 } from "@/lib/repository";
-import { errorResponse } from "@/lib/api";
-
-function isAdmin(req: NextRequest): boolean {
-  const pin = req.headers.get("x-admin-pin");
-  return Boolean(process.env.ADMIN_PIN) && pin === process.env.ADMIN_PIN;
-}
+import { errorResponse, isAdminRequest } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -191,7 +186,7 @@ interface PatchLogBody {
 // 기록 수정 (관리자 전용 — PIN 필요)
 export async function PATCH(req: NextRequest) {
   try {
-    if (!isAdmin(req)) {
+    if (!isAdminRequest(req)) {
       return NextResponse.json(
         { error: "forbidden", message: "관리자만 수정할 수 있습니다." },
         { status: 403 },
@@ -242,7 +237,7 @@ export async function PATCH(req: NextRequest) {
 // 기록 무효 처리(삭제 대신, 관리자 전용)
 export async function DELETE(req: NextRequest) {
   try {
-    if (!isAdmin(req)) {
+    if (!isAdminRequest(req)) {
       return NextResponse.json(
         { error: "forbidden", message: "관리자만 삭제(무효 처리)할 수 있습니다." },
         { status: 403 },

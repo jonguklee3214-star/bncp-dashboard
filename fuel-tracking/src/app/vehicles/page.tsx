@@ -80,20 +80,28 @@ export default function VehiclesPage() {
               onClick={() => setPinOpen(true)}
               className="rounded-md border border-neutral-border bg-white px-3 py-1.5 text-sm hover:border-hanwha"
             >
-              🔒 {t("admin.exempt")}
+              🔒 {t("admin.locked")}
             </button>
           )}
-          <VehicleImport onDone={refresh} />
-          <button
-            onClick={() => setAdding(true)}
-            className="rounded-lg bg-hanwha px-3 py-1.5 text-sm font-bold text-white"
-          >
-            + {t("vehicles.add")}
-          </button>
+          {isAdmin && pin && (
+            <>
+              <VehicleImport pin={pin} onDone={refresh} />
+              <button
+                onClick={() => setAdding(true)}
+                className="rounded-lg bg-hanwha px-3 py-1.5 text-sm font-bold text-white"
+              >
+                + {t("vehicles.add")}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {isAdmin && <p className="text-xs text-gray-500">🛠 {t("admin.exemptHint")}</p>}
+      {isAdmin ? (
+        <p className="text-xs text-gray-500">🛠 {t("admin.exemptHint")}</p>
+      ) : (
+        <p className="text-xs text-gray-500">🔒 {t("admin.adminOnly")}</p>
+      )}
 
       {pinOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -134,9 +142,10 @@ export default function VehiclesPage() {
         className="w-full rounded-lg border border-neutral-border px-4 py-2.5 outline-none focus:border-hanwha"
       />
 
-      {(adding || editing) && (
+      {(adding || editing) && pin && (
         <VehicleEditor
           initial={editing ?? undefined}
+          pin={pin}
           onClose={() => {
             setAdding(false);
             setEditing(null);
@@ -206,12 +215,14 @@ export default function VehiclesPage() {
                         {v.mileageExemptReason ? t("admin.exemptRevoke") : t("admin.exemptGrant")}
                       </button>
                     )}
-                    <button
-                      onClick={() => setEditing(v)}
-                      className="rounded-md border border-neutral-border px-2 py-1 text-xs hover:border-hanwha"
-                    >
-                      {t("vehicles.edit")}
-                    </button>
+                    {isAdmin && (
+                      <button
+                        onClick={() => setEditing(v)}
+                        className="rounded-md border border-neutral-border px-2 py-1 text-xs hover:border-hanwha"
+                      >
+                        {t("vehicles.edit")}
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>

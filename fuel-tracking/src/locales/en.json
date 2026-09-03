@@ -131,6 +131,8 @@
     "notConfigured": "Admin PIN is not set. Contact your administrator.",
     "editRecord": "Edit Record",
     "unlocked": "Admin mode (editing enabled)",
+    "locked": "Admin mode",
+    "adminOnly": "Adding/editing vehicles, CSV import and sheet initialization are admin-only.",
     "void": "Delete (void)",
     "voidConfirm": "Void this record? It will be excluded from totals and history (data preserved).",
     "voidReason": "Void reason (optional)",

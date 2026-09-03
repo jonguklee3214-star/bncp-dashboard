@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Vehicle } from "@/types";
 import { appendAudit, getVehicles, upsertVehicle } from "@/lib/repository";
 import { dieselTracksMileage } from "@/data/seed";
-import { errorResponse } from "@/lib/api";
+import { errorResponse, forbidden, isAdminRequest } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +29,12 @@ export async function GET() {
   }
 }
 
-// 차량 추가/수정 (항목 62). vehicleId 가 있으면 수정, 없으면 생성.
+// 차량 추가/수정 (항목 62). vehicleId 가 있으면 수정, 없으면 생성. (관리자 전용)
 export async function POST(req: NextRequest) {
   try {
+    if (!isAdminRequest(req)) {
+      return forbidden("차량 추가·수정은 관리자만 할 수 있습니다.");
+    }
     const body = (await req.json()) as Partial<Vehicle>;
     const now = new Date().toISOString();
     const isNew = !body.vehicleId;

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { FuelType, Part, Vehicle } from "@/types";
 import { appendAudit, getVehicles, upsertVehicle } from "@/lib/repository";
 import { dieselTracksMileage } from "@/data/seed";
-import { errorResponse } from "@/lib/api";
+import { errorResponse, forbidden, isAdminRequest } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +18,12 @@ interface ImportRow {
   status?: string;
 }
 
-// CSV 일괄 등록 (수동 추가와 별개, 다건). control_no 기준 upsert.
+// CSV 일괄 등록 (수동 추가와 별개, 다건). control_no 기준 upsert. (관리자 전용)
 export async function POST(req: NextRequest) {
   try {
+    if (!isAdminRequest(req)) {
+      return forbidden("CSV 일괄 등록은 관리자만 할 수 있습니다.");
+    }
     const { rows } = (await req.json()) as { rows: ImportRow[] };
     if (!Array.isArray(rows) || rows.length === 0) {
       return NextResponse.json(

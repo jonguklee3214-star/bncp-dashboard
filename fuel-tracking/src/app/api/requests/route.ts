@@ -7,19 +7,14 @@ import {
   setEditRequestStatus,
   updateFuelLog,
 } from "@/lib/repository";
-import { errorResponse } from "@/lib/api";
+import { errorResponse, isAdminRequest } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
-
-function isAdmin(req: NextRequest): boolean {
-  const pin = req.headers.get("x-admin-pin");
-  return Boolean(process.env.ADMIN_PIN) && pin === process.env.ADMIN_PIN;
-}
 
 // 목록 (관리자) — 기본 pending
 export async function GET(req: NextRequest) {
   try {
-    if (!isAdmin(req)) {
+    if (!isAdminRequest(req)) {
       return NextResponse.json({ error: "forbidden", message: "관리자 전용" }, { status: 403 });
     }
     const status = (req.nextUrl.searchParams.get("status") as EditRequest["status"]) || "pending";
@@ -71,7 +66,7 @@ export async function POST(req: NextRequest) {
 // 승인/반려 (관리자). 승인 시 실제 기록에 반영.
 export async function PATCH(req: NextRequest) {
   try {
-    if (!isAdmin(req)) {
+    if (!isAdminRequest(req)) {
       return NextResponse.json({ error: "forbidden", message: "관리자 전용" }, { status: 403 });
     }
     const { requestId, action } = (await req.json()) as {

@@ -4,19 +4,35 @@ import { useState } from "react";
 import Link from "next/link";
 import { LANGS, useI18n } from "@/lib/i18n";
 import { useStore } from "@/lib/store";
+import { useAdmin } from "@/lib/useAdmin";
 import { Card, SectionTitle } from "@/components/ui";
 
 export default function SettingsPage() {
   const { t, lang, setLang } = useI18n();
   const { refresh } = useStore();
+  const { isAdmin, pin, unlock, lock } = useAdmin();
   const [initState, setInitState] = useState<"idle" | "running" | "done" | "error">("idle");
   const [initMsg, setInitMsg] = useState("");
+  const [pinInput, setPinInput] = useState("");
+  const [pinErr, setPinErr] = useState("");
+
+  // 관리자 잠금 해제 (시트 초기화 같은 위험한 작업은 관리자만)
+  async function tryUnlock() {
+    setPinErr("");
+    const r = await unlock(pinInput);
+    if (r.ok) setPinInput("");
+    else setPinErr(r.message || t("admin.wrongPin"));
+  }
 
   async function initSheet() {
+    if (!pin) return;
     setInitState("running");
     setInitMsg("");
     try {
-      const res = await fetch("/api/init", { method: "POST" });
+      const res = await fetch("/api/init", {
+        method: "POST",
+        headers: { "x-admin-pin": pin },
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "init failed");
       setInitState("done");
@@ -57,17 +73,50 @@ export default function SettingsPage() {
       </Card>
 
       <Card className="p-4">
-        <SectionTitle>{t("settings.initSheet")}</SectionTitle>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <SectionTitle>{t("settings.initSheet")}</SectionTitle>
+          {isAdmin && (
+            <button onClick={lock} className="text-xs font-medium text-hanwha">
+              🔓 {t("admin.unlocked")}
+            </button>
+          )}
+        </div>
         <p className="mb-3 text-sm text-gray-500">
           Google Sheet 에 헤더와 초기 차량/장비 데이터를 심습니다. (이미 데이터가 있으면 보존)
         </p>
-        <button
-          onClick={initSheet}
-          disabled={initState === "running"}
-          className="rounded-lg bg-hanwha px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
-        >
-          {initState === "running" ? "..." : t("settings.initSheet")}
-        </button>
+
+        {isAdmin ? (
+          <button
+            onClick={initSheet}
+            disabled={initState === "running"}
+            className="rounded-lg bg-hanwha px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+          >
+            {initState === "running" ? "..." : t("settings.initSheet")}
+          </button>
+        ) : (
+          <div>
+            <p className="mb-2 text-xs text-gray-500">🔒 {t("admin.adminOnly")}</p>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                inputMode="numeric"
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && tryUnlock()}
+                placeholder={t("admin.enterPin")}
+                className="w-40 rounded-lg border border-neutral-border px-3 py-2 text-sm outline-none focus:border-hanwha"
+              />
+              <button
+                onClick={tryUnlock}
+                className="rounded-lg border border-hanwha px-3 py-2 text-sm font-bold text-hanwha"
+              >
+                {t("admin.unlock")}
+              </button>
+            </div>
+            {pinErr && <p className="mt-2 text-sm text-danger">{pinErr}</p>}
+          </div>
+        )}
+
         {initMsg && (
           <p className={`mt-2 text-sm ${initState === "error" ? "text-danger" : "text-success"}`}>
             {initMsg}

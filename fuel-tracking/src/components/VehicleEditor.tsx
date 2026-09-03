@@ -27,10 +27,12 @@ const EMPTY: Vehicle = {
 
 export function VehicleEditor({
   initial,
+  pin,
   onClose,
   onSaved,
 }: {
   initial?: Vehicle;
+  pin: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -50,7 +52,7 @@ export function VehicleEditor({
     try {
       const res = await fetch("/api/vehicles", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-admin-pin": pin },
         body: JSON.stringify({
           ...v,
           driverIds: drivers.split("/").map((d) => d.trim()).filter(Boolean),

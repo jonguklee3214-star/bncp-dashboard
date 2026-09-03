@@ -36,7 +36,7 @@ const TEMPLATE = [
   "gasoline,공사-30,LSU-200,Sorento,,,토목,홍길동,active",
 ].join("\n");
 
-export function VehicleImport({ onDone }: { onDone: () => void }) {
+export function VehicleImport({ pin, onDone }: { pin: string; onDone: () => void }) {
   const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState("");
@@ -60,7 +60,7 @@ export function VehicleImport({ onDone }: { onDone: () => void }) {
       });
       const res = await fetch("/api/vehicles/import", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-admin-pin": pin },
         body: JSON.stringify({ rows }),
       });
       const data = await res.json();

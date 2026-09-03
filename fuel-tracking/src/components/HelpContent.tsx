@@ -83,10 +83,12 @@ const MANUAL: Record<Lang, Manual> = {
         n: "5",
         title: "차량 관리 (관리자)",
         bullets: [
+          "먼저 잠금 해제: 우측 상단 🔒 관리자 모드 → PIN 입력. PIN 없이는 추가·수정·CSV 등록 버튼이 보이지 않습니다.",
           "차량 추가: 우측 상단 '+ 차량 추가'. 추가 즉시 주유 입력에서 선택 가능.",
           "수정: 각 행의 '수정' 버튼.",
           "CSV 일괄 등록: 'CSV 양식'을 받아 채운 뒤 'CSV 등록'으로 여러 대 한 번에(관리번호 기준).",
           "운행/미운행: 안 쓰는 차량은 삭제 대신 '미운행'. 과거 기록은 보존됩니다.",
+          "시트 초기화: 설정 화면의 '시트 초기화'도 관리자 PIN 이 있어야 실행됩니다.",
         ],
       },
       {
@@ -160,10 +162,12 @@ const MANUAL: Record<Lang, Manual> = {
         n: "5",
         title: "Vehicle Management (admin)",
         bullets: [
+          "Unlock first: top-right 🔒 Admin mode → enter PIN. Without the PIN the add/edit/import buttons are hidden.",
           "Add vehicle: top-right '+ Add Vehicle'. Immediately selectable in Fuel Entry.",
           "Edit: the 'Edit' button on each row.",
           "Bulk CSV import: download 'CSV Template', fill it, then 'Import CSV' (matched by control no.).",
           "Active/Inactive: instead of deleting, set unused vehicles Inactive. Past records are kept.",
+          "Sheet initialization: 'Initialize Sheet' in Settings also requires the admin PIN.",
         ],
       },
       {
@@ -237,10 +241,12 @@ const MANUAL: Record<Lang, Manual> = {
         n: "5",
         title: "যানবাহন ব্যবস্থাপনা (অ্যাডমিন)",
         bullets: [
+          "প্রথমে আনলক: উপরে ডানে 🔒 অ্যাডমিন মোড → পিন দিন। পিন ছাড়া যোগ/সম্পাদনা/ইম্পোর্ট বোতাম দেখা যাবে না।",
           "যোগ: উপরে ডানে '+ যানবাহন যোগ করুন'। সাথে সাথে এন্ট্রিতে পাওয়া যায়।",
           "সম্পাদনা: প্রতিটি সারির 'সম্পাদনা' বোতাম।",
           "CSV ইম্পোর্ট: 'CSV টেমপ্লেট' পূরণ করে 'CSV ইম্পোর্ট' (কন্ট্রোল নং অনুযায়ী)।",
           "সক্রিয়/নিষ্ক্রিয়: অব্যবহৃত যানবাহন মুছবেন না, নিষ্ক্রিয় করুন। পুরোনো রেকর্ড থাকে।",
+          "শিট ইনিশিয়ালাইজ: সেটিংসের 'শিট ইনিশিয়ালাইজ'-এর জন্যও অ্যাডমিন পিন লাগে।",
         ],
       },
       {
