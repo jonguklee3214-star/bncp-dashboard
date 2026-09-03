@@ -58,7 +58,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
           ))}
         </nav>
-        <div className="border-t border-neutral-border p-3 text-xs text-gray-400">
+        <div className="border-t border-neutral-border p-3 text-sm font-semibold text-gray-700">
           Fuel Tracking System
         </div>
       </aside>
@@ -73,24 +73,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="text-[13px] sm:text-[15px]">{t("campaign")}</span>
           </div>
           <DemoBanner />
-          <div className="flex h-14 items-center justify-between gap-3 px-4">
+          <div className="flex min-h-14 items-center gap-3 px-4 py-1.5">
             {/* mobile logo + 팀명 (가운데 정렬) */}
             <div className="flex flex-col items-center md:hidden">
               <Image src={logo} alt="Hanwha E&C" width={140} height={30} className="h-6 w-auto" />
               <span className="mt-0.5 text-[11px] font-bold text-gray-800">{t("appTeam")}</span>
             </div>
-            <div className="hidden text-sm text-gray-400 md:block">{t("appSubtitle")}</div>
-            <LanguageSwitcher />
+            <span className="hidden shrink-0 text-lg font-bold text-gray-900 md:block">
+              {t("appSubtitle")}
+            </span>
+            {/* 날씨 — 우측으로 밀어 언어 선택 왼쪽에 배치 (데스크톱). 항상 상단 고정. */}
+            <div className="ml-auto hidden min-w-0 md:block">
+              <WeatherWidget variant="bar" />
+            </div>
+            <div className="ml-auto shrink-0 md:ml-3">
+              <LanguageSwitcher />
+            </div>
+          </div>
+          {/* 모바일: 로고 줄 아래에 같은 날씨 줄 (헤더 안이라 스크롤해도 유지) */}
+          <div className="border-t border-neutral-border px-3 py-1 md:hidden">
+            <WeatherWidget variant="bar" />
           </div>
         </header>
 
         {/* Content — 날씨는 모든 페이지 상단 고정 (항목 7) */}
-        <main className="print-full px-4 pb-24 pt-4 md:px-8 md:pb-10">
-          <div className="no-print mb-4">
-            <WeatherWidget />
-          </div>
-          {children}
-        </main>
+        <main className="print-full px-4 pb-24 pt-4 md:px-8 md:pb-10">{children}</main>
       </div>
 
       {/* ── Mobile bottom navigation (항목 6) ── */}
