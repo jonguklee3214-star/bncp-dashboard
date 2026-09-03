@@ -40,6 +40,10 @@ Settings → Pages → Deploy from a branch → **main / (root)**
    이 GitHub 저장소를 고른다.
 2. **Framework Preset = Other**, Build Command·Output Directory는 **비워 둔다**
    (정적 파일 그대로 올린다).
+   ★**Root Directory는 저장소 맨 위(`./`) 그대로 둔다.** 이 저장소에는 `fuel-tracking/`
+     (주유 관리, Next.js)이 **같이 들어 있다** — 그쪽은 **별도 Vercel 프로젝트**로,
+     Root Directory를 `fuel-tracking`으로 잡아 따로 연결한다. 두 프로젝트가 각자
+     자기 `vercel.json`을 쓴다(맨 위 것이 BNCP용). 하나로 묶으려 하면 어긋난다.
 3. Deploy를 누르면 끝. 주소는
    - 관리자 : `https://<프로젝트>.vercel.app/`
    - 협력업체 : `https://<프로젝트>.vercel.app/vendor.html`
