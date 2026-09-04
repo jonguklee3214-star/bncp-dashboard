@@ -239,6 +239,7 @@ export interface UsageRow {
   key: string;        // 운전자 이름 또는 차량 식별자
   isDriver: boolean;
   vehicles: string[]; // 그 사람이 넣은 차량들
+  fuelTypes: FuelLog["fuelType"][]; // 넣은 유종 (보통 하나)
   count: number;
   volume: number;
   dates: string[];    // YYYY-MM-DD, 오름차순
@@ -256,13 +257,22 @@ export function usageByPerson(logs: FuelLog[]): UsageRow[] {
     for (const key of keys) {
       const row =
         map.get(key) ??
-        { key, isDriver: drivers.length > 0, vehicles: [], count: 0, volume: 0, dates: [] };
+        {
+          key,
+          isDriver: drivers.length > 0,
+          vehicles: [],
+          fuelTypes: [],
+          count: 0,
+          volume: 0,
+          dates: [],
+        };
       row.count += 1;
       // 복수 운전자 차량은 주유량을 나눠 갖지 않고 각자에게 그대로 보여준다 (횟수 기준 조회이므로)
       row.volume = round(row.volume + l.fuelVolumeL);
       const d = siteDate(l.fuelDatetime);
       if (!row.dates.includes(d)) row.dates.push(d);
       if (!row.vehicles.includes(vehicle)) row.vehicles.push(vehicle);
+      if (!row.fuelTypes.includes(l.fuelType)) row.fuelTypes.push(l.fuelType);
       map.set(key, row);
     }
   }

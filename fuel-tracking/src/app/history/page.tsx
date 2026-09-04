@@ -203,6 +203,7 @@ export default function HistoryPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-neutral-border bg-neutral-soft text-left text-xs text-gray-500">
+                <th className="px-3 py-2 font-medium">{t("fuelType.label")}</th>
                 <th className="px-3 py-2 font-medium">{t("history.who")}</th>
                 <th className="px-3 py-2 text-right font-medium">{t("history.count")}</th>
                 <th className="px-3 py-2 text-right font-medium">{t("entry.fuelVolume")}</th>
@@ -223,6 +224,22 @@ export default function HistoryPage() {
                       className={`cursor-pointer ${isOpen ? "bg-hanwha/5" : "hover:bg-neutral-soft"}`}
                     >
                       <td className="px-3 py-2">
+                        <div className="flex flex-wrap gap-1">
+                          {u.fuelTypes.map((ft) => (
+                            <span
+                              key={ft}
+                              className={`rounded px-1.5 py-0.5 text-xs font-medium ${
+                                ft === "diesel"
+                                  ? "bg-[#2563EB]/10 text-[#2563EB]"
+                                  : "bg-hanwha/10 text-hanwha"
+                              }`}
+                            >
+                              {t(`fuelType.${ft}`)}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
                         <div className="font-medium">{u.key}</div>
                         {u.isDriver && (
                           <div className="text-xs text-gray-500">{u.vehicles.join(" / ")}</div>
@@ -235,16 +252,14 @@ export default function HistoryPage() {
                         </span>
                       </td>
                       <td className="tabular px-3 py-2 text-right text-hanwha">{formatL(u.volume)}</td>
-                      <td className="no-print px-3 py-2 text-right">
-                        <span className="whitespace-nowrap rounded-md border border-neutral-border px-2 py-1 text-xs text-gray-700">
-                          {t("history.days")} {isOpen ? "▲" : "▼"}
-                        </span>
+                      <td className="no-print px-3 py-2 text-right text-xs text-gray-500">
+                        {isOpen ? "▲" : "▼"}
                       </td>
                     </tr>
 
                     {isOpen && (
                       <tr className="bg-neutral-soft/60">
-                        <td colSpan={4} className="px-3 py-3">
+                        <td colSpan={5} className="px-3 py-3">
                           {/* 주유한 날짜 — 하나를 고르면 그날 기록만 아래에 나온다 */}
                           <div className="flex flex-wrap gap-1.5">
                             {u.dates.map((d) => (
