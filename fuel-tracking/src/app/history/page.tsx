@@ -87,6 +87,84 @@ export default function HistoryPage() {
   // 조회 결과 요약: 누가(또는 어느 차량이) 몇 번, 며칠에 넣었는지
   const usage = useMemo(() => usageByPerson(filtered), [filtered]);
 
+  const toggleUsage = (key: string) => {
+    setOpenKey(openKey === key ? null : key);
+    setPickedDate(null);
+  };
+
+  /** 펼친 뒤 보여줄 부분: 주유한 날짜 칩 + 고른 날의 기록. PC·모바일 공용. */
+  function usageDetail(u: (typeof usage)[number]) {
+    const dayLogs = pickedDate
+      ? filtered.filter(
+          (l) =>
+            siteDate(l.fuelDatetime) === pickedDate &&
+            (u.isDriver
+              ? l.driver.split("/").map((x) => x.trim()).includes(u.key)
+              : (l.mainVehicleNo || l.controlNo || l.vehicleType) === u.key),
+        )
+      : [];
+    return (
+      <>
+        <div className="flex flex-wrap gap-1.5">
+          {u.dates.map((d) => (
+            <button
+              key={d}
+              onClick={() => setPickedDate(pickedDate === d ? null : d)}
+              className={`rounded-md px-2.5 py-1.5 text-xs font-medium ${
+                pickedDate === d
+                  ? "bg-hanwha text-white"
+                  : "border border-neutral-border bg-white text-gray-700 hover:border-hanwha"
+              }`}
+            >
+              {dayNum(d)}
+            </button>
+          ))}
+        </div>
+
+        {dayLogs.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {dayLogs.map((l) => (
+              <div key={l.recordId} className="rounded-lg border border-neutral-border bg-white p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">
+                      {l.mainVehicleNo || l.controlNo || l.vehicleType}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {formatDateTime(l.fuelDatetime)}
+                      {l.controlNo ? ` · ${l.controlNo}` : ""}
+                      {l.part ? ` · ${l.part}` : ""}
+                    </div>
+                  </div>
+                  <div className="no-print shrink-0">
+                    <EditButton
+                      log={l}
+                      isAdmin={isAdmin}
+                      open={open}
+                      t={t}
+                      onEdit={() => setEditing(l)}
+                      onRequest={() => setRequesting(l)}
+                    />
+                  </div>
+                </div>
+                <div className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                  <Row label={t("entry.fuelVolume")} value={formatL(l.fuelVolumeL)} highlight />
+                  {l.mileageKm != null && (
+                    <Row label={t("entry.currentMileage")} value={formatKm(l.mileageKm)} />
+                  )}
+                  {l.distanceKm != null && (
+                    <Row label={t("entry.distance")} value={formatKm(l.distanceKm)} />
+                  )}
+                  {l.remarks && <Row label={t("entry.remarks")} value={l.remarks} />}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -197,149 +275,102 @@ export default function HistoryPage() {
         <FilterBar filters={filters} onChange={setFilters} vehicles={vehicles} />
       </div>
 
-      {/* 차량·운전자별 조회 — 줄을 눌러 날짜를 펼치고, 날짜를 눌러 그날 기록을 본다 */}
+      {/* 차량·운전자별 조회 — 눌러서 날짜를 펼치고, 날짜를 눌러 그날 기록을 본다 */}
       {filtered.length > 0 && (
-        <Card className="overflow-x-auto p-0">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-neutral-border bg-neutral-soft text-left text-xs text-gray-500">
-                <th className="px-3 py-2 font-medium">{t("fuelType.label")}</th>
-                <th className="px-3 py-2 font-medium">{t("history.who")}</th>
-                <th className="px-3 py-2 text-right font-medium">{t("history.count")}</th>
-                <th className="px-3 py-2 text-right font-medium">{t("entry.fuelVolume")}</th>
-                <th className="px-3 py-2"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-border">
-              {usage.map((u) => {
-                const isOpen = openKey === u.key;
-                const toggle = () => {
-                  setOpenKey(isOpen ? null : u.key);
-                  setPickedDate(null);
-                };
-                return (
-                  <Fragment key={u.key}>
-                    <tr
-                      onClick={toggle}
-                      className={`cursor-pointer ${isOpen ? "bg-hanwha/5" : "hover:bg-neutral-soft"}`}
-                    >
-                      <td className="px-3 py-2">
-                        <div className="flex flex-wrap gap-1">
-                          {u.fuelTypes.map((ft) => (
-                            <span
-                              key={ft}
-                              className={`rounded px-1.5 py-0.5 text-xs font-medium ${
-                                ft === "diesel"
-                                  ? "bg-[#2563EB]/10 text-[#2563EB]"
-                                  : "bg-hanwha/10 text-hanwha"
-                              }`}
-                            >
-                              {t(`fuelType.${ft}`)}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="font-medium">{u.key}</div>
-                        {u.isDriver && (
-                          <div className="text-xs text-gray-500">{u.vehicles.join(" / ")}</div>
-                        )}
-                      </td>
-                      <td className="tabular px-3 py-2 text-right font-bold">
-                        {u.count}
-                        <span className="ml-0.5 text-xs font-normal text-gray-500">
-                          {t("units.transactions")}
-                        </span>
-                      </td>
-                      <td className="tabular px-3 py-2 text-right text-hanwha">{formatL(u.volume)}</td>
-                      <td className="no-print px-3 py-2 text-right text-xs text-gray-500">
-                        {isOpen ? "▲" : "▼"}
-                      </td>
-                    </tr>
-
-                    {isOpen && (
-                      <tr className="bg-neutral-soft/60">
-                        <td colSpan={5} className="px-3 py-3">
-                          {/* 주유한 날짜 — 하나를 고르면 그날 기록만 아래에 나온다 */}
-                          <div className="flex flex-wrap gap-1.5">
-                            {u.dates.map((d) => (
-                              <button
-                                key={d}
-                                onClick={() => setPickedDate(pickedDate === d ? null : d)}
-                                className={`rounded-md px-2.5 py-1 text-xs font-medium ${
-                                  pickedDate === d
-                                    ? "bg-hanwha text-white"
-                                    : "border border-neutral-border bg-white text-gray-700 hover:border-hanwha"
-                                }`}
-                              >
-                                {dayNum(d)}
-                              </button>
-                            ))}
-                          </div>
-
-                          {pickedDate && (
-                            <div className="mt-3 space-y-2">
-                              {filtered
-                                .filter(
-                                  (l) =>
-                                    siteDate(l.fuelDatetime) === pickedDate &&
-                                    (u.isDriver
-                                      ? l.driver
-                                          .split("/")
-                                          .map((x) => x.trim())
-                                          .includes(u.key)
-                                      : (l.mainVehicleNo || l.controlNo || l.vehicleType) === u.key),
-                                )
-                                .map((l) => (
-                                  <div
-                                    key={l.recordId}
-                                    className="rounded-lg border border-neutral-border bg-white p-3"
-                                  >
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div>
-                                        <div className="font-medium">
-                                          {l.mainVehicleNo || l.controlNo || l.vehicleType}
-                                        </div>
-                                        <div className="text-xs text-gray-500">
-                                          {formatDateTime(l.fuelDatetime)}
-                                          {l.controlNo ? ` · ${l.controlNo}` : ""}
-                                          {l.part ? ` · ${l.part}` : ""}
-                                        </div>
-                                      </div>
-                                      <div className="no-print">
-                                        <EditButton
-                                          log={l}
-                                          isAdmin={isAdmin}
-                                          open={open}
-                                          t={t}
-                                          onEdit={() => setEditing(l)}
-                                          onRequest={() => setRequesting(l)}
-                                        />
-                                      </div>
-                                    </div>
-                                    <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
-                                      <Row label={t("entry.fuelVolume")} value={formatL(l.fuelVolumeL)} highlight />
-                                      {l.mileageKm != null && (
-                                        <Row label={t("entry.currentMileage")} value={formatKm(l.mileageKm)} />
-                                      )}
-                                      {l.distanceKm != null && (
-                                        <Row label={t("entry.distance")} value={formatKm(l.distanceKm)} />
-                                      )}
-                                      {l.remarks && <Row label={t("entry.remarks")} value={l.remarks} />}
-                                    </div>
-                                  </div>
-                                ))}
-                            </div>
+        <>
+          {/* PC: 표 */}
+          <Card className="hidden overflow-x-auto p-0 md:block">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-neutral-border bg-neutral-soft text-left text-xs text-gray-500">
+                  <th className="px-3 py-2 font-medium">{t("fuelType.label")}</th>
+                  <th className="px-3 py-2 font-medium">{t("history.who")}</th>
+                  <th className="px-3 py-2 text-right font-medium">{t("history.count")}</th>
+                  <th className="px-3 py-2 text-right font-medium">{t("entry.fuelVolume")}</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-border">
+                {usage.map((u) => {
+                  const isOpen = openKey === u.key;
+                  return (
+                    <Fragment key={u.key}>
+                      <tr
+                        onClick={() => toggleUsage(u.key)}
+                        className={`cursor-pointer ${isOpen ? "bg-hanwha/5" : "hover:bg-neutral-soft"}`}
+                      >
+                        <td className="px-3 py-2">
+                          <FuelBadges types={u.fuelTypes} t={t} />
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="font-medium">{u.key}</div>
+                          {u.isDriver && (
+                            <div className="text-xs text-gray-500">{u.vehicles.join(" / ")}</div>
                           )}
                         </td>
+                        <td className="tabular whitespace-nowrap px-3 py-2 text-right font-bold">
+                          {u.count}
+                          <span className="ml-0.5 text-xs font-normal text-gray-500">
+                            {t("units.transactions")}
+                          </span>
+                        </td>
+                        <td className="tabular whitespace-nowrap px-3 py-2 text-right text-hanwha">
+                          {formatL(u.volume)}
+                        </td>
+                        <td className="no-print px-3 py-2 text-right text-xs text-gray-500">
+                          {isOpen ? "▲" : "▼"}
+                        </td>
                       </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </Card>
+                      {isOpen && (
+                        <tr className="bg-neutral-soft/60">
+                          <td colSpan={5} className="px-3 py-3">
+                            {usageDetail(u)}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </Card>
+
+          {/* 모바일: 카드 (표는 글자가 눌려 읽기 어렵다) */}
+          <div className="space-y-2 md:hidden">
+            {usage.map((u) => {
+              const isOpen = openKey === u.key;
+              return (
+                <Card key={u.key} className={`p-0 ${isOpen ? "border-hanwha/40" : ""}`}>
+                  <button
+                    onClick={() => toggleUsage(u.key)}
+                    className="flex w-full items-center gap-2 p-3 text-left"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex items-center gap-1.5">
+                        <FuelBadges types={u.fuelTypes} t={t} />
+                      </div>
+                      <div className="truncate font-bold">{u.key}</div>
+                      {u.isDriver && (
+                        <div className="truncate text-xs text-gray-500">{u.vehicles.join(" / ")}</div>
+                      )}
+                      <div className="tabular mt-1 text-sm text-gray-700">
+                        {u.count}
+                        {t("units.transactions")} ·{" "}
+                        <span className="font-bold text-hanwha">{formatL(u.volume)}</span>
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-xs text-gray-500">{isOpen ? "▲" : "▼"}</span>
+                  </button>
+                  {isOpen && (
+                    <div className="border-t border-neutral-border bg-neutral-soft/60 p-3">
+                      {usageDetail(u)}
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {loading && <p className="text-sm text-gray-400">{t("common.loading")}</p>}
@@ -558,6 +589,30 @@ function EditHistoryList({ entries, t }: { entries: EditHistoryEntry[]; t: (k: s
           </span>
           {e.reason && <span className="text-gray-500">📝 {e.reason}</span>}
         </div>
+      ))}
+    </div>
+  );
+}
+
+/** 유종 배지 — 그래프와 같은 색 (디젤 파랑 · 가솔린 주황). */
+function FuelBadges({
+  types,
+  t,
+}: {
+  types: FuelLog["fuelType"][];
+  t: (k: string) => string;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {types.map((ft) => (
+        <span
+          key={ft}
+          className={`whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-medium ${
+            ft === "diesel" ? "bg-[#2563EB]/10 text-[#2563EB]" : "bg-hanwha/10 text-hanwha"
+          }`}
+        >
+          {t(`fuelType.${ft}`)}
+        </span>
       ))}
     </div>
   );
