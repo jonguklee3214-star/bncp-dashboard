@@ -1,13 +1,39 @@
 @import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css");
 
+/* ══ 한화 글꼴 — **굵은 제목 한 벌만** (v2.53.0) ═══════════════
+   ★Bold 하나만 싣는다. Regular·Light는 **일부러 안 싣는다** —
+     사용자 지적 「한화 폰트는 작은 글씨는 시인성이 떨어져 감안해야 해」.
+     본문 굵기를 안 실어 두면 작은 글씨로 **새어 들어갈 길 자체가 막힌다.**
+   ★600·700·800이 모두 이 한 벌로 간다(font-weight 범위). 안 그러면 브라우저가
+     가짜 굵기를 만들어 번진다.
+   ★숫자는 이 글꼴로 찍지 않는다 — `1`의 폭이 다른 숫자의 60%뿐이고
+     GSUB/GPOS가 없어 tabular-nums가 **동작하지 않는다.** 수량 표의 자릿수가
+     어긋난다. 숫자가 지나가는 칸은 모두 Pretendard(--f)로 남긴다.
+   ★없는 글자가 있다(− ▾ ▸ ✓ ☂ ⚠ ✕) — 그래서 --f-t는 반드시 --f로 이어진다. */
+@font-face{
+  font-family:"Hanwha";
+  src:url("../font/Hanwha-B.woff2") format("woff2");
+  font-weight:600 900;
+  font-style:normal;
+  font-display:swap;
+}
+
 /* ══════════════════════════════════════════════════════════════
    BNCP 통합관리 — 한화 건설부문 디자인 시스템
    오렌지는 포인트 전용. 면 채우기 금지.
    ══════════════════════════════════════════════════════════════ */
 
 :root{
-  --orange:#F37321;
-  --orange-w:#FDF0E8;
+  /* ★한화 색상 규정 — 손으로 섞은 오렌지 다섯을 이 넷으로 모았다 (v2.53.0).
+     100/70/50%는 규정표 그대로다. --orange/--orange-w는 51곳이 쓰고 있어
+     이름은 그대로 두고 값만 규정에 맞춘다(별칭). */
+  --o-100:#F37321;  /* Hanwha Orange 100%  RGB 243/115/33 */
+  --o-70:#F89B6C;   /* 70%  RGB 248/155/108 */
+  --o-50:#FBB584;   /* 50%  RGB 251/181/132 */
+  --o-bg:#FDF0E8;   /* 배경용 옅은 톤 — 면 채우기는 여기까지만 */
+
+  --orange:var(--o-100);
+  --orange-w:var(--o-bg);
   --ink:#1A1A1A;
   --black:#000;
   --mute:#333333;   /* 회색이 흐리다는 지적 → 검정에 가깝게(대비 ~11:1). 옛 #5C5C5C (v2.46.1) */
@@ -41,6 +67,10 @@
 
   --f:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,
       "Segoe UI","Noto Sans KR","Malgun Gothic",sans-serif;
+  /* ★제목 전용 (v2.53.0) — **15px 이상 굵은 제목에만** 붙인다.
+     그 아래 크기·표 본문·입력창·숫자에는 절대 붙이지 않는다(위 @font-face 참조).
+     반드시 var(--f)로 이어 둘 것 — 한화에 없는 글자가 여기로 떨어진다. */
+  --f-t:"Hanwha",var(--f);
 }
 
 *,*::before,*::after{box-sizing:border-box}
@@ -66,7 +96,7 @@ table{border-collapse:collapse;width:100%}
 }
 .brand__logo{height:38px;width:auto;display:block}  /* 26px → 38px (v2.15.0) */
 .brand__div{width:1px;height:28px;background:var(--line)}
-.brand__t{font-size:15px;font-weight:700;letter-spacing:-.02em}
+.brand__t{font-family:var(--f-t);font-size:15px;font-weight:700;letter-spacing:-.02em}
 .brand__t small{
   display:block;font-size:10px;font-weight:500;color:var(--mute);
   letter-spacing:.08em;text-transform:uppercase;margin-top:1px
@@ -127,7 +157,7 @@ main{padding:0 var(--pad) 72px}
     padding:22px 0 12px}
 /* ★각 탭 상단 제목 20% 축소 (v2.40.0 · 18-스펙 항목) — 26→21px.
    제목이 화면 위쪽을 덜 먹어 정작 볼 내용이 넓어진다. 모바일도 같은 비율(21→17). */
-.ph h1{margin:0;font-size:21px;font-weight:800;letter-spacing:-.035em;line-height:1.1}
+.ph h1{margin:0;font-family:var(--f-t);font-size:21px;font-weight:700;letter-spacing:-.03em;line-height:1.15}
 .ph p{margin:0 0 3px;font-size:var(--fs-body);color:var(--mute)}
 
 .grid{display:grid;gap:16px}
@@ -146,7 +176,7 @@ main{padding:0 var(--pad) 72px}
 .card{border:1px solid var(--line);border-radius:var(--r);background:var(--bg)}
 .card__h{
   display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
-  padding:13px 16px;border-bottom:1px solid var(--line);
+  padding:12px 16px;border-bottom:1px solid var(--line);
 }
 .card__h h2{margin:0;font-size:13px;font-weight:700;letter-spacing:-.01em}
 .card__h .sub{font-size:11px;color:var(--mute)}
@@ -156,7 +186,7 @@ main{padding:0 var(--pad) 72px}
 .card__f{padding:10px 16px;border-top:1px solid var(--line);background:var(--wash);font-size:11px;color:var(--mute)}
 
 /* ── KPI ──────────────────────────────────────────────────── */
-.kpi{border:1px solid var(--line);border-radius:var(--r);padding:15px 16px 14px}
+.kpi{border:1px solid var(--line);border-radius:var(--r);padding:16px}
 .kpi__l{font-size:11px;font-weight:600;color:var(--mute);letter-spacing:.01em}
 .kpi__v{margin-top:5px;font-size:30px;font-weight:800;letter-spacing:-.04em;line-height:1.05}
 .kpi__v span{font-size:14px;font-weight:600;color:var(--mute);margin-left:2px;letter-spacing:0}
@@ -238,7 +268,7 @@ textarea.in{resize:vertical;min-height:60px}
 .tw .nm{font-weight:600}
 .tw .sp{font-size:11px;color:var(--mute)}
 .tw .em{color:var(--orange);font-weight:700}
-.tw td.wmark{box-shadow:inset 2px 0 0 var(--danger)}
+.tw td.wmark{box-shadow:inset 3px 0 0 var(--danger)}
 
 .empty{padding:34px 16px;text-align:center;color:var(--faint);font-size:12px}
 .empty b{display:block;color:var(--mute);font-weight:600;font-size:13px;margin-bottom:4px}
@@ -254,15 +284,15 @@ textarea.in{resize:vertical;min-height:60px}
 .bd--d{border-color:var(--danger);color:var(--danger)}
 .bd--ok{border-color:var(--ok);color:var(--ok)}
 .bd--mute{background:var(--wash)}
-.bd--warn{background:#fff4ec;color:var(--orange);border-color:var(--orange)}
+.bd--warn{background:var(--o-bg);color:var(--orange);border-color:var(--orange)}
 
 .alert{
   display:flex;gap:10px;align-items:flex-start;
-  padding:11px 14px;border:1px solid var(--line);border-left:3px solid var(--faint);
+  padding:12px 14px;border:1px solid var(--line);border-left:3px solid var(--faint);
   border-radius:var(--r);font-size:12px;margin-bottom:12px;background:var(--wash);
 }
 .alert--d{border-left-color:var(--danger);background:var(--danger-w);border-color:#F3D6D6}
-.alert--o{border-left-color:var(--orange);background:var(--orange-w);border-color:#F7DCC9}
+.alert--o{border-left-color:var(--orange);background:var(--orange-w);border-color:var(--o-50)}
 .alert b{font-weight:700}
 .alert .sp{flex:1}
 
@@ -279,7 +309,7 @@ textarea.in{resize:vertical;min-height:60px}
   border-bottom:1px solid var(--line-2);font-size:12px;
 }
 .pick__i:hover{background:var(--wash)}
-.pick__i[aria-selected="true"]{background:var(--orange-w);box-shadow:inset 2px 0 0 var(--orange)}
+.pick__i[aria-selected="true"]{background:var(--orange-w);box-shadow:inset 3px 0 0 var(--orange)}
 .pick__i b{display:block;font-weight:600}
 .pick__i span{font-size:11px;color:var(--mute)}
 
@@ -294,7 +324,7 @@ textarea.in{resize:vertical;min-height:60px}
   border-right:1px solid var(--line-2);min-width:26px}
 .gantt .pl{background:repeating-linear-gradient(45deg,#F0F0F0,#F0F0F0 3px,#FAFAFA 3px,#FAFAFA 6px)}
 .gantt .ac{background:var(--orange)}
-.gantt .ac.dim{background:#F9C39C}
+.gantt .ac.dim{background:var(--o-50)}
 .gantt .today{box-shadow:inset -1px 0 0 var(--black)}
 
 /* ── 출력 ─────────────────────────────────────────────────── */
@@ -391,7 +421,7 @@ html[lang="ar"] body{line-height:1.75}
 }
 .vrule{
   margin-top:14px;padding:10px 12px;font-size:12px;
-  border:1px solid #F7DCC9;border-left:3px solid var(--orange);
+  border:1px solid var(--o-50);border-left:3px solid var(--orange);
   background:var(--orange-w);border-radius:var(--r);
 }
 /* ── 진행 중 작업 고르기 (v2.37.0 · 2단계) ──────────────────
@@ -513,8 +543,8 @@ html[lang="ar"] body{line-height:1.75}
 .dbar__t{flex:1;height:8px;background:var(--line-2);border-radius:1px;overflow:hidden}
 .dbar__t i{display:block;height:100%;background:var(--orange);transition:width .25s ease}
 .dbar__t i.lv1{background:var(--orange)}
-.dbar__t i.lv2{background:#F79C61}
-.dbar__t i.lv3{background:#FBC7A5}
+.dbar__t i.lv2{background:var(--o-70)}
+.dbar__t i.lv3{background:var(--o-50)}
 .dbar__v{flex:0 0 56px;text-align:right;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
 tr.on{background:var(--orange-w)}
 
@@ -530,8 +560,8 @@ tr.on{background:var(--orange-w)}
 .staplus,.statil{color:var(--faint);font-size:12px}
 .stalen{margin-left:auto;font-size:12px;font-weight:600}
 .statot{margin-top:8px;text-align:right;font-size:13px;font-weight:700;color:var(--orange)}
-.igrp{border:1px solid var(--line);margin-top:12px}
-.igrp__h{padding:8px 12px;background:var(--wash);font-size:13px;font-weight:600;border-bottom:1px solid var(--line)}
+.igrp{border:1px solid var(--line);border-radius:var(--r);margin-top:12px}
+.igrp__h{padding:8px 12px;background:var(--wash);font-size:13px;font-weight:700;border-bottom:1px solid var(--line)}
 .igrp__s{padding:8px 12px;border-top:1px solid var(--line-2);font-size:12px;font-weight:600;color:var(--orange)}
 .irow{display:flex;align-items:center;gap:10px;padding:8px 12px;font-size:13px;cursor:pointer}
 .irow+.irow{border-top:1px solid var(--line-2)}
@@ -541,15 +571,16 @@ tr.on{background:var(--orange-w)}
 
 /* 협력업체 확인·게이트 — v2.10.0 */
 .vgate{margin:40px auto;max-width:520px;padding:24px;text-align:center;
-  border:1px solid var(--line);border-left:3px solid var(--orange);font-size:15px;font-weight:700}
+  border:1px solid var(--line);border-left:3px solid var(--orange);border-radius:var(--r);
+  font-size:15px;font-weight:700}
 .vgate .sp{display:block;margin-top:8px;font-size:13px;font-weight:400;color:var(--mute)}
 .vcomp{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap}
 .vcomp__n{font-weight:700;font-size:14px}
 .vcomp .in{width:auto;min-width:150px}
 /* 관리자 확인필요 */
-.chk{border:1px solid var(--line);border-left:3px solid var(--orange);margin-bottom:16px}
-.chk__h{padding:10px 14px;background:var(--wash);font-weight:700;font-size:var(--fs-base);border-bottom:1px solid var(--line)}
-.chk__r{padding:10px 14px;font-size:var(--fs-base)}
+.chk{border:1px solid var(--line);border-left:3px solid var(--orange);border-radius:var(--r);margin-bottom:16px}
+.chk__h{padding:12px 14px;background:var(--wash);font-weight:700;font-size:var(--fs-base);border-bottom:1px solid var(--line)}
+.chk__r{padding:12px 14px;font-size:var(--fs-base)}
 .chk__r+.chk__r{border-top:1px solid var(--line-2)}
 .chk__w{color:var(--orange);font-weight:700}
 
@@ -558,7 +589,8 @@ tfoot .tot td{border-top:2px solid var(--ink);font-weight:700;background:var(--w
 .prow{cursor:pointer}
 .prow:hover{background:var(--orange-w)}
 .dt{position:fixed;z-index:200;width:420px;max-width:92vw;background:var(--bg);
-  border:1px solid var(--ink);box-shadow:0 8px 28px rgba(0,0,0,.16);padding:14px 16px;font-size:13px}
+  border:1px solid var(--ink);border-radius:var(--r);box-shadow:0 8px 28px rgba(0,0,0,.16);
+  padding:16px;font-size:13px}
 .dt__h{font-weight:700;font-size:14px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--line)}
 .dt__g{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
 .dt__g div{text-align:center}
@@ -577,7 +609,7 @@ tfoot .tot td{border-top:2px solid var(--ink);font-weight:700;background:var(--w
 
 /* 로그인·권한 — v2.12.0 */
 .lg{max-width:360px;margin:80px auto;text-align:center}
-.lg__t{font-size:20px;font-weight:800;margin-bottom:6px}
+.lg__t{font-family:var(--f-t);font-size:20px;font-weight:700;margin-bottom:6px}
 .lg__n{font-size:13px;color:var(--mute);margin-bottom:18px}
 .lg .in{text-align:center;margin-bottom:10px}
 .lg .btn{width:100%}
@@ -589,7 +621,7 @@ body.nocopy input,body.nocopy textarea{-webkit-user-select:text;user-select:text
 @media print{body.nocopy{display:none !important}}
 
 /* 장비 가동/고장 누적 막대 — v2.13.0 */
-.ebar{display:flex;height:8px;background:var(--line-2);overflow:hidden}
+.ebar{display:flex;height:8px;background:var(--line-2);border-radius:1px;overflow:hidden}
 .ebar__r{background:var(--ink)}
 .ebar__d{background:var(--danger)}
 
@@ -687,7 +719,7 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
 
 /* 구획 제목 — 작업현황 안에서 직영을 가른다 */
 .sec{display:flex;align-items:center;gap:12px;margin:30px 0 14px}
-.sec span{font-size:15px;font-weight:800;letter-spacing:-.02em;white-space:nowrap}
+.sec span{font-family:var(--f-t);font-size:15px;font-weight:700;letter-spacing:-.015em;white-space:nowrap}
 .sec::after{content:"";flex:1;height:1px;background:var(--line)}
 
 /* ★현황판 인력 막대(.pn__c*)와 .pn__gb는 v2.18.0에서 지웠다 —
@@ -758,7 +790,7 @@ tr.gr>td{padding-top:8px;padding-bottom:8px}
 /* ★현황판 제목 (v2.30.0 · 요청 ②) — 종전엔 제목이 없어 숫자만 바로 시작했다.
    카드 제목과 같은 톤(굵은 산세리프). 오렌지는 밑줄 포인트로만 절제 사용. */
 /* ★현황판 제목 — 너무 작았다(13px). 카드 제목답게 키운다 (v2.40.0 사용자 지적). */
-.sb__t{padding:13px 16px;font-size:16px;font-weight:800;letter-spacing:-.01em;
+.sb__t{padding:12px 16px;font-family:var(--f-t);font-size:16px;font-weight:700;letter-spacing:-.01em;
        border-bottom:1px solid var(--line);
        box-shadow:inset 0 -2px 0 var(--orange)}
 /* ★가로 균형 (v2.19.18 사용자 지적 「빈공간도 많아」).
@@ -936,13 +968,19 @@ tr[data-sloc]{cursor:pointer}
 .ce__h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding:0 16px 6px}
 .ce__h .nm{font-size:14px;font-weight:700}
 .ce__b{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 16px}
-.ce__t{font-size:12px;font-weight:700;color:var(--ink);margin-bottom:5px}
+.ce__t{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:6px}
 .ce__z{padding:8px 0}
 @media (max-width:860px){.ce__b{grid-template-columns:1fr}}
 /* ★협력업체·직영 작업내용 — 한 카드 안에서 서로 갈라 둔다 (v2.49.0) */
 /* ★소제목은 **한 겹**이다 (v2.49.1). 카드 제목(13px/700) 밑에서 층이 읽히도록
    같은 크기·굵기에 왼쪽 강조선을 둔다 — 흐린 11px는 너무 작아 안 읽혔다. */
-.wc__s{padding:14px 0;border-top:1px solid var(--line)}
+.wc__s{padding:16px 0;border-top:1px solid var(--line)}
+/* ★빈 상태 글이 카드 밖으로 삐져나왔다 (v2.53.0 — 캡처로 확인).
+   .ce__z는 본래 .ce__b(좌우 16px) 안에 놓이는 것이어서 스스로는 좌우 여백이
+   없다. 그런데 여기서는 .wc__s의 바로 밑에 놓여, 여백을 줄 사람이 아무도
+   없었다 — 「아직 없습니다」가 카드 테두리에 딱 붙어 밖으로 나온 것처럼 보였다.
+   ★소제목(.wc__t)과 같은 16px에 맞춘다. */
+.wc__s>.ce__z{padding-left:16px;padding-right:16px}
 .wc__s:first-child{border-top:0;padding-top:2px}
 .wc__t{display:flex;align-items:center;gap:8px;margin:0 16px 8px;
   padding-left:9px;border-left:3px solid var(--orange);

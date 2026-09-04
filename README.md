@@ -29,6 +29,46 @@ Settings → Pages → Deploy from a branch → **main / (root)**
 
 ---
 
+## 1-B. Vercel로 옮기기 (v2.53.0)
+
+저장소에 `vercel.json`이 들어 있다 — 빌드는 없고, 캐시 머리말만 정해 준다
+(`/assets/*`는 1년 고정, `.html`은 매번 새로 확인 → 새 판이 바로 뜬다).
+
+**사용자가 할 일**
+
+1. [vercel.com](https://vercel.com) 로그인 → **Add New… → Project** →
+   이 GitHub 저장소를 고른다.
+2. **Framework Preset = Other**, Build Command·Output Directory는 **비워 둔다**
+   (정적 파일 그대로 올린다).
+   ★**Root Directory는 저장소 맨 위(`./`) 그대로 둔다.** 이 저장소에는 `fuel-tracking/`
+     (주유 관리, Next.js)이 **같이 들어 있다** — 그쪽은 **별도 Vercel 프로젝트**로,
+     Root Directory를 `fuel-tracking`으로 잡아 따로 연결한다. 두 프로젝트가 각자
+     자기 `vercel.json`을 쓴다(맨 위 것이 BNCP용). 하나로 묶으려 하면 어긋난다.
+3. Deploy를 누르면 끝. 주소는
+   - 관리자 : `https://<프로젝트>.vercel.app/`
+   - 협력업체 : `https://<프로젝트>.vercel.app/vendor.html`
+
+★**주소가 바뀌면 기기마다 저장된 것(`localStorage`)이 초기화된다.** 로그인·역할·
+화면 설정이 비고, 기준자료는 서버에서 다시 내려받는다. 현장에 나가 있는 사람들의
+북마크도 새 주소로 바꿔 줘야 한다.
+
+## 1-C. 구글 계정 바꾸기 (시트·Apps Script)
+
+1. **새 계정**에서 구글 스프레드시트를 하나 만든다(빈 시트여도 된다 — 필요한 시트는
+   `Code.gs`가 알아서 만든다).
+2. 확장 프로그램 → **Apps Script** → 저장소의 `Code.gs` 내용을 **통째로 붙여넣기**.
+3. **배포 → 새 배포 → 웹 앱**
+   - 실행 사용자 : **나**
+   - 액세스 권한 : **모든 사용자**
+   → 나오는 `.../exec` 주소를 복사한다.
+4. 그 주소를 **`assets/js/api.js`의 `url:` 한 줄**에 넣는다. **주소가 적힌 곳은
+   저장소를 통틀어 거기 한 곳뿐이다.**
+
+★옛 계정의 시트는 그대로 둬도 된다 — 새 주소로 바꾸는 순간 아무도 그쪽을 부르지
+않는다. 자료를 옮기려면 시트를 통째로 복사해 새 계정으로 옮기면 된다.
+
+---
+
 ## 2. 협력업체 화면 (vendor.html)
 
 라벨은 **English / العربية 병기**. 위치(Phase·Town·Block)와 장비명은 항상 영문.

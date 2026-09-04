@@ -1098,7 +1098,10 @@ console.log('\n[97] 현황판·상단제목 손질 (v2.40.0 사용자 지적)');
     return m ? +m[1] : 0;
   };
   /* 각 탭 상단 제목 20% 축소 (18-스펙) — 26→21, 모바일 21→17 */
-  ok(/\.ph h1\{margin:0;font-size:21px/.test(css97), '★상단 제목 20% 축소(26→21px)');
+  /* ★v2.53.0 — 종전에는 `.ph h1{margin:0;font-size:21px`처럼 **선언 차례까지** 박아
+     두고 있었다. 한화 글꼴을 붙이려고 font-family를 그 사이에 넣자 크기는 그대로인데
+     검사가 깨졌다 — 값이 아니라 글자 순서를 보던 것이다(0-J). 크기만 본다. */
+  ok(/\.ph h1\{[^}]*font-size:21px/.test(css97), '★상단 제목 20% 축소(26→21px)');
   ok(/\.ph h1\{font-size:17px\}/.test(css97), '★모바일 상단 제목도 20% 축소(21→17px)');
   /* 현황판 고정 — 화면보다 길어도 안 잘리게 높이를 묶고 안에서 스크롤 */
   ok(/\.pg__side\{[^}]*max-height:calc/.test(css97) && /\.pg__side\{[^}]*overflow-y:auto/.test(css97),
@@ -1974,6 +1977,95 @@ console.log('\n[100] 자재 현황 — 어느 업체가 신청해서 지급받�
     if (kDes[i] == null) delete S.mdesign[LK][i]; else S.mdesign[LK][i] = kDes[i];
   });
   S.lang = kLang; A.setFlt(kFlt); A.setRole(kRole); A.go(1);
+}
+
+/* ★[29] 앞 — 한화 브랜드 적용 (v2.53.0 사용자 요청).
+   사용자가 색상 규정과 글꼴을 주며 「적용할 거 생각해봐」, 이어서
+   「디자인이 좀 깔끔했으면 좋겠어」라고 했다.
+   ★여기는 **CSS 계약**을 본다. 검사 골격에는 진짜 브라우저가 없어 글꼴이
+     실제로 그려지지 않는다 — 화면 결과로는 볼 수 없는 유일한 구역이다
+     (검사 [20]·[39]도 같은 이유로 원본을 읽는다).
+     대신 **지켜야 할 선**을 글로 굳혀, 나중에 누가 넘으면 실패하게 한다. */
+console.log('\n[101] 한화 브랜드 — 글꼴은 큰 제목에만, 숫자에는 절대 안 닿는다 (v2.53.0)');
+{
+  const CSS = fs.readFileSync(path.join(ROOT, 'assets/css/app.css'), 'utf8');
+  const IDX = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const VND = fs.readFileSync(path.join(ROOT, 'vendor.html'), 'utf8');
+
+  /* ① 글꼴 파일 — 있고, 한글이 실제로 들어 있다 ------------------------
+     ★빈 파일·엉뚱한 파일을 올려도 CSS만 보면 통과해 버린다. 파일 속을
+       직접 열어 한글 11,172자를 센다. */
+  const FP = path.join(ROOT, 'assets/font/Hanwha-B.woff2');
+  ok(fs.existsSync(FP), '★한화 Bold 글꼴 파일이 저장소에 있다');
+  const fbuf = fs.readFileSync(FP);
+  ok(fbuf.slice(0, 4).toString('latin1') === 'wOF2', '★woff2로 압축돼 있다(용량)');
+  ok(fbuf.length < 400 * 1024, `글꼴이 400KB 미만이다 (${Math.round(fbuf.length / 1024)}KB)`);
+
+  /* ② @font-face는 **하나뿐**이다 -------------------------------------
+     ★Regular·Light를 실으면 작은 본문으로 새어 들어간다.
+       사용자 지적 : 「한화 폰트는 작은 글씨는 시인성이 떨어져 감안해야 해」. */
+  const faces = CSS.match(/@font-face\s*\{[^}]*\}/g) || [];
+  ok(faces.length === 1, `★@font-face가 하나뿐이다(굵은 제목용 한 벌) — 지금 ${faces.length}`);
+  ok(/font-display\s*:\s*swap/.test(faces[0] || ''),
+     '글꼴을 받는 동안 글자가 사라지지 않는다(font-display:swap)');
+
+  /* ③ 대체 글꼴 사슬 — 한화에 없는 글자가 떨어질 곳 --------------------
+     ★한화에는 − ▾ ▸ ✓ ☂ ⚠ ✕ 가 없다. 「지급−설계」의 −도 그중 하나다. */
+  const mFt = /--f-t\s*:\s*([^;]+);/.exec(CSS);
+  ok(!!mFt, '제목 전용 글꼴 토큰(--f-t)이 있다');
+  ok(/var\(--f\)/.test(mFt ? mFt[1] : ''),
+     '★--f-t가 Pretendard(--f)로 이어진다 — 한화에 없는 글자 7개가 여기로 떨어진다');
+
+  /* ④ ★핵심 — --f-t를 쓰는 규칙은 **전부 15px 이상**이다 ---------------
+     사용자 지적을 검사로 굳힌다. 나중에 누가 작은 칸에 붙이면 여기서 걸린다. */
+  const rules = CSS.match(/[^{}]+\{[^{}]*\}/g) || [];
+  const ftRules = rules.filter(r => /var\(--f-t\)/.test(r));
+  ok(ftRules.length >= 5, `★한화를 쓰는 규칙이 있다 (${ftRules.length}곳) — 검사가 헛돌지 않게`);
+  const tooSmall = ftRules.filter(r => {
+    const m = /font-size\s*:\s*(\d+)px/.exec(r);
+    return !m || Number(m[1]) < 15;
+  }).map(r => r.split('{')[0].trim());
+  ok(tooSmall.length === 0,
+     '★한화를 쓰는 규칙은 전부 15px 이상이다(작은 글씨 시인성) — 어긴 곳: ' +
+     (tooSmall.join(', ') || '없음'));
+
+  /* ⑤ ★숫자가 지나가는 칸에는 한화가 닿지 않는다 ----------------------
+     이 글꼴은 `1`의 폭이 다른 숫자의 60%뿐이고 GSUB/GPOS가 없어
+     tabular-nums가 동작하지 않는다 → 수량 표의 자릿수가 어긋난다. */
+  const numSel = ['.tw td', '.tw .r', '.in', 'select.in', 'textarea.in',
+                  '.kpi__v', '.dbar__v', '.num', '.ab', 'body'];
+  const numBad = ftRules.filter(r => {
+    const sel = r.split('{')[0];
+    return numSel.some(x => sel.split(',').some(one => one.trim() === x));
+  }).map(r => r.split('{')[0].trim());
+  ok(numBad.length === 0,
+     '★표 본문·입력창·숫자 칸에는 한화가 닿지 않는다(자릿수 어긋남 방지) — 어긴 곳: ' +
+     (numBad.join(', ') || '없음'));
+
+  /* ⑥ 두 화면 모두 글꼴을 미리 받아 둔다 ------------------------------- */
+  ok(/rel="preload"[^>]*Hanwha-B\.woff2/.test(IDX) && /rel="preload"[^>]*Hanwha-B\.woff2/.test(VND),
+     '관리자·업체 화면 둘 다 글꼴을 preload 한다');
+  const pre = /href="(assets\/font\/Hanwha-B\.woff2[^"]*)"/.exec(IDX);
+  ok(pre && pre[1].indexOf('?') < 0,
+     '★preload 주소에 ?v=가 없다 — 있으면 CSS가 부르는 주소와 달라져 두 번 받는다');
+
+  /* ⑦ 색상 — 손으로 섞은 오렌지가 남아 있지 않다 ----------------------- */
+  ['#F79C61', '#F9C39C', '#FBC7A5', '#F7DCC9', '#fff4ec'].forEach(function (h) {
+    ok(CSS.indexOf(h) < 0, `★임의로 섞은 오렌지 ${h}가 없다(규정 3톤으로 통일)`);
+  });
+  ok(/--o-100\s*:\s*#F37321/.test(CSS) && /--o-70\s*:\s*#F89B6C/.test(CSS) &&
+     /--o-50\s*:\s*#FBB584/.test(CSS),
+     '★한화 색상 규정 100/70/50%가 토큰으로 있다');
+
+  /* ⑧ 맨 아래 제목 층이 하나로 정리됐다 --------------------------------
+     사용자가 「소재목은 하나만 해, 제목이 몇 개야」라고 지적한 그 층이다. */
+  const l3 = ['.card__h h2', '.igrp__h', '.ce__t'].map(sel => {
+    const r = rules.filter(x => x.split('{')[0].trim() === sel)[0] || '';
+    const fs_ = /font-size\s*:\s*(\d+)px/.exec(r), fw = /font-weight\s*:\s*(\d+)/.exec(r);
+    return sel + '=' + (fs_ ? fs_[1] : '?') + '/' + (fw ? fw[1] : '?');
+  });
+  ok(l3.every(x => x.indexOf('=13/700') > 0),
+     '★카드·묶음 제목이 13px/700 하나로 맞다 — ' + l3.join(' '));
 }
 
 /* ── 29 내역서 원본 인식 (v2.14.0) ────────────────────── */
